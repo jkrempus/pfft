@@ -1,0 +1,30 @@
+import std.stdio, std.conv, std.datetime;
+
+import pfft.sse;
+
+void main(string[] args)
+{
+    int log2n = parse!int(args[1]);
+    
+    auto re = new float[1<<log2n];
+    auto im = new float[1<<log2n];
+
+    re []= 0f;
+    im []= 0f;
+    
+    auto tables = fft_table(log2n);
+    
+    ulong flopsPerIter = 5 * log2n * (1 << log2n); 
+    ulong niter = 10_000_000_000L / flopsPerIter;
+    niter = niter ? niter : 1;
+    
+    StopWatch sw;
+    sw.start();
+    
+    foreach(i; 0 .. niter)
+        fft(re.ptr, im.ptr, log2n, tables);
+    
+    sw.stop();
+    
+    writeln(to!float(niter * flopsPerIter) / sw.peek().nsecs());
+}
