@@ -5,7 +5,14 @@
 
 import std.stdio, std.conv, std.datetime;
 
-import pfft.sse;
+version(SCALAR)
+{
+    import pfft.scalar;
+}
+else
+{
+    import pfft.sse;
+}
 
 void main(string[] args)
 {

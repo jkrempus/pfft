@@ -6,7 +6,15 @@
 import std.stdio, std.range, std.algorithm, std.conv, 
     std.math, std.numeric, std.complex, std.random;
 
-import pfft.sse;
+
+version(SCALAR)
+{
+    import pfft.scalar;
+}
+else
+{
+    import pfft.sse;
+}
 
 auto rms(R)(R r)
 {

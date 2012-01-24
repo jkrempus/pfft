@@ -269,11 +269,12 @@ template FFT(alias V, Options)
 
     static void fft_pass_interleaved(int interleaved)(
         vec * pr, vec * pi, vec * pend, T * table)
+            if(is(typeof(V.interleave)))
     {
         for(; pr < pend; pr += 2, pi += 2, table += 2*interleaved)
         {
             vec tmpr, ti, ur, ui, wr, wi;
-            V.complex_array_to_real_mag_vec!interleaved(table, wr, wi);
+            V.complex_array_to_real_imag_vec!interleaved(table, wr, wi);
             V.deinterleave!interleaved(pr[0], pr[1], ur, tmpr);
             V.deinterleave!interleaved(pi[0], pi[1], ui, ti);
 
@@ -337,7 +338,7 @@ template FFT(alias V, Options)
                 nextTableRow(table, tableRowLen, tableI);  
             }
             
-            static if(hasMember!(V, "interleave"))
+            static if(is(typeof(V.interleave)))
                 foreach(i; ints_up_to!(log2(vec_size)))
                 {
                     fft_pass_interleaved!(1 << (1 + i))(pr, pi, pr + N, table + tableI);

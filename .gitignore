@@ -4,4 +4,7 @@
 *.~
 test
 bench
-
+bench-scalar
+*.data
+*.old
+*.deps

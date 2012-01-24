@@ -35,7 +35,7 @@ struct SSE
             return cast(float4*)a;
         }
                 
-        static void complex_array_to_real_mag_vec(int len)(
+        static void complex_array_to_real_imag_vec(int len)(
             float * arr, ref vec rr, ref vec ri)
         {
             static if(len==2)
