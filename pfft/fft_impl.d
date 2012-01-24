@@ -269,7 +269,7 @@ template FFT(alias V, Options)
 
     static void fft_pass_interleaved(int interleaved)(
         vec * pr, vec * pi, vec * pend, T * table)
-            if(is(typeof(V.interleave)))
+            if(is(typeof(V.interleave!2)))
     {
         for(; pr < pend; pr += 2, pi += 2, table += 2*interleaved)
         {
@@ -338,7 +338,7 @@ template FFT(alias V, Options)
                 nextTableRow(table, tableRowLen, tableI);  
             }
             
-            static if(is(typeof(V.interleave)))
+            static if(is(typeof(V.interleave!2)))
                 foreach(i; ints_up_to!(log2(vec_size)))
                 {
                     fft_pass_interleaved!(1 << (1 + i))(pr, pi, pr + N, table + tableI);
