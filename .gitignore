@@ -4,7 +4,9 @@
 *.~
 test
 bench
-bench-scalar
+bench_scalar
+misc_tests
 *.data
 *.old
 *.deps
+*.asm

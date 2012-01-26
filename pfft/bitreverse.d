@@ -15,6 +15,16 @@ void _swap(T)(ref T a, ref T b)
     a = bb;
 }
 
+template ints_up_to(int n, T...)
+{
+    static if(n)
+    {
+        alias ints_up_to!(n-1, n-1, T) ints_up_to;
+    }
+    else
+        alias T ints_up_to;
+}
+
 auto bit_reversed_pairs(int _log2n)
 {
     struct R
@@ -48,6 +58,34 @@ void bit_reverse_simple(T)(T* p, int log2n)
             _swap(p[i0],p[i1]);
 }
 
+void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
+{
+    for(size_t i = chunk_size, j = (nchunks >> 1) * chunk_size; 
+        j < nchunks * chunk_size; 
+        j += chunk_size*2, i += chunk_size*2)
+    {        
+        foreach(k; ints_up_to!chunk_size)
+            _swap(p[i + k], p[j + k]);
+    }
+}
+
+import std.stdio;
+void bit_reverse_simple_small(int max_log2n, T)(T* p, int log2n)
+{
+    assert(log2n <= max_log2n);
+    
+    size_t n = 1 << log2n;
+    
+    foreach(i; ints_up_to!(max_log2n/2))
+    {
+        if(i == max_log2n/2)
+            return;
+                
+        foreach(j; 0..(1 << i))
+            bit_reverse_step!(1<<i)(p + (n >> i)*j, n >> (2*i));
+    }
+}
+
 struct Aligned(T,size_t n, size_t alignment)
 { 
     ubyte[T.sizeof*n + alignment] a;
@@ -56,16 +94,6 @@ struct Aligned(T,size_t n, size_t alignment)
         assert((alignment & (alignment - 1)) == 0);
         return cast(T*)( ((cast(size_t)a.ptr) + alignment) & ~(alignment - 1) ); 
     }
-}
-
-template ints_up_to(int n, T...)
-{
-    static if(n)
-    {
-        alias ints_up_to!(n-1, n-1, T) ints_up_to;
-    }
-    else
-        alias T ints_up_to;
 }
 
 struct BitReverse(alias V, Options)
