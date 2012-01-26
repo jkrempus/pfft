@@ -402,8 +402,8 @@ template FFT(alias V, Options)
         {
             if(log2n < 4)
             {
-                bit_reverse_simple_small!3(re, log2n); 
-                bit_reverse_simple_small!3(im, log2n); 
+                bit_reverse_step!1(re, 1 << log2n);                     // only works for log2n < 4
+                bit_reverse_step!1(im, 1 << log2n); 
             }
             else
             {
