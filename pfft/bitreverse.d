@@ -86,14 +86,15 @@ void bit_reverse_simple_small(int max_log2n, T)(T* p, int log2n)
     }
 }
 
-struct Aligned(T,size_t n, size_t alignment)
-{ 
-    ubyte[T.sizeof*n + alignment] a;
-    @property auto ptr()
-    { 
-        assert((alignment & (alignment - 1)) == 0);
-        return cast(T*)( ((cast(size_t)a.ptr) + alignment) & ~(alignment - 1) ); 
-    }
+auto aligned_ptr(T, U)(U * ptr, size_t alignment)
+{
+    return cast(T*)
+        (((cast(size_t)ptr) + alignment) & ~(alignment - 1UL));
+}
+
+auto aligned_size(T)(size_t size, size_t alignment)
+{
+    return size * T.sizeof + alignment;
 }
 
 struct BitReverse(alias V, Options)
@@ -196,8 +197,8 @@ struct BitReverse(alias V, Options)
         enum log2l = Options.log2_bitreverse_large_chunk_size;
         enum l = 1<<log2l;
         
-        Aligned!(T, l*l, 64) mem;
-        auto buffer = mem.ptr;
+        ubyte[aligned_size!T(l * l, 64)] mem = void;
+        auto buffer = aligned_ptr!T(mem.ptr, 64);
         
         int log2m = log2n - log2l;
         size_t m = 1<<log2m, n = 1<<log2n;

@@ -286,16 +286,36 @@ template FFT(alias V, Options)
         }
     }
     
+    static void fft_passes_fractional(vec * pr, vec * pi, vec * pend, 
+        T * table, size_t tableI, size_t tableRowLen)
+    {
+        static if(is(typeof(V.interleave!2)))
+        {
+            foreach(i; ints_up_to!(log2(vec_size)))
+            {
+                fft_pass_interleaved!(1 << (1 + i))(pr, pi, pend, table + tableI);
+                nextTableRow(table, tableRowLen, tableI);
+            }
+        }
+        else
+            for (size_t m2 = vec_size >> 1; m2 > 0 ; m2 >>= 1)
+            {
+                FFT!(Scalar!T, Options).fft_pass(
+                    cast(T*) pr, cast(T*) pi, cast(T*)pend, table + tableI, m2);
+                nextTableRow(table, tableRowLen, tableI);  
+            }
+    }
+    
     void fft_passes_strided(int l)(
         vec * pr, vec * pi, size_t N , 
         ref T * table, ref size_t tableI, ref size_t tableRowLen, 
         size_t stride, int nPasses)
     {
-        Aligned!(vec, l*l, 64) rmem;
-        Aligned!(vec, l*l, 64) imem;
+        ubyte[aligned_size!vec(l * l, 64)] rmem = void;
+        ubyte[aligned_size!vec(l * l, 64)] imem = void;
         
-        auto rbuffer = rmem.ptr;
-        auto ibuffer = imem.ptr;
+        auto rbuffer = aligned_ptr!vec(rmem.ptr, 64);
+        auto ibuffer = aligned_ptr!vec(imem.ptr, 64);
       
         for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += l, pp += stride)
             BR.copy_some!(l)(pb, pp);
@@ -338,19 +358,9 @@ template FFT(alias V, Options)
                 nextTableRow(table, tableRowLen, tableI);  
             }
             
-            static if(is(typeof(V.interleave!2)))
-                foreach(i; ints_up_to!(log2(vec_size)))
-                {
-                    fft_pass_interleaved!(1 << (1 + i))(pr, pi, pr + N, table + tableI);
-                    nextTableRow(table, tableRowLen, tableI);
-                }
-            else
-                for (size_t m2 = vec_size >> 1; m2 > 0 ; m2 >>= 1)
-                {
-                    FFT!(Scalar!T, Options).fft_pass(
-                        cast(T*) pr, cast(T*) pi, cast(T*)(pr + N), table + tableI, m2);
-                    nextTableRow(table, tableRowLen, tableI);  
-                }
+            fft_passes_fractional(pr, pi, pr + N, 
+                table, tableI, tableRowLen);
+
             return;
         }
     
