@@ -161,7 +161,7 @@ struct BitReverse(alias V, Options)
     static void swap_some(int len, TT)(TT *  a, TT *  b)
         if(len*TT.sizeof % (vec.sizeof * 4) == 0)
     {
-        foreach(i; ints_up_to!(len * TT.sizeof / 4 / vec.sizeof))
+        foreach(i; 0 .. len * TT.sizeof / 4 / vec.sizeof)
             swap4once((cast(vec*)a) + 4 * i, (cast(vec*)b) + 4 * i);
     }
     
@@ -188,7 +188,7 @@ struct BitReverse(alias V, Options)
     static void copy_some(int len, TT)(TT *  a, TT *  b)
         if(len*TT.sizeof % (vec.sizeof*8) == 0)
     {
-        foreach(i; ints_up_to!(len * TT.sizeof / 8 / vec.sizeof))
+        foreach(i; 0 .. len * TT.sizeof / 8 / vec.sizeof)
             copy8once((cast(vec*)a) + 8 * i, (cast(vec*)b) + 8 * i);
     }
     

@@ -96,7 +96,7 @@ template FFT(alias V, Options)
         return r - 1;
     }
     
-    void fft_table_impl(int log2n, int nReversedLoops, Tuple!(T,T) * r)
+    void fft_table_impl(int log2n, int n_reversed_loops, Tuple!(T,T) * r)
     {
         auto p = r;
         for (int s = 1; s <= log2n; ++s)
@@ -106,9 +106,9 @@ template FFT(alias V, Options)
             for(size_t i=0; i< m/2; i++)
             {
                 p[i][0] = cos(dphi*i);
-                p[i][1] = -sin(dphi*i);            // needed to add a minus here
+                p[i][1] = -sin(dphi*i);
             }
-            if(s <= log2n-nReversedLoops || log2n >= Options.large_limit)
+            if(s <= log2n - n_reversed_loops)
                 bit_reverse_simple(p, s - 1);
             else
                 complex_array_to_vector(p, m/2);
@@ -126,7 +126,12 @@ template FFT(alias V, Options)
         Tables tables;
         
         tables.table = cast(T*) GC.malloc(T.sizeof * 2 * (1 << log2n));
-        fft_table_impl(log2n, log2(vec_size), cast(Tuple!(T,T) *)(tables.table + 2));
+        
+        int n_reversed_loops = log2n >= Options.large_limit ? 
+            0 : log2(vec_size);
+        
+        fft_table_impl(log2n, n_reversed_loops, 
+            cast(Tuple!(T,T) *)(tables.table + 2));
         
         if(log2n < 4)
         {
@@ -134,13 +139,15 @@ template FFT(alias V, Options)
         }
         else if(log2n < Options.large_limit)
         {
-            tables.brTable = cast(uint*) GC.malloc(uint.sizeof * BR.br_table_size(log2n));
+            tables.brTable = cast(uint*) 
+                GC.malloc(uint.sizeof * BR.br_table_size(log2n));
             BR.init_br_table(tables.brTable, log2n);
         }
         else
         {
             enum log2size = 2*Options.log2_bitreverse_large_chunk_size;
-            tables.brTable = cast(uint*) GC.malloc(uint.sizeof * BR.br_table_size(log2size));
+            tables.brTable = cast(uint*) 
+                GC.malloc(uint.sizeof * BR.br_table_size(log2size));
             BR.init_br_table(tables.brTable, log2size);
         }
         
@@ -212,7 +219,7 @@ template FFT(alias V, Options)
     
     void fft_pass(vec *pr, vec *pi, vec *pend, T *table, const size_t m2)
     {
-        const size_t m = m2 + m2;
+        size_t m = m2 + m2;
         for(; pr < pend ;
           pr += m, pi += m)
         {
@@ -275,6 +282,7 @@ template FFT(alias V, Options)
         {
             vec tmpr, ti, ur, ui, wr, wi;
             V.complex_array_to_real_imag_vec!interleaved(table, wr, wi);
+                
             V.deinterleave!interleaved(pr[0], pr[1], ur, tmpr);
             V.deinterleave!interleaved(pi[0], pi[1], ui, ti);
 
@@ -306,28 +314,28 @@ template FFT(alias V, Options)
             }
     }
     
-    void fft_passes_strided(int l)(
+    void fft_passes_strided(int l, int chunk_size)(
         vec * pr, vec * pi, size_t N , 
         ref T * table, ref size_t tableI, ref size_t tableRowLen, 
         size_t stride, int nPasses)
     {
-        ubyte[aligned_size!vec(l * l, 64)] rmem = void;
-        ubyte[aligned_size!vec(l * l, 64)] imem = void;
+        ubyte[aligned_size!vec(l * chunk_size, 64)] rmem = void;
+        ubyte[aligned_size!vec(l * chunk_size, 64)] imem = void;
         
         auto rbuffer = aligned_ptr!vec(rmem.ptr, 64);
         auto ibuffer = aligned_ptr!vec(imem.ptr, 64);
       
-        for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += l, pp += stride)
-            BR.copy_some!(l)(pb, pp);
-        for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += l, pp += stride)
-            BR.copy_some!(l)(pb, pp);
+        for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += chunk_size, pp += stride)
+            BR.copy_some!(chunk_size)(pb, pp);
+        for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += chunk_size, pp += stride)
+            BR.copy_some!(chunk_size)(pb, pp);
         
-        size_t m2 = l*l/2;
+        size_t m2 = l*chunk_size/2;
         size_t m2_limit = m2>>nPasses;
 
         if(tableRowLen == 2 && nPasses >= 2)
         {
-            first_fft_passes(rbuffer, ibuffer, l*l);
+            first_fft_passes(rbuffer, ibuffer, l*chunk_size);
             m2 >>= 1;
             nextTableRow(table, tableRowLen, tableI);
             m2 >>= 1;
@@ -336,14 +344,14 @@ template FFT(alias V, Options)
         
         for(; m2 > m2_limit; m2 >>= 1)
         {
-            fft_pass(rbuffer, ibuffer, rbuffer + l*l, table + tableI, m2);
+            fft_pass(rbuffer, ibuffer, rbuffer + l*chunk_size, table + tableI, m2);
             nextTableRow(table, tableRowLen, tableI);  
         }
       
-        for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += l, pp += stride)
-            BR.copy_some!(l)(pp, pb);
-        for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += l, pp += stride)
-            BR.copy_some!(l)(pp, pb);
+        for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += chunk_size, pp += stride)
+            BR.copy_some!(chunk_size)(pp, pb);
+        for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += chunk_size, pp += stride)
+            BR.copy_some!(chunk_size)(pp, pb);
     }
     
     void fft_passes_recursive(
@@ -386,7 +394,7 @@ template FFT(alias V, Options)
             tableI = tableIOld;
             tableRowLen = tableRowLenOld;
 
-            fft_passes_strided!l(pr + i, pi + i, N, table, 
+            fft_passes_strided!(l, l)(pr + i, pi + i, N, table, 
                 tableI, tableRowLen, m, nPasses);
         }
 

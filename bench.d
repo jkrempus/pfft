@@ -26,7 +26,7 @@ void main(string[] args)
     
     auto tables = fft_table(log2n);
     
-    ulong flopsPerIter = 5 * log2n * (1 << log2n); 
+    ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
     ulong niter = 10_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
@@ -37,6 +37,5 @@ void main(string[] args)
         fft(re.ptr, im.ptr, log2n, tables);
     
     sw.stop();
-    
     writeln(to!float(niter * flopsPerIter) / sw.peek().nsecs());
 }

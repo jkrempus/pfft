@@ -41,14 +41,15 @@ struct SSE
             static if(len==2)
             {
                 rr = ri = (cast(vec*)arr)[0];
-                rr = __builtin_ia32_shufps(rr, rr, shuf_mask!(2,2,0,0));
+                rr = __builtin_ia32_shufps(rr, rr, shuf_mask!(2,2,0,0));    // I could use __builtin_ia32_movsldup here but it doesn't seem to increase performance
                 ri = __builtin_ia32_shufps(ri, ri, shuf_mask!(3,3,1,1));
             }
             else static if(len==4)
             {
-                rr = ri = (cast(vec*)arr)[0];
-                rr = __builtin_ia32_shufps(rr, (cast(vec*)arr)[1], shuf_mask!(2,0,2,0));
-                ri = __builtin_ia32_shufps(ri, (cast(vec*)arr)[1], shuf_mask!(3,1,3,1));
+                vec tmp = (cast(vec*)arr)[0];
+                ri = (cast(vec*)arr)[1];
+                rr = __builtin_ia32_shufps(tmp, ri, shuf_mask!(2,0,2,0));
+                ri = __builtin_ia32_shufps(tmp, ri, shuf_mask!(3,1,3,1));
             }
         }
 
