@@ -5,8 +5,7 @@
 
 module pfft.fft_impl;
 
-
-import std.typecons, std.math, std.c.string, std.traits, std.parallelism;
+import std.typecons, std.math, std.c.string, std.traits;
 import core.bitop, core.memory;
 
 import pfft.bitreverse;
@@ -402,15 +401,10 @@ template FFT(alias V, Options)
 
         {
             ulong nextN = (N>>nPasses);
-            
-            if(tableRowLen == 2 << nPasses)
-                foreach(i; taskPool.parallel(std.range.iota(1<<nPasses)))
-                    fft_passes_recursive(pr + nextN*i, pi  + nextN*i, 
-                        nextN, table, tableI + 2*i, tableRowLen);
-            else
-                foreach(i; 0 .. (1<<nPasses))
-                    fft_passes_recursive(pr + nextN*i, pi  + nextN*i, 
-                        nextN, table, tableI + 2*i, tableRowLen);
+
+            for(int i = 0; i<(1<<nPasses); i++)
+                fft_passes_recursive(pr + nextN*i, pi  + nextN*i, 
+                    nextN, table, tableI + 2*i, tableRowLen);
         }
     }
     
