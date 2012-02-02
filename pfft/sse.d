@@ -163,6 +163,7 @@ struct Options
     enum large_limit = 14;
     enum log2_optimal_n = 9;
     enum passes_per_recursive_call = 5;
+    enum log2_recursive_passes_chunk_size = 5;
 }
 
 version(CPP_IMPL)

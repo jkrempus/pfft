@@ -372,7 +372,8 @@ template FFT(alias V, Options)
             return;
         }
     
-        enum l = 1L<<Options.passes_per_recursive_call;
+        enum l = 1UL << Options.passes_per_recursive_call;
+        enum chunk_size = 1UL << Options.log2_recursive_passes_chunk_size;
 
         int log2n = bsf(N);
 
@@ -388,13 +389,13 @@ template FFT(alias V, Options)
         size_t tableIOld = tableI;
         size_t tableRowLenOld = tableRowLen;
 
-        for(size_t i=0; i < m; i += l)
+        for(size_t i=0; i < m; i += chunk_size)
         {
             table = tableOld;
             tableI = tableIOld;
             tableRowLen = tableRowLenOld;
 
-            fft_passes_strided!(l, l)(pr + i, pi + i, N, table, 
+            fft_passes_strided!(l, chunk_size)(pr + i, pi + i, N, table, 
                 tableI, tableRowLen, m, nPasses);
         }
 
