@@ -6,8 +6,11 @@
 import std.stdio, std.range, std.algorithm, std.conv, 
     std.math, std.numeric, std.complex, std.random;
 
-
-version(SCALAR)
+version(StdSimd)
+{
+    import pfft.stdsimd;
+}
+else version(Scalar)
 {
     import pfft.scalar;
 }

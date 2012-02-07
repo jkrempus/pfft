@@ -5,7 +5,11 @@
 
 import std.stdio, std.conv, std.datetime;
 
-version(SCALAR)
+version(StdSimd)
+{
+    import pfft.stdsimd;
+}
+else version(Scalar)
 {
     import pfft.scalar;
 }
