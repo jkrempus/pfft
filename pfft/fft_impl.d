@@ -5,8 +5,7 @@
 
 module pfft.fft_impl;
 
-import std.typecons, std.math, std.c.string, std.traits;
-import core.bitop, core.memory;
+import core.bitop, core.stdc.math, core.sys.posix.stdlib;
 
 import pfft.bitreverse;
 
@@ -59,6 +58,13 @@ struct _FFTTables(T)
     uint * brTable;
 }
 
+auto aligned_alloc(T)(size_t n, size_t alignment)
+{
+    T * r;
+    posix_memalign(cast(void**)&r, alignment, n * T.sizeof);
+    return r;
+}
+
 template FFT(alias V, Options)
 {
     alias BitReverse!(V, Options) BR;
@@ -67,7 +73,9 @@ template FFT(alias V, Options)
     alias V.T T;
     alias V.vec vec;
     
-    void complex_array_to_vector(Tuple!(T,T) * pairs, size_t n)
+    alias T[2] Pair;
+    
+    void complex_array_to_vector(Pair * pairs, size_t n)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
@@ -96,7 +104,7 @@ template FFT(alias V, Options)
         return r - 1;
     }
     
-    void fft_table_impl(int log2n, int n_reversed_loops, Tuple!(T,T) * r)
+    void fft_table_impl(int log2n, int n_reversed_loops, Pair * r)
     {
         auto p = r;
         for (int s = 1; s <= log2n; ++s)
@@ -125,13 +133,12 @@ template FFT(alias V, Options)
         
         Tables tables;
         
-        tables.table = cast(T*) GC.malloc(T.sizeof * 2 * (1 << log2n));
-        
+        tables.table = aligned_alloc!T(2 * (1 << log2n), 64);
         int n_reversed_loops = log2n >= Options.large_limit ? 
             0 : log2(vec_size);
         
         fft_table_impl(log2n, n_reversed_loops, 
-            cast(Tuple!(T,T) *)(tables.table + 2));
+            cast(Pair *)(tables.table + 2));
         
         if(log2n < 4)
         {
@@ -139,15 +146,13 @@ template FFT(alias V, Options)
         }
         else if(log2n < Options.large_limit)
         {
-            tables.brTable = cast(uint*) 
-                GC.malloc(uint.sizeof * BR.br_table_size(log2n));
+            tables.brTable = aligned_alloc!uint(BR.br_table_size(log2n), 64);
             BR.init_br_table(tables.brTable, log2n);
         }
         else
         {
             enum log2size = 2*Options.log2_bitreverse_large_chunk_size;
-            tables.brTable = cast(uint*) 
-                GC.malloc(uint.sizeof * BR.br_table_size(log2size));
+            tables.brTable = aligned_alloc!uint(BR.br_table_size(log2size), 64);
             BR.init_br_table(tables.brTable, log2size);
         }
         
