@@ -65,6 +65,11 @@ auto aligned_alloc(T)(size_t n, size_t alignment)
     return r;
 }
 
+auto aligned_array(T)(size_t n, size_t alignment)
+{
+    return aligned_alloc!T(n, alignment)[0 .. n];
+}
+
 template FFT(alias V, Options)
 {
     alias BitReverse!(V, Options) BR;
@@ -79,7 +84,7 @@ template FFT(alias V, Options)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
-          T buffer[vec_size*2];
+          T buffer[vec_size*2] = void;
           for(size_t j = 0; j < vec_size; j++)
           {
             buffer[j] = pairs[i+j][0];

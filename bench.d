@@ -3,7 +3,35 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import std.stdio, std.conv, std.datetime;
+import core.stdc.stdio, core.stdc.stdlib;
+
+version( NoPhobos )
+{
+    import core.sys.posix.sys.time;
+    
+    double get_time()
+    {
+        timeval tv;
+        gettimeofday(&tv, null);
+        return tv.tv_sec + 1e-6 * tv.tv_usec;
+    }
+}
+else
+{
+    import std.datetime;
+    
+    StopWatch sw;
+    
+    static this()
+    {
+        sw.start();
+    }
+    
+    double get_time()
+    {
+        return sw.peek().nsecs() * 1e-9f;
+    }
+}
 
 version(StdSimd)
 {
@@ -18,12 +46,12 @@ else
     import pfft.sse;
 }
 
-void main(string[] args)
-{
-    int log2n = parse!int(args[1]);
-    
-    auto re = new float[1<<log2n];
-    auto im = new float[1<<log2n];
+import pfft.fft_impl : aligned_array;
+
+void bench(int log2n)
+{    
+    auto re = aligned_array!float(1 << log2n, 64);
+    auto im = aligned_array!float(1 << log2n, 64);
 
     re []= 0f;
     im []= 0f;
@@ -34,12 +62,19 @@ void main(string[] args)
     ulong niter = 10_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
-    StopWatch sw;
-    sw.start();
+    double t = get_time();
     
     foreach(i; 0 .. niter)
         fft(re.ptr, im.ptr, log2n, tables);
     
-    sw.stop();
-    writeln(to!float(niter * flopsPerIter) / sw.peek().nsecs());
+    t = get_time() - t;
+    printf("%f\n", 1e-9 * niter * flopsPerIter / t);
+    
+    free(re.ptr);
+    free(im.ptr);
+}
+
+void main(string[] args)
+{ 
+    bench(atoi(args[1].ptr)); 
 }
