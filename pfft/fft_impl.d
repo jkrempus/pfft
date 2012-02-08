@@ -111,15 +111,10 @@ template FFT(alias V, Options)
         {
             size_t m = 1 << s;
             double dphi = 4.0*asin(1.0) / m;
-            float ds = sin(dfloat), dc = cos(dfloat);
-            float sphi = 0f, cphi = 1f;
             for(size_t i=0; i< m/2; i++)
             {
-                p[i][0] = cphi; //cos(dphi*i);
-                p[i][1] = -sphi; //-sin(dphi*i);
-                float tmp = cphi * dc - sphi * ds;
-                float sphi = cphi * ds + sphi * dc;
-                cphi = tmp;
+                p[i][0] = cos(dphi*i);
+                p[i][1] = -sin(dphi*i);
             }
             if(s <= log2n - n_reversed_loops)
                 bit_reverse_simple(p, s - 1);
