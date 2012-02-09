@@ -461,7 +461,7 @@ template FFT(alias V, Options)
             BR.bit_reverse_small(re, log2n, tables.brTable); 
             BR.bit_reverse_small(im, log2n, tables.brTable);
         }
-        fft_passes_bit_reversed( re_vec, im_vec , N / vec_size, cast(vec*) tables.table, N/vec_size/vec_size); 
+        fft_passes_bit_reversed( re_vec, im_vec , N / vec_size, cast(vec*) tables.table, N/vec_size/vec_size);
     }
     
     void fft_large(T * re, T * im, int log2n, Tables tables)
