@@ -41,6 +41,10 @@ else version(Scalar)
 {
     import pfft.scalar;
 }
+else version(Neon)
+{
+    import pfft.neon;
+}
 else
 {
     import pfft.sse;
@@ -49,7 +53,7 @@ else
 import pfft.fft_impl : aligned_array;
 
 void bench(int log2n)
-{    
+{   
     auto re = aligned_array!float(1 << log2n, 64);
     auto im = aligned_array!float(1 << log2n, 64);
 
@@ -59,7 +63,7 @@ void bench(int log2n)
     auto tables = fft_table(log2n);
     
     ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
-    ulong niter = 1_00_000_000L / flopsPerIter;
+    ulong niter = 1_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
     double t = get_time();
@@ -74,7 +78,9 @@ void bench(int log2n)
     free(im.ptr);
 }
 
+import gcc.builtins;
+
 void main(string[] args)
-{ 
+{     
     bench(atoi(args[1].ptr)); 
 }
