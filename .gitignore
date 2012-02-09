@@ -6,6 +6,7 @@ test
 bench
 bench_scalar
 misc_tests
+test_nophobos
 *.data
 *.old
 *.deps
