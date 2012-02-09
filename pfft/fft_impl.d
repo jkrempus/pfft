@@ -9,6 +9,10 @@ import core.bitop, core.stdc.math, core.sys.posix.stdlib;
 
 import pfft.bitreverse;
 
+size_t _one(){ return cast(size_t) 1; }
+
+enum one = _one();
+
 struct Scalar(_T)
 {
     alias _T vec;
@@ -58,11 +62,23 @@ struct _FFTTables(T)
     uint * brTable;
 }
 
+version(Android)
+{
+    extern (C) void *memalign(size_t boundary, size_t size);
+}
+
 auto aligned_alloc(T)(size_t n, size_t alignment)
 {
-    T * r;
-    posix_memalign(cast(void**)&r, alignment, n * T.sizeof);
-    return r;
+    version(Android)
+    {
+        return cast(T*) memalign(alignment, n * T.sizeof);
+    }
+    else
+    {
+        T * r;
+        posix_memalign(cast(void**)&r, alignment, n * T.sizeof);
+        return r;
+    }
 }
 
 auto aligned_array(T)(size_t n, size_t alignment)
@@ -393,7 +409,7 @@ template FFT(alias V, Options)
             log2n - Options.log2_optimal_n;
 
         int log2m = log2n - Options.passes_per_recursive_call;
-        size_t m = 1L<<log2m;
+        size_t m = one << log2m;
         
         T *  tableOld = table;
         size_t tableIOld = tableI;
@@ -410,7 +426,7 @@ template FFT(alias V, Options)
         }
 
         {
-            ulong nextN = (N>>nPasses);
+            size_t nextN = (N>>nPasses);
 
             for(int i = 0; i<(1<<nPasses); i++)
                 fft_passes_recursive(pr + nextN*i, pi  + nextN*i, 

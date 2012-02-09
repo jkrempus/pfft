@@ -69,7 +69,6 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
-import std.stdio;
 void bit_reverse_simple_small(int max_log2n, T)(T* p, int log2n)
 {
     assert(log2n <= max_log2n);
