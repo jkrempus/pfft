@@ -11,3 +11,5 @@ test_nophobos
 *.old
 *.deps
 *.asm
+*.gcda
+*.ignore

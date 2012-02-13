@@ -125,7 +125,39 @@ template FFT(alias V, Options)
         return r - 1;
     }
     
-    void fft_table_impl(int log2n, int n_reversed_loops, Pair * r)
+    void fft_table_sines_cosines_fast(int log2n,  Pair * r)
+    {
+        auto p0 = r;
+        auto p1 = p0 + 1;
+        auto p1end = p0 + (1<<log2n) - 1;
+        
+        real dphi = - asin(1.0);
+        
+        (*p0)[0] = 1;
+        (*p0)[1] = 0;
+        while(p1 < p1end)
+        {
+            T cdphi = cos(dphi);
+            T sdphi = sin(dphi);
+            dphi *= cast(T)0.5;
+                        
+            auto p0end = p1;
+            while(p0 < p0end)
+            {
+                auto c = (*p0)[0];
+                auto s = (*p0)[1];
+                p0++;
+                (*p1)[0] = c;
+                (*p1)[1] = s;
+                p1++;
+                (*p1)[0] = c * cdphi - s * sdphi;   
+                (*p1)[1] = c * sdphi + s * cdphi;
+                p1++;
+            }
+        }
+    }
+    
+    void fft_table_sines_cosines(int log2n,  Pair * r)
     {
         auto p = r;
         for (int s = 1; s <= log2n; ++s)
@@ -137,6 +169,21 @@ template FFT(alias V, Options)
                 p[i][0] = cos(dphi*i);
                 p[i][1] = -sin(dphi*i);
             }
+            p += m/2;
+        }
+    }
+    
+    void fft_table_impl(int log2n, int n_reversed_loops, Pair * r)
+    {
+        static if(is(typeof(Options.fast_init)))
+            fft_table_sines_cosines_fast(log2n, r);
+        else 
+            fft_table_sines_cosines(log2n, r);
+            
+        auto p = r;
+        for (int s = 1; s <= log2n; ++s)
+        {
+            size_t m = 1 << s;
             if(s <= log2n - n_reversed_loops)
                 bit_reverse_simple(p, s - 1);
             else
@@ -236,7 +283,7 @@ template FFT(alias V, Options)
             pi[i0] = ai0 + ai1;
             pi[i1] = ai0 - ai1;
 
-            pr[i2] = ar2 + ai3;     // needed to swap add and sub in these four lines
+            pr[i2] = ar2 + ai3;
             pr[i3] = ar2 - ai3;
             pi[i2] = ai2 - ar3;
             pi[i3] = ai2 + ar3;      
@@ -352,9 +399,9 @@ template FFT(alias V, Options)
         auto ibuffer = aligned_ptr!vec(imem.ptr, 64);
       
         for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += chunk_size, pp += stride)
-            BR.copy_some!(chunk_size)(pb, pp);
+            BR.copy_array(pb, pp, chunk_size);
         for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += chunk_size, pp += stride)
-            BR.copy_some!(chunk_size)(pb, pp);
+            BR.copy_array(pb, pp, chunk_size);
         
         size_t m2 = l*chunk_size/2;
         size_t m2_limit = m2>>nPasses;
@@ -375,9 +422,9 @@ template FFT(alias V, Options)
         }
       
         for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += chunk_size, pp += stride)
-            BR.copy_some!(chunk_size)(pp, pb);
+            BR.copy_array(pp, pb, chunk_size);
         for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += chunk_size, pp += stride)
-            BR.copy_some!(chunk_size)(pp, pb);
+            BR.copy_array(pp, pb, chunk_size);
     }
     
     void fft_passes_recursive(

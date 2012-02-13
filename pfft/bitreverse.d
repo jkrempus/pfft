@@ -157,9 +157,10 @@ struct BitReverse(alias V, Options)
         src[3] = a7;
     }
 
-    static void swap_some(int len, TT)(TT *  a, TT *  b)
-        if(len*TT.sizeof % (vec.sizeof * 4) == 0)
+    static void swap_array(TT)(TT *  a, TT *  b, int len)
     {
+        assert(len*TT.sizeof % (vec.sizeof * 4) == 0);
+        
         foreach(i; 0 .. len * TT.sizeof / 4 / vec.sizeof)
             swap4once((cast(vec*)a) + 4 * i, (cast(vec*)b) + 4 * i);
     }
@@ -184,9 +185,10 @@ struct BitReverse(alias V, Options)
         dst[7] = a7;
     }
 
-    static void copy_some(int len, TT)(TT *  a, TT *  b)
-        if(len*TT.sizeof % (vec.sizeof*8) == 0)
+    static void copy_array(TT)(TT *  a, TT *  b, int len)
     {
+        assert((len*TT.sizeof % (vec.sizeof*8) == 0));
+        
         foreach(i; 0 .. len * TT.sizeof / 8 / vec.sizeof)
             copy8once((cast(vec*)a) + 8 * i, (cast(vec*)b) + 8 * i);
     }
@@ -209,20 +211,20 @@ struct BitReverse(alias V, Options)
             {
           
                 for(T* pp = p + i0 * l, pb = buffer; pp < pend; pb += l, pp += m)
-                    copy_some!l(pb, pp);//memcpy(pb, pp, l * T.sizeof);
+                    copy_array(pb, pp, l);
           
                 bit_reverse_small(buffer,log2l+log2l, table);
 
                 if(i1 != i0)
                 {
                     for(T* pp = p + i1 * l, pb = buffer; pp < pend; pb += l, pp += m)
-                        swap_some!l(pp,pb);
+                        swap_array(pp, pb, l);
                 
                     bit_reverse_small(buffer,log2l+log2l, table);
                 }
 
                 for(T* pp = p + i0*l, pb = buffer; pp < pend; pp += m, pb += l)
-                    copy_some!l(pp, pb);//memcpy(pp, pb, l*T.sizeof);
+                    copy_array(pp, pb, l);
             }
         }
     }
