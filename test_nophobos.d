@@ -31,6 +31,14 @@ struct Rand
     }
 }
 
+/*void tmp()
+{
+    import core.simd, gcc.builtins;
+    float4 a;
+    a = __builtin_neon_vcombinev2sf( __builtin_neon_vget_lowv4sf(a), 
+                                     __builtin_neon_vget_highv4sf(a));
+}*/
+
 auto sq(T)(T a){ return a*a; }
 
 void main(string[] args)

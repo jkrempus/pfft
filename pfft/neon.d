@@ -46,13 +46,77 @@ struct Neon
         return vec(a);
     }
     
+    static void complex_array_to_real_imag_vec(int N)(T * arr, ref vec rr, ref vec ri)
+    {
+        static if(N==4)
+        {
+            deinterleave!4((cast(vec*)arr)[0], (cast(vec*)arr)[1], rr, ri);
+        }
+        else if(N==2)
+        {
+            asm
+            {
+                "vldmia  %[arr], {d16-d17} \n"
+                "vmov q9, q8 \n"
+                "vuzp.32 q8, q9 \n"
+                "vuzp.32 d16, d17 \n"
+                "vuzp.32 d18, d19 \n"
+                "vmov %q[rr], q8 \n"
+                "vmov %q[ri], q9 \n"
+                : [rr]"=w" (rr), [ri]"=w" (ri)
+                : [arr]"r" (arr)
+                : "q8", "q9";
+            }
+        }
+    }
+    
+    static void interleave(int N)(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        if(N == 4)
+        {
+            float4[2] tmp;
+            __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
+            r0.v = tmp[0];
+            r1.v = tmp[1];
+        }
+        else if(N == 2)
+        {
+            deinterleave!2(a0, a1, r0, r1);
+        }
+    }
+    
+    static void deinterleave(int N)(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        if(N==4)
+        {
+            float4[2] tmp;
+            __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
+            r0.v = tmp[0];
+            r1.v = tmp[1];
+        }
+        else if(N==2)
+        {
+            asm
+            {
+                "vmov q14, %q2 \n"
+                "vmov q15, %q3 \n"
+                "vswp d29, d30 \n"
+                "vmov %q0, q14 \n"
+                "vmov %q1, q15 \n"
+                :"=w" (r0), "=w" (r1)
+                :"w" (a0), "w" (a1)
+                :"q14", "q15";
+            }
+        }
+    }
+    
     private static float4 * v(float * a)
     {
         return cast(float4*)a;
     }
     
     static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, int i, int j)
-    {
+    {        
         float4[2] a, b, ra, rb;
         
         __builtin_neon_vuzpv4sf(&a[0], *v(p0 + i), *v(p1 + i));

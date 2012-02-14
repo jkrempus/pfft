@@ -42,7 +42,7 @@ void main(string[] args)
         im[i] = c[i].im;
     }
     
-    auto ft = (new Fft(n)).fft!float(c);
+    auto ft = (new Fft(n)).fft!double(c);
     
     auto tables = fft_table(log2n);
     fft(re.ptr, im.ptr, log2n, tables);
