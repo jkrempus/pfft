@@ -56,16 +56,13 @@ struct Neon
         {
             asm
             {
-                "vldmia  %[arr], {d16-d17} \n"
-                "vmov q9, q8 \n"
-                "vuzp.32 q8, q9 \n"
-                "vuzp.32 d16, d17 \n"
-                "vuzp.32 d18, d19 \n"
-                "vmov %q[rr], q8 \n"
-                "vmov %q[ri], q9 \n"
-                : [rr]"=w" rr, [ri]"=w" ri
-                : [arr]"r" arr
-                : "q8", "q9";
+                "vldmia  %2, {%e0-%f0} \n"
+                "vmov %q1, %q0 \n"
+                "vuzp.32 %q0, %q1 \n"
+                "vuzp.32 %e0, %f0 \n"
+                "vuzp.32 %e1, %f1 \n"
+                : "=w" rr, "=w" ri
+                : "r" arr ;
             }
         }
     }
@@ -98,15 +95,11 @@ struct Neon
         {
             asm
             {
-                "vmov q14, %q2 \n"
-                "vmov q15, %q3 \n"
-                "vswp d29, d30 \n"
-                "vmov %q0, q14 \n"
-                "vmov %q1, q15 \n"
-                :"=w" r0, "=w" r1
-                :"w" a0, "w" a1
-                :"q14", "q15";
+                "vswp %f0, %e1 \n"
+                :"+w" a0.v, "+w" a1.v ;
             }
+            r0 = a0;
+            r1 = a1;
         }
     }
     
