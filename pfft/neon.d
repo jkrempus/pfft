@@ -63,8 +63,8 @@ struct Neon
                 "vuzp.32 d18, d19 \n"
                 "vmov %q[rr], q8 \n"
                 "vmov %q[ri], q9 \n"
-                : [rr]"=w" (rr), [ri]"=w" (ri)
-                : [arr]"r" (arr)
+                : [rr]"=w" rr, [ri]"=w" ri
+                : [arr]"r" arr
                 : "q8", "q9";
             }
         }
@@ -75,7 +75,7 @@ struct Neon
         if(N == 4)
         {
             float4[2] tmp;
-            __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
+            __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
         }
@@ -90,7 +90,7 @@ struct Neon
         if(N==4)
         {
             float4[2] tmp;
-            __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
+            __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
         }
@@ -103,8 +103,8 @@ struct Neon
                 "vswp d29, d30 \n"
                 "vmov %q0, q14 \n"
                 "vmov %q1, q15 \n"
-                :"=w" (r0), "=w" (r1)
-                :"w" (a0), "w" (a1)
+                :"=w" r0, "=w" r1
+                :"w" a0, "w" a1
                 :"q14", "q15";
             }
         }
