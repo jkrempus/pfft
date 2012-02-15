@@ -289,7 +289,7 @@ template FFT(alias V, Options)
             pi[i3] = ai2 + ar3;      
         }
     }
-    
+        
     void fft_pass(vec *pr, vec *pi, vec *pend, T *table, const size_t m2)
     {
         size_t m = m2 + m2;

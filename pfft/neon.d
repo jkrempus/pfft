@@ -75,6 +75,13 @@ struct Neon
             __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
+            /*asm
+            {
+                "vzip.32 %q0, %q1 \n"
+                :"+w" a0.v, "+w" a1.v ;
+            }
+            r0 = a0;
+            r1 = a1;*/
         }
         else if(N == 2)
         {
@@ -90,6 +97,13 @@ struct Neon
             __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
+            /*asm
+            {
+                "vuzp.32 %q0, %q1 \n"
+                :"+w" a0.v, "+w" a1.v ;
+            }
+            r0 = a0;
+            r1 = a1;*/
         }
         else if(N==2)
         {
@@ -103,44 +117,71 @@ struct Neon
         }
     }
     
+    
     private static float4 * v(float * a)
     {
         return cast(float4*)a;
     }
     
-    static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, int i, int j)
-    {        
-        float4[2] a, b, ra, rb;
-        
-        __builtin_neon_vuzpv4sf(&a[0], *v(p0 + i), *v(p1 + i));
-        __builtin_neon_vuzpv4sf(&b[0], *v(p2 + i), *v(p3 + i));
-        __builtin_neon_vtrnv4sf(&ra[0], a[0], b[0]);
-        __builtin_neon_vtrnv4sf(&rb[0], a[1], b[1]);
-        __builtin_neon_vuzpv4sf(&a[0], *v(p0 + j), *v(p1 + j));
-        __builtin_neon_vuzpv4sf(&b[0], *v(p2 + j), *v(p3 + j));
-        *v(p0 + j) = ra[0];
-        *v(p1 + j) = ra[1];
-        *v(p2 + j) = rb[0];
-        *v(p3 + j) = rb[1];
-        __builtin_neon_vtrnv4sf(&ra[0], a[0], b[0]);
-        __builtin_neon_vtrnv4sf(&rb[0], a[1], b[1]);
-        *v(p0 + i) = ra[0];
-        *v(p1 + i) = ra[1];
-        *v(p2 + i) = rb[0];
-        *v(p3 + i) = rb[1];
+    
+    // for input:
+    // [0 1 2 3] [4 5 6 7] [8 9 10 11] [12 13 14 15]
+    // _br_shuffle outputs:
+    // [0 8 4 12] [1 9 5 13] [2 10 6 14] [3 11 7 15]
+    
+    private static _br_shuffle(ref float4 a0, ref float4 a1, 
+                               ref float4 a2, ref float4 a3)
+    {
+        asm
+        {
+            "vuzp.32 %q0, %q1 \n"
+            "vuzp.32 %q2, %q3 \n"
+            "vtrn.32 %q0, %q2 \n"
+            "vtrn.32 %q1, %q3 \n"
+            : "+w" a0, "+w" a1, "+w" a2, "+w" a3;
+        }
     }
+    
+    
+    static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, int i, int j)
+    {                
+        float4  
+        a0 = *v(p0 + i), 
+        a1 = *v(p1 + i), 
+        a2 = *v(p2 + i), 
+        a3 = *v(p3 + i);
+        _br_shuffle(a0, a1, a2, a3);
+        
+        float4  
+        b0 = *v(p0 + j), 
+        b1 = *v(p1 + j), 
+        b2 = *v(p2 + j), 
+        b3 = *v(p3 + j);
+        *v(p0 + j) = a0;
+        *v(p1 + j) = a2;
+        *v(p2 + j) = a1;
+        *v(p3 + j) = a3;
+        
+        _br_shuffle(b0, b1, b2, b3);
+        *v(p0 + i) = b0;
+        *v(p1 + i) = b2;
+        *v(p2 + i) = b1;
+        *v(p3 + i) = b3;
+    }
+
 
     static void bit_reverse_16(T * p0, T * p1, T * p2, T * p3, int i)
     {
-        float4[2] a, b, ra, rb;
-        __builtin_neon_vuzpv4sf(&a[0], *v(p0 + i), *v(p1 + i));
-        __builtin_neon_vuzpv4sf(&b[0], *v(p2 + i), *v(p3 + i));
-        __builtin_neon_vtrnv4sf(&ra[0], a[0], b[0]);
-        __builtin_neon_vtrnv4sf(&rb[0], a[1], b[1]);
-        *v(p0 + i) = ra[0];
-        *v(p1 + i) = ra[1];
-        *v(p2 + i) = rb[0];
-        *v(p3 + i) = rb[1];
+        float4  
+        a0 = *v(p0 + i), 
+        a1 = *v(p1 + i), 
+        a2 = *v(p2 + i), 
+        a3 = *v(p3 + i);
+        _br_shuffle(a0, a1, a2, a3);
+        *v(p0 + i) = a0;
+        *v(p1 + i) = a2;
+        *v(p2 + i) = a1;
+        *v(p3 + i) = a3;
     }
 }
 
