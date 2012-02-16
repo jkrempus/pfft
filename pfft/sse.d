@@ -14,6 +14,10 @@ template shuf_mask(int a3, int a2, int a1, int a0)
     enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
 }
 
+version(X86_64)
+    version(linux)
+        version = linux_x86_64;
+
 struct SSE
 {
     alias float4 vec;
@@ -135,7 +139,7 @@ struct SSE
     {
         static vec scalar_to_vector(float a)
         {
-            version(AsmX86_64_Posix)
+            version(linux_x86_64)
                 asm
                 {
                     naked;
@@ -158,7 +162,7 @@ struct SSE
         
         static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, size_t i0, size_t i1)
         {
-            version(AsmX86_64_Posix)
+            version(linux_x86_64)
                 asm                                                
                 {
                     naked;
@@ -227,7 +231,7 @@ struct SSE
 
         static void bit_reverse_16(T * p0, T * p1, T * p2, T * p3, size_t i)
         {
-            version(AsmX86_64_Posix)
+            version(linux_x86_64)
             {
                 asm
                 {
