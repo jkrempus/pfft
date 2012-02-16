@@ -101,9 +101,9 @@ struct BitReverse(alias V, Options)
     alias V.T T;
     alias V.vec vec;
     
-    static size_t br_table_size(int log2n){ return (1<<(log2n-4)) + 4; }
+    static size_t br_table_size()(int log2n){ return (1<<(log2n-4)) + 4; }
     
-    static void init_br_table(uint * table, int log2n)
+    static void init_br_table()(uint * table, int log2n)
     {
         int j = 0;
         foreach(i0, i1; bit_reversed_pairs(log2n - 4))
@@ -119,7 +119,7 @@ struct BitReverse(alias V, Options)
             }
     }
     
-    static void bit_reverse_small(T*  p, uint log2n, uint*  table)
+    static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         const uint Log2l = 2U;
         size_t 
@@ -137,7 +137,7 @@ struct BitReverse(alias V, Options)
             V.bit_reverse_swap_16( p, p1, p2, p3, table[0], table[1]);
     }
 
-    static void swap4once(vec * dst, vec * src)
+    static void swap4once()(vec * dst, vec * src)
     {
         vec a0 = src[0];
         vec a1 = src[1];
@@ -165,7 +165,7 @@ struct BitReverse(alias V, Options)
             swap4once((cast(vec*)a) + 4 * i, (cast(vec*)b) + 4 * i);
     }
     
-    static void copy8once(vec * dst, vec * src)
+    static void copy8once()(vec * dst, vec * src)
     {
         vec a0 = src[0];
         vec a1 = src[1];
@@ -193,7 +193,7 @@ struct BitReverse(alias V, Options)
             copy8once((cast(vec*)a) + 8 * i, (cast(vec*)b) + 8 * i);
     }
     
-    static void bit_reverse_large(T* p, int log2n, uint * table)
+    static void bit_reverse_large()(T* p, int log2n, uint * table)
     {
         enum log2l = Options.log2_bitreverse_large_chunk_size;
         enum l = 1<<log2l;

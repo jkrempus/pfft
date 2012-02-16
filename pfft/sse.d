@@ -135,24 +135,137 @@ struct SSE
     {
         static vec scalar_to_vector(float a)
         {
-            struct quad
+            version(AsmX86_64_Posix)
+                asm
+                {
+                    naked;
+                    shufps XMM0, XMM0, 0;
+                    ret;
+                }
+            else
             {
-                align(16) float a;
-                float b;
-                float c;
-                float d;
-            };
-            return *cast(vec*)&quad(a,a,a,a);
+                struct quad
+                {
+                    align(16) float a;
+                    float b;
+                    float c;
+                    float d;
+                };
+                return *cast(vec*)&quad(a,a,a,a);
+            }
         }
         
-        static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, size_t i1, size_t i2)
+        
+        static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, size_t i0, size_t i1)
         {
-            Scalar!T.bit_reverse_swap_16(p0, p1, p2, p3, i1, i2);
+            version(AsmX86_64_Posix)
+                asm                                                
+                {
+                    naked;
+                    
+                    movaps XMM0, [R9 + T.sizeof*RSI];
+                    movaps XMM1, [R8 + T.sizeof*RSI];
+                    movaps XMM2, [RCX + T.sizeof*RSI];
+                    movaps XMM3, [RDX + T.sizeof*RSI];
+                    
+                    movaps XMM4, XMM0;
+                    shufps XMM4, XMM2, 0b01_00_01_00;
+                    movaps XMM5, XMM1;
+                    shufps XMM5, XMM3, 0b01_00_01_00;
+                    movaps XMM6, XMM0;
+                    shufps XMM6, XMM2, 0b11_10_11_10;
+                    movaps XMM7, XMM1;
+                    shufps XMM7, XMM3, 0b11_10_11_10;
+                    
+                    movaps XMM0, XMM4;
+                    shufps XMM0, XMM5, 0b10_00_10_00;
+                    movaps XMM1, XMM6;
+                    shufps XMM1, XMM7, 0b10_00_10_00;
+                    movaps XMM2, XMM4;
+                    shufps XMM2, XMM5, 0b11_01_11_01;
+                    movaps XMM3, XMM6;
+                    shufps XMM3, XMM7, 0b11_01_11_01;
+                    
+                    movaps XMM4, [R9 + T.sizeof*RDI];
+                    movaps XMM5, [R8 + T.sizeof*RDI];
+                    movaps XMM6, [RCX + T.sizeof*RDI];
+                    movaps XMM7, [RDX + T.sizeof*RDI];
+                    
+                    movaps [R9 + T.sizeof*RDI], XMM0;
+                    movaps [R8 + T.sizeof*RDI], XMM1;
+                    movaps [RCX + T.sizeof*RDI], XMM2;
+                    movaps [RDX + T.sizeof*RDI], XMM3;
+                    
+                    movaps XMM0, XMM4;
+                    shufps XMM0, XMM6, 0b01_00_01_00;
+                    movaps XMM1, XMM5;
+                    shufps XMM1, XMM7, 0b01_00_01_00;
+                    movaps XMM2, XMM4;
+                    shufps XMM2, XMM6, 0b11_10_11_10;
+                    movaps XMM3, XMM5;
+                    shufps XMM3, XMM7, 0b11_10_11_10;
+                    
+                    movaps XMM4, XMM0;
+                    shufps XMM4, XMM1, 0b10_00_10_00;
+                    movaps XMM5, XMM2;
+                    shufps XMM5, XMM3, 0b10_00_10_00;
+                    movaps XMM6, XMM0;
+                    shufps XMM6, XMM1, 0b11_01_11_01;
+                    movaps XMM7, XMM2;
+                    shufps XMM7, XMM3, 0b11_01_11_01;
+                    
+                    movaps [R9 + T.sizeof*RSI], XMM4;
+                    movaps [R8 + T.sizeof*RSI], XMM5;
+                    movaps [RCX + T.sizeof*RSI], XMM6;
+                    movaps [RDX + T.sizeof*RSI], XMM7;
+                                        
+                    ret;
+                }
+            else
+                Scalar!T.bit_reverse_swap_16(p0, p1, p2, p3, i0, i1);
         }
 
         static void bit_reverse_16(T * p0, T * p1, T * p2, T * p3, size_t i)
         {
-            Scalar!T.bit_reverse_16(p0, p1, p2, p3, i);
+            version(AsmX86_64_Posix)
+            {
+                asm
+                {
+                    naked;
+                    
+                    movaps XMM0, [R8 + T.sizeof*RDI];
+                    movaps XMM1, [RCX + T.sizeof*RDI];
+                    movaps XMM2, [RDX + T.sizeof*RDI];
+                    movaps XMM3, [RSI + T.sizeof*RDI];
+                    
+                    movaps XMM4, XMM0;
+                    shufps XMM4, XMM2, 0b01_00_01_00;
+                    movaps XMM5, XMM1;
+                    shufps XMM5, XMM3, 0b01_00_01_00;
+                    movaps XMM6, XMM0;
+                    shufps XMM6, XMM2, 0b11_10_11_10;
+                    movaps XMM7, XMM1;
+                    shufps XMM7, XMM3, 0b11_10_11_10;
+                    
+                    movaps XMM0, XMM4;
+                    shufps XMM0, XMM5, 0b10_00_10_00;
+                    movaps XMM1, XMM6;
+                    shufps XMM1, XMM7, 0b10_00_10_00;
+                    movaps XMM2, XMM4;
+                    shufps XMM2, XMM5, 0b11_01_11_01;
+                    movaps XMM3, XMM6;
+                    shufps XMM3, XMM7, 0b11_01_11_01;
+                    
+                    movaps [R8 + T.sizeof*RDI], XMM0;
+                    movaps [RCX + T.sizeof*RDI], XMM1;
+                    movaps [RDX + T.sizeof*RDI], XMM2;
+                    movaps [RSI + T.sizeof*RDI], XMM3;
+                    
+                    ret;
+                }
+            }
+            else
+                Scalar!T.bit_reverse_16(p0, p1, p2, p3, i);
         }                         
     }
 }
