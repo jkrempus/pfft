@@ -123,21 +123,15 @@ struct Neon
         return cast(float4*)a;
     }
     
-    
-    // for input:
-    // [0 1 2 3] [4 5 6 7] [8 9 10 11] [12 13 14 15]
-    // _br_shuffle outputs:
-    // [0 8 4 12] [1 9 5 13] [2 10 6 14] [3 11 7 15]
-    
-    private static _br_shuffle(ref float4 a0, ref float4 a1, 
+    private static _bit_reverse(ref float4 a0, ref float4 a1, 
                                ref float4 a2, ref float4 a3)
     {
         asm
         {
-            "vuzp.32 %q0, %q1 \n"
-            "vuzp.32 %q2, %q3 \n"
             "vtrn.32 %q0, %q2 \n"
             "vtrn.32 %q1, %q3 \n"
+            "vswp %f0, %e1 \n"
+            "vswp %f2, %e3 \n"
             : "+w" a0, "+w" a1, "+w" a2, "+w" a3;
         }
     }
@@ -150,7 +144,7 @@ struct Neon
         a1 = *v(p1 + i), 
         a2 = *v(p2 + i), 
         a3 = *v(p3 + i);
-        _br_shuffle(a0, a1, a2, a3);
+        _bit_reverse(a0, a1, a2, a3);
         
         float4  
         b0 = *v(p0 + j), 
@@ -158,30 +152,21 @@ struct Neon
         b2 = *v(p2 + j), 
         b3 = *v(p3 + j);
         *v(p0 + j) = a0;
-        *v(p1 + j) = a2;
-        *v(p2 + j) = a1;
+        *v(p1 + j) = a1;
+        *v(p2 + j) = a2;
         *v(p3 + j) = a3;
         
-        _br_shuffle(b0, b1, b2, b3);
+        _bit_reverse(b0, b1, b2, b3);
         *v(p0 + i) = b0;
-        *v(p1 + i) = b2;
-        *v(p2 + i) = b1;
+        *v(p1 + i) = b1;
+        *v(p2 + i) = b2;
         *v(p3 + i) = b3;
     }
 
 
     static void bit_reverse_16(T * p0, T * p1, T * p2, T * p3, int i)
     {
-        float4  
-        a0 = *v(p0 + i), 
-        a1 = *v(p1 + i), 
-        a2 = *v(p2 + i), 
-        a3 = *v(p3 + i);
-        _br_shuffle(a0, a1, a2, a3);
-        *v(p0 + i) = a0;
-        *v(p1 + i) = a2;
-        *v(p2 + i) = a1;
-        *v(p3 + i) = a3;
+        _bit_reverse(*v(p0 + i), *v(p1 + i), *v(p2 + i), *v(p3 + i));
     }
 }
 
