@@ -64,7 +64,7 @@ void bench(int log2n)
     auto tables = fft_table(log2n);
     
     ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
-    ulong niter = 1_000_000_000L / flopsPerIter;
+    ulong niter = 10_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
     double t = get_time();

@@ -293,8 +293,7 @@ template FFT(alias V, Options)
     void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, const size_t m2)
     {
         size_t m = m2 + m2;
-        for(; pr < pend ;
-          pr += m, pi += m)
+        for(; pr < pend ; pr += m, pi += m)
         {
             vec wr = V.scalar_to_vector(table[0]);
             vec wi = V.scalar_to_vector(table[1]);
@@ -309,6 +308,80 @@ template FFT(alias V, Options)
                 pr[k1] = ur + tr;                                                    
                 pi[k2] = ui - ti;                                                    
                 pi[k1] = ui + ti;
+            }
+        }
+    }
+    
+    void fft_two_passes()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    {
+        size_t m = m2 + m2;
+        size_t m4 = m2 / 2;
+        for(; pr < pend ; pr += m, pi += m)
+        {
+            vec w1r = V.scalar_to_vector(table[0]);
+            vec w1i = V.scalar_to_vector(table[1]);
+            
+            vec w2r = w1r * w1r - w1i * w1i;
+            vec w2i = w1r * w1i;
+            w2i += w2i;
+            
+            vec w3r = w2r * w1r - w2i * w1i;
+            vec w3i = w2r * w1i + w2i * w1r;
+            
+            table += 4;
+            for (size_t k0 = 0, k1 = m4, k2 = m2, k3 = m2 + m4; k0<m4; k0++, k1++, k2++, k3++) 
+            {                 
+                vec tr, ur, ti, ui;
+                
+                vec r0 = pr[k0];
+                vec r1 = pr[k1];
+                vec r2 = pr[k2];
+                vec r3 = pr[k3];
+                
+                vec i0 = pi[k0];
+                vec i1 = pi[k1];
+                vec i2 = pi[k2];
+                vec i3 = pi[k3];
+                
+                tr = r2 * w2r - i2 * w2i;
+                ti = r2 * w2i + i2 * w2r;
+                r2 = r0 - tr;
+                i2 = i0 - ti;
+                r0 += tr;
+                i0 += ti;
+                
+                tr = r3 * w3r - i3 * w3i;
+                ti = r3 * w3i + i3 * w3r;
+                ur = r1 * w1r - i1 * w1i;
+                ui = r1 * w1i + i1 * w1r;
+                r3 = ur - tr;
+                i3 = ui - ti;
+                r1 = ur + tr;
+                i1 = ui + ti;
+                
+                tr = r1;
+                ti = i1;
+                r1 = r0 - tr;
+                i1 = i0 - ti;
+                r0 += tr;
+                i0 += ti;
+                
+                tr = i3;
+                ti = -r3;
+                r3 = r2 - tr;
+                i3 = i2 - ti;
+                r2 += tr;
+                i2 += ti;
+                
+                pr[k0] = r0;
+                pr[k1] = r1;
+                pr[k2] = r2;
+                pr[k3] = r3;
+                
+                pi[k0] = i0;
+                pi[k1] = i1;
+                pi[k2] = i2;
+                pi[k3] = i3;
             }
         }
     }
@@ -331,7 +404,16 @@ template FFT(alias V, Options)
             table += tableRowLen;
             tableRowLen += tableRowLen;
         }
-            
+        
+        for (; m2 > 1 ; m2 >>= 2)
+        {
+            table += tableRowLen;
+            tableRowLen += tableRowLen;
+            fft_two_passes(re, im, pend, table, m2);
+            table += tableRowLen;
+            tableRowLen += tableRowLen;
+        }
+        
         for (; m2 > 0 ; m2 >>= 1)
         {
             fft_pass(re, im, pend, table, m2);
@@ -433,7 +515,14 @@ template FFT(alias V, Options)
     {
         if(N <= (1<<Options.log2_optimal_n))
         {
-            for (size_t m2 = N >> 1; m2 > 0 ; m2 >>= 1)
+            size_t m2 = N >> 1;
+            for (; m2 > 1 ; m2 >>= 2)
+            {
+                nextTableRow(table, tableRowLen, tableI);  
+                fft_two_passes(pr, pi, pr + N, table + tableI, m2);
+                nextTableRow(table, tableRowLen, tableI);  
+            }
+            for (; m2 > 0 ; m2 >>= 1)
             {
                 fft_pass(pr, pi, pr + N, table + tableI, m2);
                 nextTableRow(table, tableRowLen, tableI);  

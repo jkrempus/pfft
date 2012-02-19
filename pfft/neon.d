@@ -32,6 +32,14 @@ struct NeonVec
     {
         return NeonVec(__builtin_neon_vmulv4sf(v, other.v, 3));
     }
+    /*NeonVec muladd(NeonVec a, NeonVec b)
+    {
+        return NeonVec(__builtin_neon_vmlav4sf(v, a.v, b.v, 3));
+    }
+    NeonVec mulsub(NeonVec a, NeonVec b)
+    {
+        return NeonVec(__builtin_neon_vmlsv4sf(v, a.v, b.v, 3));
+    }*/
 }
 
 struct Neon
@@ -75,13 +83,6 @@ struct Neon
             __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
-            /*asm
-            {
-                "vzip.32 %q0, %q1 \n"
-                :"+w" a0.v, "+w" a1.v ;
-            }
-            r0 = a0;
-            r1 = a1;*/
         }
         else if(N == 2)
         {
@@ -97,13 +98,6 @@ struct Neon
             __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
-            /*asm
-            {
-                "vuzp.32 %q0, %q1 \n"
-                :"+w" a0.v, "+w" a1.v ;
-            }
-            r0 = a0;
-            r1 = a1;*/
         }
         else if(N==2)
         {
