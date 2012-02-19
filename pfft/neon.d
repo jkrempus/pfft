@@ -32,6 +32,7 @@ struct NeonVec
     {
         return NeonVec(__builtin_neon_vmulv4sf(v, other.v, 3));
     }
+    
     /*NeonVec muladd(NeonVec a, NeonVec b)
     {
         return NeonVec(__builtin_neon_vmlav4sf(v, a.v, b.v, 3));

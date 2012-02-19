@@ -323,7 +323,7 @@ template FFT(alias V, Options)
             
             vec w2r = w1r * w1r - w1i * w1i;
             vec w2i = w1r * w1i;
-            w2i += w2i;
+            w2i = w2i + w2i;
             
             vec w3r = w2r * w1r - w2i * w1i;
             vec w3i = w2r * w1i + w2i * w1r;
@@ -347,8 +347,8 @@ template FFT(alias V, Options)
                 ti = r2 * w2i + i2 * w2r;
                 r2 = r0 - tr;
                 i2 = i0 - ti;
-                r0 += tr;
-                i0 += ti;
+                r0 = r0 + tr;
+                i0 = i0 + ti;
                 
                 tr = r3 * w3r - i3 * w3i;
                 ti = r3 * w3i + i3 * w3r;
@@ -363,15 +363,15 @@ template FFT(alias V, Options)
                 ti = i1;
                 r1 = r0 - tr;
                 i1 = i0 - ti;
-                r0 += tr;
-                i0 += ti;
+                r0 = r0 + tr;
+                i0 = i0 + ti;
                 
                 tr = i3;
-                ti = -r3;
+                ti = r3;                // take minus into account later
                 r3 = r2 - tr;
-                i3 = i2 - ti;
-                r2 += tr;
-                i2 += ti;
+                i3 = i2 + ti;
+                r2 = r2 + tr;
+                i2 = i2 - ti;
                 
                 pr[k0] = r0;
                 pr[k1] = r1;
