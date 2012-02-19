@@ -5,7 +5,7 @@
 
 module pfft.fft_impl;
 
-import core.bitop, core.stdc.math, core.sys.posix.stdlib;
+import core.bitop, core.stdc.math, core.stdc.stdlib, core.sys.posix.stdlib;
 
 import pfft.bitreverse;
 
@@ -173,22 +173,60 @@ template FFT(alias V, Options)
         }
     }
     
-    void fft_table_impl()(int log2n, int n_reversed_loops, Pair * r)
+    void fft_table_impl()(int log2n, Pair * r)
     {
         static if(is(typeof(Options.fast_init)))
             fft_table_sines_cosines_fast(log2n, r);
         else 
             fft_table_sines_cosines(log2n, r);
-            
+                
+        int n_reversed_loops = 
+            log2n >= Options.large_limit ? 0 : log2(vec_size);
+                
         auto p = r;
-        for (int s = 1; s <= log2n; ++s)
+        for (int s = 0; s < log2n; ++s)
         {
-            size_t m = 1 << s;
-            if(s <= log2n - n_reversed_loops)
-                bit_reverse_simple(p, s - 1);
+            size_t m = 1 << (s + 1);
+            
+            if(s < log2n - n_reversed_loops)
+                bit_reverse_simple(p, s);
             else
                 complex_array_to_vector(p, m/2);
+            
             p += m/2;
+        }
+        
+        p = r;
+        
+        int start_s = log2n < Options.large_limit ? 0 : 
+                      log2n - Options.log2_optimal_n - log2(vec_size);
+        int s = 0;
+        for(; s < start_s; s++)
+        {
+            size_t m = 1 << (s + 1);
+            p += m/2;
+        }
+        for (; s + 1 < log2n - log2(vec_size);  s += 2)
+        {
+            size_t m = 1 << (s + 1);
+            
+            foreach(i; 0 .. m / 2)
+            {
+                Pair a1 = p[m / 2 + 2 * i];
+                Pair a2, a3;
+                
+                a2[0] = a1[0] * a1[0] - a1[1] * a1[1];
+                a2[1] = a1[0] * a1[1] + a1[1] * a1[0];
+                
+                a3[0] = a2[0] * a1[0] - a2[1] * a1[1];
+                a3[1] = a2[0] * a1[1] + a2[1] * a1[0];
+                
+                p[i] = a1;
+                p[m / 2 + 2 * i] = a2;
+                p[m / 2 + 2 * i + 1] = a3;
+            }
+            
+            p += m / 2 + m;
         }
     }
     
@@ -202,11 +240,8 @@ template FFT(alias V, Options)
         Tables tables;
         
         tables.table = aligned_alloc!T(2 * (1 << log2n), 64);
-        int n_reversed_loops = log2n >= Options.large_limit ? 
-            0 : log2(vec_size);
         
-        fft_table_impl(log2n, n_reversed_loops, 
-            cast(Pair *)(tables.table + 2));
+        fft_table_impl(log2n, cast(Pair *)(tables.table + 2));
         
         if(log2n < 4)
         {
@@ -312,23 +347,33 @@ template FFT(alias V, Options)
         }
     }
     
-    void fft_two_passes()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    void fft_two_passes()(vec *pr, vec *pi, vec *pend, 
+                          T *table0, T *table1,  size_t m2)
     {
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
         for(; pr < pend ; pr += m, pi += m)
         {
-            vec w1r = V.scalar_to_vector(table[0]);
-            vec w1i = V.scalar_to_vector(table[1]);
+            vec w1r = V.scalar_to_vector(table0[0]);
+            vec w1i = V.scalar_to_vector(table0[1]);
             
-            vec w2r = w1r * w1r - w1i * w1i;
+            vec w2r = V.scalar_to_vector(table1[0]);
+            vec w2i = V.scalar_to_vector(table1[1]);
+            
+            vec w3r = V.scalar_to_vector(table1[2]);
+            vec w3i = V.scalar_to_vector(table1[3]);
+            
+            /*vec w2r = w1r * w1r - w1i * w1i;
             vec w2i = w1r * w1i;
             w2i = w2i + w2i;
             
             vec w3r = w2r * w1r - w2i * w1i;
             vec w3i = w2r * w1i + w2i * w1r;
             
-            table += 4;
+            table += 4;*/
+            table0 += 2;
+            table1 += 4;
+            
             for (size_t k0 = 0, k1 = m4, k2 = m2, k3 = m2 + m4; k0<m4; k0++, k1++, k2++, k3++) 
             {                 
                 vec tr, ur, ti, ui;
@@ -407,14 +452,15 @@ template FFT(alias V, Options)
         
         for (; m2 > 1 ; m2 >>= 2)
         {
-            table += tableRowLen;
+            auto next_table = table + tableRowLen;
+            fft_two_passes(re, im, pend, table, next_table, m2);
+            table = next_table;
             tableRowLen += tableRowLen;
-            fft_two_passes(re, im, pend, table, m2);
             table += tableRowLen;
             tableRowLen += tableRowLen;
         }
         
-        for (; m2 > 0 ; m2 >>= 1)
+        if (m2 != 0)
         {
             fft_pass(re, im, pend, table, m2);
             table += tableRowLen;
@@ -513,16 +559,17 @@ template FFT(alias V, Options)
         vec * pr, vec *  pi, size_t N , 
         T * table, size_t tableI, size_t tableRowLen)
     {
-        if(N <= (1<<Options.log2_optimal_n))
+        if(N == (1<<Options.log2_optimal_n))
         {
             size_t m2 = N >> 1;
             for (; m2 > 1 ; m2 >>= 2)
             {
-                nextTableRow(table, tableRowLen, tableI);  
-                fft_two_passes(pr, pi, pr + N, table + tableI, m2);
+                auto tmp = table + tableI;
+                nextTableRow(table, tableRowLen, tableI); 
+                fft_two_passes(pr, pi, pr + N, tmp, table + tableI, m2);
                 nextTableRow(table, tableRowLen, tableI);  
             }
-            for (; m2 > 0 ; m2 >>= 1)
+            if (m2 != 0)
             {
                 fft_pass(pr, pi, pr + N, table + tableI, m2);
                 nextTableRow(table, tableRowLen, tableI);  
