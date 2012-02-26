@@ -232,14 +232,22 @@ template FFT(alias V, Options)
     
     alias _FFTTables!T Tables;
     
-    Tables tables()(int log2n)
+    size_t table_size_bytes(int log2n)
+    {
+        return ((2 * T.sizeof) << log2n) + BR.br_table_size(log2n) * uint.sizeof;
+    }
+    
+    Tables tables()(int log2n, void * p = null)
     {
         if(log2n < 2*log2(vec_size))
-            return FFT!(Scalar!T, Options).tables(log2n);
+            return FFT!(Scalar!T, Options).tables(log2n, p);
+        
+        if(p == null)
+            p = cast(void*)aligned_alloc!byte(table_size_bytes(log2n), 64);
         
         Tables tables;
         
-        tables.table = aligned_alloc!T(2 * (1 << log2n), 64);
+        tables.table = cast(T*) p;
         
         fft_table_impl(log2n, cast(Pair *)(tables.table + 2));
         
@@ -249,7 +257,7 @@ template FFT(alias V, Options)
         }
         else if(log2n < Options.large_limit)
         {
-            tables.brTable = aligned_alloc!uint(BR.br_table_size(log2n), 64);
+            tables.brTable = cast(uint*)(p + ((2 * T.sizeof) << log2n));
             BR.init_br_table(tables.brTable, log2n);
         }
         else
