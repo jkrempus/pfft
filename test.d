@@ -6,17 +6,30 @@
 import std.stdio, std.range, std.algorithm, std.conv, 
     std.math, std.numeric, std.complex, std.random;
 
-version(StdSimd)
+version(Double)
 {
-    import pfft.stdsimd;
-}
-else version(Scalar)
-{
-    import pfft.scalar;
+    alias double T;
+    alias real U;
+    
+    import pfft.sse_double;
 }
 else
 {
-    import pfft.sse;
+    alias float T;
+    alias double U;
+    
+    version(StdSimd)
+    {
+        import pfft.stdsimd;
+    }
+    else version(Scalar)
+    {
+        import pfft.scalar;
+    }
+    else
+    {
+        import pfft.sse;
+    }
 }
 
 auto rms(R)(R r)
@@ -29,9 +42,9 @@ void main(string[] args)
     int log2n = parse!int(args[1]);
     int n = 1<<log2n;
     
-    auto re = new float[n];
-    auto im = new float[n];
-    auto c = new Complex!(double)[n];
+    auto re = new T[n];
+    auto im = new T[n];
+    auto c = new Complex!(U)[n];
     
     rndGen.seed(1);
     foreach(i, e; re)
@@ -42,7 +55,7 @@ void main(string[] args)
         im[i] = c[i].im;
     }
     
-    auto ft = (new Fft(n)).fft!double(c);
+    auto ft = (new Fft(n)).fft!U(c);
     
     auto tables = fft_table(log2n);
     fft(re.ptr, im.ptr, log2n, tables);

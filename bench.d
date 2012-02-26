@@ -33,21 +33,31 @@ else
     }
 }
 
-version(StdSimd)
+version(Double)
 {
-    import pfft.stdsimd;
-}
-else version(Scalar)
-{
-    import pfft.scalar;
-}
-else version(Neon)
-{
-    import pfft.neon;
+    import pfft.sse_double;
+    alias double T;
 }
 else
 {
-    import pfft.sse;
+    alias float T;
+    
+    version(StdSimd)
+    {
+        import pfft.stdsimd;
+    }
+    else version(Scalar)
+    {
+        import pfft.scalar;
+    }
+    else version(Neon)
+    {
+        import pfft.neon;
+    }
+    else
+    {
+        import pfft.sse;
+    }
 }
 
 import pfft.fft_impl : aligned_array;
@@ -55,8 +65,8 @@ import pfft.fft_impl : aligned_array;
 void bench(int log2n)
 {
 
-    auto re = aligned_array!float(1 << log2n, 64);
-    auto im = aligned_array!float(1 << log2n, 64);
+    auto re = aligned_array!T(1 << log2n, 64);
+    auto im = aligned_array!T(1 << log2n, 64);
 
     re []= 0f;
     im []= 0f;
@@ -64,7 +74,7 @@ void bench(int log2n)
     auto tables = fft_table(log2n);
     
     ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
-    ulong niter = 1_000_000_000L / flopsPerIter;
+    ulong niter = 10_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
     double t = get_time();
