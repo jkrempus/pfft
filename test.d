@@ -11,7 +11,7 @@ version(Double)
     alias double T;
     alias real U;
     
-    import pfft.sse_double;
+    import impl = pfft.sse_double;
 }
 else
 {
@@ -20,21 +20,21 @@ else
     
     version(StdSimd)
     {
-        import pfft.stdsimd;
+        import impl = pfft.stdsimd;
     }
     else version(Scalar)
     {
-        import pfft.scalar;
+        import impl = pfft.scalar;
     }
     else
     {
-        import pfft.sse;
+        import impl = pfft.sse;
     }
 }
 
 auto rms(R)(R r)
 {
-    return sqrt(reduce!q{ a + b.re^^2 + b.im^^2 }(0.0, r) / r.length);
+    return std.math.sqrt(reduce!q{ a + b.re^^2 + b.im^^2 }(0.0, r) / r.length);
 }
 
 void main(string[] args)
@@ -57,8 +57,8 @@ void main(string[] args)
     
     auto ft = (new Fft(n)).fft!U(c);
     
-    auto tables = fft_table(log2n);
-    fft(re.ptr, im.ptr, log2n, tables);
+    auto tables = impl.fft_table(log2n);
+    impl.fft(re.ptr, im.ptr, log2n, tables);
     
     auto diff = map!
         ((a){ return a[2] - complex(a[0], a[1]); })

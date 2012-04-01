@@ -5,8 +5,7 @@
 
 module pfft.fft_impl;
 
-import core.bitop, core.stdc.math, core.stdc.stdlib, core.sys.posix.stdlib;
-
+import core.sys.posix.stdlib;
 import pfft.bitreverse;
 
 size_t _one(){ return cast(size_t) 1; }
@@ -88,6 +87,9 @@ auto aligned_array(T)(size_t n, size_t alignment)
 
 template FFT(alias V, Options)
 {
+    import core.bitop, core.stdc.math, core.stdc.stdlib;
+    import pfft.bitreverse;
+    
     alias BitReverse!(V, Options) BR;
     
     alias V.vec_size vec_size;
@@ -230,22 +232,22 @@ template FFT(alias V, Options)
         }
     }
     
-    alias _FFTTables!T Tables;
+    alias _FFTTables!T Table;
     
-    size_t table_size_bytes(int log2n)
+    size_t table_size_bytes()(int log2n)
     {
         return ((2 * T.sizeof) << log2n) + BR.br_table_size(log2n) * uint.sizeof;
     }
     
-    Tables tables()(int log2n, void * p = null)
+    Table fft_table()(int log2n, void * p = null)
     {
         if(log2n < 2*log2(vec_size))
-            return FFT!(Scalar!T, Options).tables(log2n, p);
+            return FFT!(Scalar!T, Options).fft_table(log2n, p);
         
         if(p == null)
             p = cast(void*)aligned_alloc!byte(table_size_bytes(log2n), 64);
         
-        Tables tables;
+        Table tables;
         
         tables.table = cast(T*) p;
         
@@ -321,7 +323,7 @@ template FFT(alias V, Options)
             vec ai1 = ui + ti;
             vec ai3 = ui - ti;
 
-            pr[i0] = ar0 + ar1;
+            pr[i0] = ar0 + ar1;import core.bitop, core.stdc.math, core.stdc.stdlib, core.sys.posix.stdlib;
             pr[i1] = ar0 - ar1;
             pi[i0] = ai0 + ai1;
             pi[i1] = ai0 - ai1;
@@ -625,7 +627,7 @@ template FFT(alias V, Options)
         }
     }
     
-    void fft_small()(T * re, T * im, int log2n, Tables tables)
+    void fft_small()(T * re, T * im, int log2n, Table tables)
     {
         assert(log2n >= 2*log2(vec_size));
         
@@ -655,7 +657,7 @@ template FFT(alias V, Options)
         fft_passes_bit_reversed( re_vec, im_vec , N / vec_size, cast(vec*) tables.table, N/vec_size/vec_size);
     }
     
-    void fft_large()(T * re, T * im, int log2n, Tables tables)
+    void fft_large()(T * re, T * im, int log2n, Table tables)
     {
         size_t N = (1<<log2n);
         auto re_vec = cast(vec*) re;
@@ -667,7 +669,7 @@ template FFT(alias V, Options)
         BR.bit_reverse_large(im, log2n, tables.brTable);
     }
     
-    void fft()(T * re, T * im, int log2n, Tables tables)
+    void fft()(T * re, T * im, int log2n, Table tables)
     {
         if(log2n < 2*log2(vec_size))
             return FFT!(Scalar!T, Options).fft_small(re, im, log2n, tables);
@@ -676,4 +678,72 @@ template FFT(alias V, Options)
         else 
             return fft_large(re, im, log2n, tables);
     }
+    
+    void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
+    {
+        static if(is(typeof(V.interleave!vec_size)))
+        {
+            foreach(i; 0 .. n / vec_size)
+            {
+                V.interleave!vec_size(
+                    (cast(vec*)even)[i], 
+                    (cast(vec*)odd)[i], 
+                    (cast(vec*)interleaved)[i * 2], 
+                    (cast(vec*)interleaved)[i * 2 + 1]);
+            }
+        }
+        else
+        {
+            foreach(i; 0 .. n)
+            {
+                interleaved[i * 2] = even[i];
+                interleaved[i * 2 + 1] = odd[i];
+            }
+        }
+    }
+    
+    void deinterleaveArray()(T* even, T* odd, T* interleaved, size_t n)
+    {
+        static if(is(typeof(V.deinterleave!vec_size)))
+        {
+            foreach(i; 0 .. n / vec_size)
+            {
+                V.deinterleave!vec_size(
+                    (cast(vec*)interleaved)[i * 2], 
+                    (cast(vec*)interleaved)[i * 2 + 1], 
+                    (cast(vec*)even)[i], 
+                    (cast(vec*)odd)[i]);
+            }
+        }
+        else
+        {
+            foreach(i; 0 .. n)
+            {
+                even[i] = interleaved[i * 2];
+                odd[i] = interleaved[i * 2 + 1];
+            }
+        }
+    }
+    
+    bool isAligned(T* p)
+    {
+        return ((cast(size_t)p) & (vec.sizeof - 1)) == 0;
+    }
 }
+
+template Instantiate(alias F)
+{	
+	alias F.fft!() fft;
+	alias F.fft_table!() fft_table;
+	alias F.table_size_bytes!() table_size_bytes;
+	alias F.interleaveArray!() interleaveArray;
+	alias F.deinterleaveArray!() deinterleaveArray;
+	alias F.isAligned isAligned;
+
+	alias F.T T;
+	alias F.vec vec;
+	alias F.Table Table;
+	
+	enum vec_size = F.vec_size;
+}
+

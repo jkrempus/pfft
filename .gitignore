@@ -5,6 +5,7 @@
 test
 bench
 bench_scalar
+bench_std
 misc_tests
 test_nophobos
 *.data

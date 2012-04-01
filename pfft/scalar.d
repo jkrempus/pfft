@@ -17,25 +17,4 @@ struct Options
 }
 
 
-alias FFT!(Scalar!float,Options) S;
-alias FFT!(Scalar!double,Options) SD;
-
-void fft(float* re, float* im, int log2n, S.Tables tables)
-{
-    S.fft(re, im, log2n, tables);
-}
-
-auto fft_table(int log2n)
-{
-    return S.tables(log2n);
-}
-
-void fft(double* re, double* im, int log2n, SD.Tables tables)
-{
-    SD.fft(re, im, log2n, tables);
-}
-
-auto fft_table_d(int log2n)
-{
-    return SD.tables(log2n);
-}
+mixin Instantiate!(FFT!(Scalar!float,Options));
