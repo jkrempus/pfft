@@ -5,9 +5,13 @@
 test
 bench
 bench_scalar
-bench_std
+bench_stdapi
+test_stdapi
 misc_tests
 test_nophobos
+*.bc
+*.ll
+*.out
 *.data
 *.old
 *.deps

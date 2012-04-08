@@ -373,14 +373,6 @@ template FFT(alias V, Options)
             vec w3r = V.scalar_to_vector(table1[2]);
             vec w3i = V.scalar_to_vector(table1[3]);
             
-            /*vec w2r = w1r * w1r - w1i * w1i;
-            vec w2i = w1r * w1i;
-            w2i = w2i + w2i;
-            
-            vec w3r = w2r * w1r - w2i * w1i;
-            vec w3i = w2r * w1i + w2i * w1r;
-            
-            table += 4;*/
             table0 += 2;
             table1 += 4;
             

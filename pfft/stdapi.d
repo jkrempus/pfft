@@ -5,7 +5,7 @@
 
 module pfft.stdapi;
 
-import core.memory, std.complex, std.traits;
+import core.memory, std.complex, std.traits, core.bitop;
 
 auto isComplexArray(R, T)()
 {
@@ -36,13 +36,13 @@ final class Fft(TT)
     int log2n;
     impl.T* re;
     impl.T* im;
-    Complex!(impl.T) return_buf;
+    Complex!(impl.T)* return_buf = null;
     impl.Table table;
     
     
-    this(int _log2n)
+    this(int n)
     {
-        log2n  = _log2n;
+        log2n  = bsf(n);
         re = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
         im = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
         auto mem = GC.malloc( impl.table_size_bytes(log2n));
@@ -84,7 +84,7 @@ final class Fft(TT)
     }
     
     
-    void fft(Ret, R)(R range, Ret buf)
+    void fft(_TT = TT, Ret, R)(R range, Ret buf) if(is( _TT == TT ))
     {
         deinterleaveArray(range);
         impl.fft(re, im, log2n, table);
@@ -92,13 +92,13 @@ final class Fft(TT)
     }
     
     
-    auto fft(R)(R range)
+    auto fft(_TT = TT, R)(R range) if(is( _TT == TT ))
     {
         alias Complex!(impl.T) C;
-        if(return_buf.length == 0)
+        if(return_buf == null)
             return_buf = cast(C*)GC.malloc(C.sizeof << log2n);
         fft(range, return_buf);
-        return cast(const Complex!(impl.T))return_buf;
+        return return_buf[0 .. (1 << log2n)];
     }
 }
 

@@ -37,7 +37,7 @@ void bench(int log2n)
     a []= Complex!T(0, 0);
     b []= Complex!T(0, 0);
     
-    auto fft = new Fft!T(log2n);
+    auto fft = new Fft!T(1 << log2n);
     
     ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
     ulong niter = 10_000_000_000L / flopsPerIter;

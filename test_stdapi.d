@@ -8,16 +8,16 @@ import std.stdio, std.range, std.algorithm, std.conv,
 
 version(Double)
 {
+	alias double T;
     alias real U;
-    
-    import impl = pfft.impl_double;
 }
 else
 {
+	alias float T;
 	alias double U;
-	
-	import impl = pfft.impl_float;
 }
+
+import pfft_module = pfft.stdapi;
 
 auto rms(R)(R r)
 {
@@ -29,27 +29,22 @@ void main(string[] args)
     int log2n = parse!int(args[1]);
     int n = 1<<log2n;
     
-    auto re = new impl.T[n];
-    auto im = new impl.T[n];
-    auto c = new Complex!(U)[n];
+	
+    auto stdData = new Complex!(U)[n];
+    auto pfftData = new Complex!(T)[n];
     
     rndGen.seed(1);
-    foreach(i, e; re)
+    foreach(i, e; stdData)
     {
-        c[i].re = uniform(0.0,1.0);
-        c[i].im = uniform(0.0,1.0);
-        re[i] = c[i].re;
-        im[i] = c[i].im;
+        stdData[i].re = uniform(0.0,1.0);
+        stdData[i].im = uniform(0.0,1.0);
+        pfftData[i] = stdData[i];
     }
     
-    auto ft = (new Fft(n)).fft!U(c);
+    auto stdFt = (new Fft(n)).fft!U(stdData);
+    auto pfftFt = (new pfft_module.Fft!T(n)).fft(pfftData);
     
-    auto tables = impl.fft_table(log2n);
-    impl.fft(re.ptr, im.ptr, log2n, tables);
+    auto diff = map!q{ a[0] - a[1] }(zip(stdFt, pfftFt[]));
     
-    auto diff = map!
-        ((a){ return a[2] - complex(a[0], a[1]); })
-        (zip(re, im, ft));
-    
-    writefln("%.2e", rms(diff) / rms(ft));
+    writefln("%.2e", rms(diff) / rms(stdFt));
 }

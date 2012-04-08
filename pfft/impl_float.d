@@ -8,6 +8,10 @@ else version(Neon)
 {
 	public import pfft.neon;
 }
+version(StdSimd)
+{
+	import pfft.stdsimd;
+}
 else
 {
 	public import pfft.sse;

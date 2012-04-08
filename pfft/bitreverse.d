@@ -25,30 +25,30 @@ template ints_up_to(int n, T...)
         alias T ints_up_to;
 }
 
-auto bit_reversed_pairs(int _log2n)
+struct BitReversdPairs
 {
-    struct R
-    {
-        int log2n;
-        int opApply(int delegate(ref uint, ref uint) dg)
-        {
-            int mask = (0xffffffff<<(log2n));
-            uint i2 = ~mask; 
-            uint i1 = i2;
-            
-            while(i1 != (0U - 1U))
-            {
-                auto r = dg(i1, i2);
-                if(r)
-                    return r;
-                i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
-                --i1;
-            }
-            return 0;
-        }
-    }
-    
-    return R(_log2n);
+	int log2n;
+	int opApply(int delegate(ref uint, ref uint) dg)
+	{
+		int mask = (0xffffffff<<(log2n));
+		uint i2 = ~mask; 
+		uint i1 = i2;
+		
+		while(i1 != (0U - 1U))
+		{
+			auto r = dg(i1, i2);
+			if(r)
+				return r;
+			i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
+			--i1;
+		}
+		return 0;
+	}
+}
+
+auto bit_reversed_pairs(int _log2n)
+{   
+    return BitReversdPairs(_log2n);
 }
 
 void bit_reverse_simple(T)(T* p, int log2n)
