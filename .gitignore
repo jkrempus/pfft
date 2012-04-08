@@ -10,7 +10,6 @@ test_stdapi
 misc_tests
 test_nophobos
 *.bc
-*.ll
 *.out
 *.data
 *.old
