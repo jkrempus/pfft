@@ -255,3 +255,12 @@ extern(C) float4 shufps252(float4, float4);
 extern(C) float4 shufps253(float4, float4);
 extern(C) float4 shufps254(float4, float4);
 extern(C) float4 shufps255(float4, float4);
+
+auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+{
+	
+	enum sm = m3 | (m2<<2) | (m1<<4) | (m0<<6);
+	mixin("auto r = shufps" ~ sm.stringof ~ "(a, b);");
+	return r;
+}	
+

@@ -118,14 +118,7 @@ struct SSE
     
     version(ExternCShufps)
     {	
-		import pfft.shufps;
-		
-		private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
-        {
-			enum sm = shuf_mask!(m0, m1, m2, m3).stringof;
-			mixin("auto r = shufps" ~ sm ~ "(a, b);");
-			return r;
-		}		
+		import pfft.shufps: shufps;	
 	}
     
     static if(is(typeof(shufps)))
