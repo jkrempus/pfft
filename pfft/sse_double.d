@@ -175,13 +175,4 @@ struct Options
 
 alias FFT!(SSEDouble,Options) F;
 
-extern(C) void fft(double* re, double* im, int log2n, F.Tables tables)
-{
-    F.fft(re, im, log2n, tables);
-}
-
-extern(C) auto fft_table(int log2n)
-{
-    return F.tables(log2n);
-}
-
+mixin Instantiate!F;

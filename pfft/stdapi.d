@@ -40,7 +40,7 @@ final class Fft(TT)
     impl.Table table;
     
     
-    this(int n)
+    this(size_t n)
     {
         log2n  = bsf(n);
         re = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
@@ -54,11 +54,11 @@ final class Fft(TT)
     {
         if(isComplexArray!(R, TT)() && impl.isAligned(&(range[0].re)))
         {
-            impl.deinterleaveArray(re, im, &(range[0].re), 1UL << log2n);
+            impl.deinterleaveArray(re, im, &(range[0].re), (cast(size_t)1) << log2n);
         }
         else
         {
-            foreach(i; 0 .. 1UL << log2n)
+            foreach(i; 0 .. (cast(size_t)1) << log2n)
             {
                 re[i] = range[i].re;
                 im[i] = range[i].im;
@@ -71,11 +71,11 @@ final class Fft(TT)
     {
         if(isComplexArray!(R, TT)() && impl.isAligned(&(range[0].re)))
         {
-            impl.interleaveArray(re, im, &(range[0].re), 1UL << log2n);
+            impl.interleaveArray(re, im, &(range[0].re), (cast(size_t)1) << log2n);
         }
         else
         {
-            foreach(i; 0 .. 1UL << log2n)
+            foreach(i; 0 .. (cast(size_t)1) << log2n)
             {
                 range[i].re = re[i];
                 range[i].im = im[i];

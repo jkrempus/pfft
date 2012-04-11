@@ -1,9 +1,15 @@
+#!/usr/bin/env rdmd
 //          Copyright Jernej Krempuš 2012
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio;
+
+enum usage = q"EOS
+Usage:
+	%s [c|d]
+EOS";
 
 enum shufpsTemplate = q{
 auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
@@ -15,8 +21,16 @@ auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
 }	
 };
 
+void printUsage(string[] args)
+{
+	writefln(usage, "generate_shufps_code");
+}
+
 void main(string[] args)
 {	
+	if(args.length != 2)
+		return printUsage(args);
+	
 	if(args[1] == "c")
 	{
 		writeln("#include <xmmintrin.h>");
@@ -32,5 +46,7 @@ void main(string[] args)
 			writefln("extern(C) float4 shufps%d(float4, float4);", i);
 		
 		writeln(shufpsTemplate);
-	};
+	}
+	else
+		printUsage(args);
 }

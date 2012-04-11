@@ -3,93 +3,87 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import core.stdc.stdio, core.stdc.stdlib;
+import std.stdio, std.conv, std.datetime;
 
-version( NoPhobos )
+auto gc_aligned_array(T)(size_t n)
 {
-    import core.sys.posix.sys.time;
-    
-    double get_time()
-    {
-        timeval tv;
-        gettimeofday(&tv, null);
-        return tv.tv_sec + 1e-6 * tv.tv_usec;
-    }
-}
-else
-{
-    import std.datetime;
-    
-    StopWatch sw;
-    
-    static this()
-    {
-        sw.start();
-    }
-    
-    double get_time()
-    {
-        return sw.peek().nsecs() * 1e-9f;
-    }
+    import core.memory;
+    return (cast(T*)GC.malloc(T.sizeof*n))[0..n];
 }
 
-version(Double)
+struct LowLewelApi
 {
-    import pfft.sse_double;
-    alias double T;
+	version(Double)
+		import pfft.impl_double;
+	else
+		import pfft.impl_float;
+		
+	float[] dr;
+	float[] di;
+	Table table;
+	int log2n;
+	
+	this(int _log2n)
+	{
+		log2n = _log2n;
+		dr = gc_aligned_array!T(1 << log2n);
+		di = gc_aligned_array!T(1 << log2n);
+		table = fft_table(log2n); // will leak memory but we don't care
+	}
+	
+	void doit(){ fft(dr.ptr, di.ptr, log2n, table); }
+	
+	ref re(size_t i){ return dr[i]; }
+	ref im(size_t i){ return di[i]; }
 }
-else
+
+struct StdApi(T)
 {
-    alias float T;
-    
-    version(StdSimd)
-    {
-        import pfft.stdsimd;
-    }
-    else version(Scalar)
-    {
-        import pfft.scalar;
-    }
-    else version(Neon)
-    {
-        import pfft.neon;
-    }
-    else
-    {
-        import pfft.sse;
-    }
+	import pfft.stdapi;
+	import std.complex;
+	
+	Complex!(T)[] a;
+	Fft!T fft;
+	
+	this(int log2n)
+	{
+		a = gc_aligned_array!(Complex!T)(1L << log2n);
+		fft = new Fft!T(1L << log2n);
+	}
+	
+	void doit(){ fft.fft(a); }
+	
+	ref re(size_t i){ return a[i].re; }
+	ref im(size_t i){ return a[i].im; }
 }
 
-import pfft.fft_impl : aligned_array;
-
-void bench(int log2n)
+void bench(F)(int log2n)
 {
-
-    auto re = aligned_array!T(1 << log2n, 64);
-    auto im = aligned_array!T(1 << log2n, 64);
-
-    re []= 0f;
-    im []= 0f;
-    
-    auto tables = fft_table(log2n);
-    
-    ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
+	auto f = F(log2n);
+	
+	foreach(i; 0 .. 1L << log2n)
+		f.re(i) = 0.0, f.im(i) = 0.0;
+	
+	ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
     ulong niter = 10_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
-    double t = get_time();
+	StopWatch sw;
+    sw.start();
     
     foreach(i; 0 .. niter)
-        fft(re.ptr, im.ptr, log2n, tables);
+        f.doit();
     
-    t = get_time() - t;
-    printf("%f\n", 1e-9 * niter * flopsPerIter / t);
-    
-    free(re.ptr);
-    free(im.ptr);
+    sw.stop();
+    writefln("%f", to!double(niter * flopsPerIter) / sw.peek().nsecs());
 }
 
 void main(string[] args)
-{     
-    bench(atoi(args[1].ptr)); 
+{
+	version(BenchStdApi)
+		alias StdApi!float F;
+	else
+		alias LowLewelApi F;
+
+    bench!F(to!int(args[1])); 
 }

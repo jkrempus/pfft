@@ -176,12 +176,4 @@ struct Options
 
 alias FFT!(Neon,Options) F;
 
-extern(C) void fft(float* re, float* im, int log2n, F.Tables tables)
-{
-    F.fft(re, im, log2n, tables);
-}
-
-extern(C) auto fft_table(int log2n)
-{
-    return F.tables(log2n);
-}
+mixin Instantiate!F;

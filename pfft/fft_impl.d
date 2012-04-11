@@ -85,8 +85,13 @@ auto aligned_array(T)(size_t n, size_t alignment)
     return aligned_alloc!T(n, alignment)[0 .. n];
 }
 
+version(DisableLarge)
+	enum disableLarge = true;
+else 
+	enum disableLarge = false;
+
 template FFT(alias V, Options)
-{
+{	
     import core.bitop, core.stdc.math, core.stdc.stdlib;
     import pfft.bitreverse;
     
@@ -96,7 +101,12 @@ template FFT(alias V, Options)
     alias V.T T;
     alias V.vec vec;
     
-    alias T[2] Pair;
+    struct _Tuple(A...)
+    {
+		A a;
+		alias a this;
+	}
+	alias _Tuple!(T,T) Pair;
     
     void complex_array_to_vector()(Pair * pairs, size_t n)
     {
@@ -323,7 +333,7 @@ template FFT(alias V, Options)
             vec ai1 = ui + ti;
             vec ai3 = ui - ti;
 
-            pr[i0] = ar0 + ar1;import core.bitop, core.stdc.math, core.stdc.stdlib, core.sys.posix.stdlib;
+            pr[i0] = ar0 + ar1;
             pr[i1] = ar0 - ar1;
             pi[i0] = ai0 + ai1;
             pi[i1] = ai0 - ai1;
@@ -665,10 +675,15 @@ template FFT(alias V, Options)
     {
         if(log2n < 2*log2(vec_size))
             return FFT!(Scalar!T, Options).fft_small(re, im, log2n, tables);
-        else if( log2n < Options.large_limit)
+        else if( log2n < Options.large_limit || disableLarge)
             return fft_small(re, im, log2n, tables);
         else 
-            return fft_large(re, im, log2n, tables);
+        {
+			static if(!disableLarge)
+			{
+				fft_large(re, im, log2n, tables);
+			}
+		}
     }
     
     void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)

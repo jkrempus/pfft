@@ -13,7 +13,7 @@ else version(Neon)
 {
 	public import pfft.neon;
 }
-version(StdSimd)
+else version(StdSimd)
 {
 	import pfft.stdsimd;
 }
