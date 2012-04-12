@@ -5,7 +5,7 @@
 
 module pfft.stdapi;
 
-import core.memory, std.complex, std.traits, core.bitop;
+import core.memory, std.complex, std.traits, core.bitop, std.typetuple;
 
 auto isComplexArray(R, T)()
 {
@@ -23,12 +23,14 @@ auto isComplexArray(R, T)()
         return false;
 }
 
-final class Fft(TT)
+final class TypedFft(TT)
 {
     static if(is(TT == float))
 		import impl = pfft.impl_float;
     else static if(is(TT == double))
 		import impl = pfft.impl_double;
+	else static if(is(TT == real))
+		import impl = pfft.scalar_real;
     else    
         static assert(0, "Not implemented");
         
@@ -84,7 +86,7 @@ final class Fft(TT)
     }
     
     
-    void fft(_TT = TT, Ret, R)(R range, Ret buf) if(is( _TT == TT ))
+    void fft(Ret, R)(R range, Ret buf)
     {
         deinterleaveArray(range);
         impl.fft(re, im, log2n, table);
@@ -92,7 +94,7 @@ final class Fft(TT)
     }
     
     
-    auto fft(_TT = TT, R)(R range) if(is( _TT == TT ))
+    auto fft(R)(R range)
     {
         alias Complex!(impl.T) C;
         if(return_buf == null)
@@ -100,5 +102,46 @@ final class Fft(TT)
         fft(range, return_buf);
         return return_buf[0 .. (1 << log2n)];
     }
+}
+
+final class Fft
+{
+	TypedFft!float floatFft ;
+	TypedFft!double doubleFft;
+	TypedFft!real realFft;
+	size_t n;
+	
+	@property ref impl(T)()
+	{
+		static if(is(T == float))
+			return floatFft;
+		else static if(is(T == double))
+			return doubleFft;
+		else static if(is(T == double))
+			return realFft;
+	}
+	
+	this(size_t _n)
+	{
+		n = _n;
+	}
+	
+	auto lazyInit(T)()
+	{
+		if(impl!T is null)
+			impl!T = new TypedFft!T(n);
+	}
+	
+	auto fft(T, R)(R r) 
+    {
+		lazyInit!T();
+		return impl!T.fft(r);
+	}
+	
+	auto fft(T, R, Ret)(R r, Ret ret) 
+    {
+		lazyInit!T();
+		impl!T.fft(r, ret);
+	}
 }
 
