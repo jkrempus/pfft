@@ -9,7 +9,11 @@ version(Scalar)
 {
 	public import pfft.scalar_double;
 }
-else
+else version(X86)
 {
 	public import pfft.sse_double;
+}
+else
+{
+	public import pfft.scalar_double;
 }

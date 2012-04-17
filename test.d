@@ -74,9 +74,14 @@ template ElementAccess(alias a, alias r)
 	ref result_im(size_t i){ return r[i].im; }
 }
 
-struct StdApi(T)
+enum one = to!size_t(1);
+
+struct StdApi(T, bool usePhobos = false)
 {
-	import pfft.stdapi;
+	static if(usePhobos)
+		import std.numeric;
+	else
+		import pfft.stdapi;
 	
 	Complex!(T)[] a;
 	Complex!(T)[] r;
@@ -84,12 +89,12 @@ struct StdApi(T)
 	
 	this(int log2n)
 	{
-		a = gc_aligned_array!(Complex!T)(1L << log2n);
-		r = gc_aligned_array!(Complex!T)(1L << log2n);
-		fft = new Fft(1L << log2n);
+		a = gc_aligned_array!(Complex!T)(one << log2n);
+		r = gc_aligned_array!(Complex!T)(one << log2n);
+		fft = new Fft(one << log2n);
 	}
 	
-	void compute(){ fft.fft!T(a, r); }
+	void compute(){ fft.fft(a, r); }
 
 	mixin ElementAccess!(a, r);
 }
@@ -130,14 +135,14 @@ version(BenchFftw)
 }
 
 void bench(F)(int log2n)
-{
+{	
 	auto f = F(log2n);
-	
-	foreach(i; 0 .. 1L << log2n)
+
+	foreach(i; 0 .. one << log2n)
 		f.re(i) = 0.0, f.im(i) = 0.0;
-	
+
 	ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
-    ulong niter = 10_000_000_000L / flopsPerIter;
+    ulong niter = 1_000_000_000L / flopsPerIter;
     niter = niter ? niter : 1;
     
 	StopWatch sw;
@@ -190,6 +195,8 @@ bool runTest(alias f)(string[] args)
 		f!LowLewelApi(log2n);
 	else if(args[1] == "std")
 		f!(StdApi!float)(log2n);
+	else if(args[1] == "phobos")
+		f!(StdApi!(float, true))(log2n);
 	else if(args[1] == "split")
 		f!(SplitApi!float)(log2n);
 	else

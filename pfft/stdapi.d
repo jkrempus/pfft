@@ -24,7 +24,7 @@ auto isComplexArray(R, T)()
 }
 
 final class TypedFft(TT)
-{
+{	
     static if(is(TT == float))
 		import impl = pfft.impl_float;
     else static if(is(TT == double))
@@ -138,8 +138,9 @@ final class Fft
 		return impl!T.fft(r);
 	}
 	
-	auto fft(T, R, Ret)(R r, Ret ret) 
+	auto fft(R, Ret)(R r, Ret ret) 
     {
+		alias typeof(ret[0].re) T;
 		lazyInit!T();
 		impl!T.fft(r, ret);
 	}
