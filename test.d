@@ -4,12 +4,12 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
-	std.random, std.numeric;
+	std.random, std.numeric, std.math, std.algorithm;
 
-auto gc_aligned_array(T)(size_t n)
+auto gc_aligned_array(A)(size_t n)
 {
     import core.memory;
-    return (cast(T*)GC.malloc(T.sizeof*n))[0..n];
+    return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
 }
 
 template splitElementAccess(alias _re, alias _ri)
@@ -20,15 +20,20 @@ template splitElementAccess(alias _re, alias _ri)
 	ref result_im(size_t i){ return _ri[i]; }
 }
 
+version(Double)
+	alias double T;
+else
+	alias float T;
+
 struct LowLewelApi
 {
-	version(Double)
+	static if(is(T == double))
 		import pfft.impl_double;
 	else
 		import pfft.impl_float;
 		
-	float[] _re;
-	float[] _ri;
+	T[] _re;
+	T[] _ri;
 	Table table;
 	int log2n;
 	
@@ -45,7 +50,7 @@ struct LowLewelApi
 	mixin splitElementAccess!(_re, _ri);
 }
 
-struct SplitApi(T)
+struct SplitApi
 {
 	import pfft.splitapi;
 	
@@ -76,7 +81,82 @@ template ElementAccess(alias a, alias r)
 
 enum one = to!size_t(1);
 
-struct StdApi(T, bool usePhobos = false)
+struct SimpleFftTemplate(T)
+{	
+	Complex!(T)[] a;
+	Complex!(T)[] w;
+	int log2n;
+	enum one = cast(size_t)1;
+	
+	this(int _log2n)
+	{
+		log2n = _log2n;
+		
+		a = gc_aligned_array!(Complex!T)(one << log2n);
+		w = gc_aligned_array!(Complex!T)(one << log2n);
+
+		auto p = w;
+        for (int s = 1; s <= log2n; ++s)
+        {
+            size_t m = 1 << s;
+            T dphi = 4.0 * asin(to!T(1.0)) / m;
+            for(size_t i=0; i< m/2; i++)
+            {
+                p[i].re = cos(dphi * i);
+                p[i].im = -sin(dphi * i);
+            }
+            p = p[m/2 .. $];
+        }
+	}
+		
+	void compute()
+	{
+		auto n = one << log2n;
+			
+		foreach(i; 0 .. n)
+		{
+			size_t ir = 0;
+			for(auto j = i | n; j != one; j >>= 1) 
+				ir = (ir << 1) | (j & one);
+			
+			if(ir > i)
+				swap(a[i], a[ir]);
+		}
+
+		auto table = w.ptr;
+		auto pend = a.ptr + n;
+        for (size_t m2 = 1; m2 < n ; m2 <<= 1)
+        {
+            size_t m = m2 + m2;
+            for(auto p = a.ptr; p < pend ; p = p += m)
+            {
+                for (size_t k1 = 0, k2 = m2; k1<m2; k1++, k2 ++) 
+                {
+                    T wr = table[k1].re, wi = table[k1].im;                       
+
+                    T tmpr = p[k2].re, ti = p[k2].im;
+                    T ur = p[k1].re, ui = p[k1].im;
+                    T tr = tmpr*wr - ti*wi;
+                    ti = tmpr*wi + ti*wr;
+                    p[k2].re = ur - tr;
+                    p[k1].re = ur + tr;                                                    
+                    p[k2].im = ui - ti;                                                    
+                    p[k1].im = ui + ti;
+                }
+            }
+            table += m2;
+        }
+	}
+	
+	ref re(size_t i){ return a[i].re; }
+	ref im(size_t i){ return a[i].im; }
+	ref result_re(size_t i){ return a[i].re; }
+	ref result_im(size_t i){ return a[i].im; }
+}
+
+alias SimpleFftTemplate!T SimpleFft;
+
+struct StdApi(bool usePhobos = false)
 {
 	static if(usePhobos)
 		import std.numeric;
@@ -101,11 +181,26 @@ struct StdApi(T, bool usePhobos = false)
 
 version(BenchFftw)
 {
-	pragma (msg, "Using FFTW - you should link to libfftw3f.a. Note that the resulting binary will be covered by GPL (see FFTW license).");
-	
-	extern(C) void* fftwf_malloc(size_t);
-	extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
-	extern(C) void fftwf_execute(void *);
+	static if(is(T == float))
+	{
+		pragma (msg, "Using FFTW - you should link to libfftw3f.a. Note that the resulting binary will be covered by GPL (see FFTW license).");
+		
+		extern(C) void* fftwf_malloc(size_t);
+		extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
+		extern(C) void fftwf_execute(void *);
+		
+		alias fftwf_malloc fftw_malloc;
+		alias fftwf_plan_dft_1d fftw_plan_dft_1d;
+		alias fftwf_execute fftw_execute;
+	}
+	else
+	{
+		pragma (msg, "Using FFTW - you should link to libfftw3.a. Note that the resulting binary will be covered by GPL (see FFTW license).");
+		
+		extern(C) void* fftw_malloc(size_t);
+		extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
+		extern(C) void fftw_execute(void *);
+	}
 
 	enum FFTW_FORWARD = -1;
 	enum FFTW_ESTIMATE = 1U << 6;
@@ -113,9 +208,7 @@ version(BenchFftw)
 	enum FFTW_PATIENT = 1U << 5;
 
 	struct FFTW
-	{
-		alias float T;
-		
+	{		
 		Complex!(T)* a;
 		Complex!(T)* r;
 		
@@ -123,18 +216,18 @@ version(BenchFftw)
 		
 		this(int log2n)
 		{
-			a = cast(Complex!(T)*) fftwf_malloc(Complex!(T).sizeof * 1L << log2n);
-			r = cast(Complex!(T)*) fftwf_malloc(Complex!(T).sizeof * 1L << log2n);
-			p = fftwf_plan_dft_1d(1 << log2n, a, r, FFTW_FORWARD, FFTW_MEASURE);
+			a = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
+			r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
+			p = fftw_plan_dft_1d(1 << log2n, a, r, FFTW_FORWARD, FFTW_MEASURE);
 		}
 		
-		void compute(){ fftwf_execute(p); }
+		void compute(){ fftw_execute(p); }
 		
 		mixin ElementAccess!(a, r);
 	}
 }
 
-void bench(F)(int log2n)
+void bench(F)(int log2n, long flops)
 {	
 	auto f = F(log2n);
 
@@ -142,7 +235,7 @@ void bench(F)(int log2n)
 		f.re(i) = 0.0, f.im(i) = 0.0;
 
 	ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
-    ulong niter = 1_000_000_000L / flopsPerIter;
+    ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
     
 	StopWatch sw;
@@ -157,54 +250,62 @@ void bench(F)(int log2n)
 
 auto sq(T)(T a){ return a * a; }
 
-void precision(F)(int log2n)
+void precision(F)(int log2n, long flops)
 {
-	auto f = F(log2n);
-	
-	auto c = new Complex!real[1U << log2n];
+	auto tested = F(log2n);
+	auto simple = SimpleFftTemplate!real(log2n);
 	
 	rndGen.seed(1);
-    foreach(i, e; c)
+    foreach(i; 0 .. 1 << log2n)
     {
-        c[i].re = uniform(0.0,1.0);
-        c[i].im = uniform(0.0,1.0);
-        f.re(i) = c[i].re;
-        f.im(i) = c[i].im;
+		auto re = uniform(0.0,1.0);
+		auto im = uniform(0.0,1.0);
+        simple.re(i) = re;
+        simple.im(i) = im;
+        tested.re(i) = re;
+        tested.im(i) = im;
     }
     
-    auto ft = (new Fft(1 << log2n)).fft!real(c);
-    f.compute();
+    simple.compute();
+    tested.compute();
     
     
-    auto sumSqDiff = 0.0;
-    auto sumSqAvg = 0.0;
+    real sumSqDiff = 0.0;
+    real sumSqAvg = 0.0;
     
-	foreach(i, e; c)
+	foreach(i; 0 .. 1 << log2n)
 	{
-		sumSqDiff += sq(ft[i].re - f.result_re(i)) + sq(ft[i].im - f.result_im(i)); 
-		sumSqAvg += 0.5 * (sq(ft[i].re + f.result_re(i)) + sq(ft[i].im + f.result_im(i))); 
+		auto tre = tested.result_re(i);
+		auto tim = tested.result_im(i);
+		auto sre = simple.result_re(i);
+		auto sim = simple.result_im(i);
+		sumSqDiff += sq(sre - tre) + sq(sim - tim); 
+		sumSqAvg += 0.5 * (sre + tre) + sq(sim + tim); 
 	}
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
-bool runTest(alias f)(string[] args)
+bool runTest(alias f)(string[] args, long mflops)
 {
 	int log2n = to!int(args[2]);
+	long flops = mflops * 1000_000;
 	
-	if(args[1] == "lowlevel")
-		f!LowLewelApi(log2n);
+	if(args[1] == "simple")
+		f!SimpleFft(log2n, flops);
+	else if(args[1] == "lowlevel")
+		f!LowLewelApi(log2n, flops);
 	else if(args[1] == "std")
-		f!(StdApi!float)(log2n);
+		f!(StdApi!false)(log2n, flops);
 	else if(args[1] == "phobos")
-		f!(StdApi!(float, true))(log2n);
+		f!(StdApi!(true))(log2n, flops);
 	else if(args[1] == "split")
-		f!(SplitApi!float)(log2n);
+		f!SplitApi(log2n, flops);
 	else
 	{
 		version(BenchFftw)
 		{
 			if(args[1] == "fftw")
-				f!FFTW(log2n);
+				f!FFTW(log2n, flops);
 			else 
 				return false;
 		}
@@ -217,18 +318,18 @@ bool runTest(alias f)(string[] args)
 
 void main(string[] args)
 {
-	string what = "lowlevel";
 	bool s = false;
 	bool p = false;
+	int mflops = 10_000;
 	
-	getopt(args, "s", &s, "p", &p);
+	getopt(args, "s", &s, "p", &p, "m", &mflops);
 	
 	if(args.length == 3)
 	{
-		if(s && runTest!bench(args))
+		if(s && runTest!bench(args, mflops))
 			return;
 
-		if(p && runTest!precision(args))
+		if(p && runTest!precision(args, mflops))
 			return;
 	}
 	

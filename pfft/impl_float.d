@@ -15,7 +15,11 @@ else version(Neon)
 }
 else version(StdSimd)
 {
-	import pfft.stdsimd;
+	public import pfft.stdsimd;
+}
+else version(AVX)
+{
+	public import pfft.avx;
 }
 else
 {

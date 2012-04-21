@@ -16,4 +16,5 @@ struct Options
     enum log2_recursive_passes_chunk_size = 5;
     enum { fast_init };
 }
+
 mixin Instantiate!(FFT!(Scalar!real,Options));

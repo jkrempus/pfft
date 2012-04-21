@@ -175,7 +175,7 @@ template FFT(alias V, Options)
         for (int s = 1; s <= log2n; ++s)
         {
             size_t m = 1 << s;
-            double dphi = 4.0*asin(1.0) / m;
+            T dphi = 4.0*asin(1.0) / m;
             for(size_t i=0; i< m/2; i++)
             {
                 p[i][0] = cos(dphi*i);

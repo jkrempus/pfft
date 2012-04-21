@@ -13,6 +13,10 @@ else version(X86)
 {
 	public import pfft.sse_double;
 }
+else version(X86_64)
+{
+	public import pfft.sse_double;
+}
 else
 {
 	public import pfft.scalar_double;
