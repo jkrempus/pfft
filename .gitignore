@@ -17,3 +17,4 @@ test_nophobos
 *.asm
 *.gcda
 *.ignore
+*.swp
