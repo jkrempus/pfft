@@ -278,7 +278,6 @@ template FFT(alias V, Options)
             tables.brTable = aligned_alloc!uint(BR.br_table_size(log2size), 64);
             BR.init_br_table(tables.brTable, log2size);
         }
-        
         return tables;
     }
     

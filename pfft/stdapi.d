@@ -106,19 +106,23 @@ final class TypedFft(TT)
 
 final class Fft
 {
-	TypedFft!float floatFft ;
-	TypedFft!double doubleFft;
-	TypedFft!real realFft;
-	size_t n;
+    import std.variant;
+
+	private void*[string] implDict;
+
+    size_t n;
 	
-	@property ref impl(T)()
+	private @property auto impl(T)()
 	{
-		static if(is(T == float))
-			return floatFft;
-		else static if(is(T == double))
-			return doubleFft;
-		else static if(is(T == double))
-			return realFft;
+        auto p = T.stringof in implDict;
+        if(p)
+            return cast(TypedFft!T)*p;
+        else
+        {
+            auto t = new TypedFft!T(n);
+            implDict[T.stringof] = cast(void*)t;
+            return t;
+        }
 	}
 	
 	this(size_t _n)
@@ -126,23 +130,15 @@ final class Fft
 		n = _n;
 	}
 	
-	auto lazyInit(T)()
-	{
-		if(impl!T is null)
-			impl!T = new TypedFft!T(n);
-	}
-	
 	auto fft(T, R)(R r) 
     {
-		lazyInit!T();
 		return impl!T.fft(r);
 	}
 	
 	auto fft(R, Ret)(R r, Ret ret) 
     {
-		alias typeof(ret[0].re) T;
-		lazyInit!T();
-		impl!T.fft(r, ret);
+		impl!(typeof(ret[0].re)).fft(r, ret);
 	}
 }
+
 

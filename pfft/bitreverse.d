@@ -7,6 +7,8 @@ module pfft.bitreverse;
 
 import core.bitop;
 
+template st(alias a){ enum st = cast(size_t) a; }
+
 void _swap(T)(ref T a, ref T b)
 {
     auto aa = a;
@@ -101,7 +103,10 @@ struct BitReverse(alias V, Options)
     alias V.T T;
     alias V.vec vec;
     
-    static size_t br_table_size()(int log2n){ return (1<<(log2n-4)) + 4; }
+    static size_t br_table_size()(int log2n)
+    { 
+        return (st!1 << log2n) < 16 ? 0 : (1<<(log2n-4)) + 4;
+    }
     
     static void init_br_table()(uint * table, int log2n)
     {
