@@ -86,12 +86,12 @@ auto aligned_array(T)(size_t n, size_t alignment)
 }
 
 version(DisableLarge)
-	enum disableLarge = true;
+    enum disableLarge = true;
 else 
-	enum disableLarge = false;
+    enum disableLarge = false;
 
 template FFT(alias V, Options)
-{	
+{    
     import core.bitop, core.stdc.math, core.stdc.stdlib;
     import pfft.bitreverse;
     
@@ -103,10 +103,10 @@ template FFT(alias V, Options)
     
     struct _Tuple(A...)
     {
-		A a;
-		alias a this;
-	}
-	alias _Tuple!(T,T) Pair;
+        A a;
+        alias a this;
+    }
+    alias _Tuple!(T,T) Pair;
     
     void complex_array_to_vector()(Pair * pairs, size_t n)
     {
@@ -678,11 +678,11 @@ template FFT(alias V, Options)
             return fft_small(re, im, log2n, tables);
         else 
         {
-			static if(!disableLarge)
-			{
-				fft_large(re, im, log2n, tables);
-			}
-		}
+            static if(!disableLarge)
+            {
+                fft_large(re, im, log2n, tables);
+            }
+        }
     }
     
     void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
@@ -730,49 +730,41 @@ template FFT(alias V, Options)
             }
         }
     }
-    
-    bool isAligned(T* p)
-    {
-        return ((cast(size_t)p) & (vec.sizeof - 1)) == 0;
-    }
 }
 
 auto instantiate(alias F)()
 {
-	return
-	q{
-		private alias } ~ F.stringof ~ q{ F;
-		alias F.T T;
-		alias FFTTable!T Table;
+    return
+    q{
+        private alias } ~ F.stringof ~ q{ F;
+        alias F.T T;
+        alias FFTTable!T Table;
 
-		void fft(T* re, T* im, int log2n, Table t)
-		{
-			F.fft(re, im, log2n, t);
-		}
-		
-		auto fft_table(int log2n, void* p = null)
-		{
-			return F.fft_table(log2n, p);
-		}
-		
-		auto table_size_bytes(int log2n)
-		{
-			return F.table_size_bytes(log2n);
-		}
+        void fft(T* re, T* im, int log2n, Table t)
+        {
+            F.fft(re, im, log2n, t);
+        }
+        
+        auto fft_table(int log2n, void* p = null)
+        {
+            return F.fft_table(log2n, p);
+        }
+        
+        auto table_size_bytes(int log2n)
+        {
+            return F.table_size_bytes(log2n);
+        }
 
-    		void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n)
-		{
-			F.deinterleaveArray(even, odd, interleaved, n);
-		}
+            void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n)
+        {
+            F.deinterleaveArray(even, odd, interleaved, n);
+        }
 
-    		void interleaveArray(T* even, T* odd, T* interleaved, size_t n)
-		{
-			F.interleaveArray(even, odd, interleaved, n);
-		}
-
-		auto isAligned(T* p)
-		{
-			return F.isAligned(p);
-		}
-	};
-}	
+        void interleaveArray(T* even, T* odd, T* interleaved, size_t n)
+        {
+            F.interleaveArray(even, odd, interleaved, n);
+        }
+        
+        enum alignment = F.vec_size * T.sizeof;
+    };
+}    

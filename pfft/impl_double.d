@@ -7,19 +7,19 @@ module pfft.impl_double;
 
 version(Scalar)
 {
-	public import pfft.scalar_double;
+    public import pfft.scalar_double;
 }
 else version(X86)
 {
-	public import pfft.sse_double;
+    public import pfft.sse_double;
 }
 else version(X86_64)
 {
-	public import pfft.sse_double;
+    public import pfft.sse_double;
 }
 else
 {
-	public import pfft.scalar_double;
+    public import pfft.scalar_double;
 }
 
 import pfft.fft_impl;

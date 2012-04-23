@@ -8,45 +8,45 @@ import std.stdio;
 
 enum usage = q"EOS
 Usage:
-	%s [c|d]
+    %s [c|d]
 EOS";
 
 enum shufpsTemplate = q{
 auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
 {
-	
-	enum sm = m3 | (m2<<2) | (m1<<4) | (m0<<6);
-	mixin("auto r = shufps" ~ sm.stringof ~ "(a, b);");
-	return r;
-}	
+    
+    enum sm = m3 | (m2<<2) | (m1<<4) | (m0<<6);
+    mixin("auto r = shufps" ~ sm.stringof ~ "(a, b);");
+    return r;
+}    
 };
 
 void printUsage(string[] args)
 {
-	writefln(usage, "generate_shufps_code");
+    writefln(usage, "generate_shufps_code");
 }
 
 void main(string[] args)
-{	
-	if(args.length != 2)
-		return printUsage(args);
-	
-	if(args[1] == "c")
-	{
-		writeln("#include <xmmintrin.h>");
-		
-		foreach(i; 0 .. 256)
-			writefln("__m128 shufps%d(__m128 a, __m128 b){ return _mm_shuffle_ps(a, b, %d); }", i, i);
-	}
-	else if(args[1] == "d")
-	{
-		writeln("import core.simd;");
-		
-		foreach(i; 0 .. 256)
-			writefln("extern(C) float4 shufps%d(float4, float4);", i);
-		
-		writeln(shufpsTemplate);
-	}
-	else
-		printUsage(args);
+{    
+    if(args.length != 2)
+        return printUsage(args);
+    
+    if(args[1] == "c")
+    {
+        writeln("#include <xmmintrin.h>");
+        
+        foreach(i; 0 .. 256)
+            writefln("__m128 shufps%d(__m128 a, __m128 b){ return _mm_shuffle_ps(a, b, %d); }", i, i);
+    }
+    else if(args[1] == "d")
+    {
+        writeln("import core.simd;");
+        
+        foreach(i; 0 .. 256)
+            writefln("extern(C) float4 shufps%d(float4, float4);", i);
+        
+        writeln(shufpsTemplate);
+    }
+    else
+        printUsage(args);
 }

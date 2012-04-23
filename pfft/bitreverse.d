@@ -29,23 +29,23 @@ template ints_up_to(int n, T...)
 
 struct BitReversdPairs
 {
-	int log2n;
-	int opApply(int delegate(ref uint, ref uint) dg)
-	{
-		int mask = (0xffffffff<<(log2n));
-		uint i2 = ~mask; 
-		uint i1 = i2;
-		
-		while(i1 != (0U - 1U))
-		{
-			auto r = dg(i1, i2);
-			if(r)
-				return r;
-			i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
-			--i1;
-		}
-		return 0;
-	}
+    int log2n;
+    int opApply(int delegate(ref uint, ref uint) dg)
+    {
+        int mask = (0xffffffff<<(log2n));
+        uint i2 = ~mask; 
+        uint i1 = i2;
+        
+        while(i1 != (0U - 1U))
+        {
+            auto r = dg(i1, i2);
+            if(r)
+                return r;
+            i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
+            --i1;
+        }
+        return 0;
+    }
 }
 
 auto bit_reversed_pairs(int _log2n)

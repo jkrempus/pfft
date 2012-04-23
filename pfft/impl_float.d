@@ -7,27 +7,25 @@ module pfft.impl_float;
 
 version(Scalar)
 {
-	public import pfft.scalar;
+    public import pfft.scalar;
 }
 else version(Neon)
 {
-	public import pfft.neon;
+    public import pfft.neon;
 }
 else version(StdSimd)
 {
-	public import pfft.stdsimd;
+    public import pfft.stdsimd;
 }
 else version(AVX)
 {
-	public import pfft.avx;
+    public import pfft.avx;
 }
 else
 {
-	public import pfft.sse;
+    public import pfft.sse;
 }
 
 import pfft.fft_impl;
-
-//mixin Instantiate!(FFT!(Vector,Options));
 
 mixin(instantiate!(FFT!(Vector, Options))());

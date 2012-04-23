@@ -25,7 +25,7 @@ version(Double)
 else
     alias float T;
 
-struct LowLewelApi
+struct DirectApi
 {
     static if(is(T == double))
         import pfft.impl_double;
@@ -294,8 +294,8 @@ bool runTest(alias f)(string[] args, long mflops)
     
     if(args[1] == "simple")
         f!(SimpleFft!T)(log2n, flops);
-    else if(args[1] == "lowlevel")
-        f!LowLewelApi(log2n, flops);
+    else if(args[1] == "direct")
+        f!DirectApi(log2n, flops);
     else if(args[1] == "std")
         f!(StdApi!false)(log2n, flops);
     else if(args[1] == "phobos")

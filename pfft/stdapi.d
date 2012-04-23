@@ -24,13 +24,13 @@ auto isComplexArray(R, T)()
 }
 
 final class TypedFft(TT)
-{	
+{    
     static if(is(TT == float))
-		import impl = pfft.impl_float;
+        import impl = pfft.impl_float;
     else static if(is(TT == double))
-		import impl = pfft.impl_double;
-	else static if(is(TT == real))
-		import impl = pfft.scalar_real;
+        import impl = pfft.impl_double;
+    else static if(is(TT == real))
+        import impl = pfft.scalar_real;
     else    
         static assert(0, "Not implemented");
         
@@ -50,11 +50,15 @@ final class TypedFft(TT)
         auto mem = GC.malloc( impl.table_size_bytes(log2n));
         table = impl.fft_table(log2n, mem);
     }
-    
+
+    private static bool isAligned(impl.T* p)
+    {
+        return ((cast(size_t)p) & (impl.alignment - 1)) == 0;
+    }    
     
     private auto deinterleaveArray(R)(R range)
     {
-        if(isComplexArray!(R, TT)() && impl.isAligned(&(range[0].re)))
+        if(isComplexArray!(R, TT)() && isAligned(&(range[0].re)))
         {
             impl.deinterleaveArray(re, im, &(range[0].re), (cast(size_t)1) << log2n);
         }
@@ -71,7 +75,7 @@ final class TypedFft(TT)
     
     private auto interleaveArray(R)(R range)
     {
-        if(isComplexArray!(R, TT)() && impl.isAligned(&(range[0].re)))
+        if(isComplexArray!(R, TT)() && isAligned(&(range[0].re)))
         {
             impl.interleaveArray(re, im, &(range[0].re), (cast(size_t)1) << log2n);
         }
@@ -108,12 +112,12 @@ final class Fft
 {
     import std.variant;
 
-	private void*[string] implDict;
+    private void*[string] implDict;
 
     size_t n;
-	
-	private @property auto impl(T)()
-	{
+    
+    private @property auto impl(T)()
+    {
         auto p = T.stringof in implDict;
         if(p)
             return cast(TypedFft!T)*p;
@@ -123,22 +127,22 @@ final class Fft
             implDict[T.stringof] = cast(void*)t;
             return t;
         }
-	}
-	
-	this(size_t _n)
-	{
-		n = _n;
-	}
-	
-	auto fft(T, R)(R r) 
+    }
+    
+    this(size_t _n)
     {
-		return impl!T.fft(r);
-	}
-	
-	auto fft(R, Ret)(R r, Ret ret) 
+        n = _n;
+    }
+    
+    auto fft(T, R)(R r) 
     {
-		impl!(typeof(ret[0].re)).fft(r, ret);
-	}
+        return impl!T.fft(r);
+    }
+    
+    auto fft(R, Ret)(R r, Ret ret) 
+    {
+        impl!(typeof(ret[0].re)).fft(r, ret);
+    }
 }
 
 
