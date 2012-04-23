@@ -21,3 +21,8 @@ else
 {
 	public import pfft.scalar_double;
 }
+
+import pfft.fft_impl;
+
+mixin(instantiate!(FFT!(Vector, Options))());
+

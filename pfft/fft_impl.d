@@ -55,7 +55,7 @@ struct Scalar(_T)
     }            
 }
 
-struct _FFTTables(T)
+struct FFTTable(T)
 {
     T * table;
     uint * brTable;
@@ -242,7 +242,7 @@ template FFT(alias V, Options)
         }
     }
     
-    alias _FFTTables!T Table;
+    alias FFTTable!T Table;
     
     size_t table_size_bytes()(int log2n)
     {
@@ -737,19 +737,42 @@ template FFT(alias V, Options)
     }
 }
 
-template Instantiate(alias F)
-{	
-	alias F.fft!() fft;
-	alias F.fft_table!() fft_table;
-	alias F.table_size_bytes!() table_size_bytes;
-	alias F.interleaveArray!() interleaveArray;
-	alias F.deinterleaveArray!() deinterleaveArray;
-	alias F.isAligned isAligned;
+auto instantiate(alias F)()
+{
+	return
+	q{
+		private alias } ~ F.stringof ~ q{ F;
+		alias F.T T;
+		alias FFTTable!T Table;
 
-	alias F.T T;
-	alias F.vec vec;
-	alias F.Table Table;
-	
-	enum vec_size = F.vec_size;
-}
+		void fft(T* re, T* im, int log2n, Table t)
+		{
+			F.fft(re, im, log2n, t);
+		}
+		
+		auto fft_table(int log2n, void* p = null)
+		{
+			return F.fft_table(log2n, p);
+		}
+		
+		auto table_size_bytes(int log2n)
+		{
+			return F.table_size_bytes(log2n);
+		}
 
+    		void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n)
+		{
+			F.deinterleaveArray(even, odd, interleaved, n);
+		}
+
+    		void interleaveArray(T* even, T* odd, T* interleaved, size_t n)
+		{
+			F.interleaveArray(even, odd, interleaved, n);
+		}
+
+		auto isAligned(T* p)
+		{
+			return F.isAligned(p);
+		}
+	};
+}	

@@ -14,7 +14,7 @@ template shuf_mask(int a3, int a2, int a1, int a0)
     enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
 }
 
-struct SSE
+struct Vector 
 {
     alias float4 vec;
     alias float T;
@@ -88,26 +88,5 @@ struct Options
     enum log2_optimal_n = 9;
     enum passes_per_recursive_call = 5;
     enum log2_recursive_passes_chunk_size = 5;
-}
-
-version(CPP_IMPL)
-{
-    struct Tables{ void* ptr1; void* ptr2; }
-    extern(C) void fft(float* re, float* im, int log2n, Tables tables);
-    extern(C) Tables fft_table(int log2n);
-}
-else
-{
-    alias FFT!(SSE,Options) F;
-    
-    extern(C) void fft(float* re, float* im, int log2n, F.Tables tables)
-    {
-        F.fft(re, im, log2n, tables);
-    }
-
-    extern(C) auto fft_table(int log2n)
-    {
-        return F.tables(log2n);
-    }
 }
 

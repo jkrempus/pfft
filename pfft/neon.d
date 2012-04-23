@@ -43,7 +43,7 @@ struct NeonVec
     }*/
 }
 
-struct Neon
+struct Vector 
 {
     alias NeonVec vec;
     alias float T;
@@ -174,6 +174,3 @@ struct Options
     enum log2_recursive_passes_chunk_size = 5;
 }
 
-alias FFT!(Neon,Options) F;
-
-mixin Instantiate!F;

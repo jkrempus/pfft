@@ -17,5 +17,5 @@ struct Options
     enum { fast_init }
 }
 
+alias Scalar!float Vector;
 
-mixin Instantiate!(FFT!(Scalar!float,Options));

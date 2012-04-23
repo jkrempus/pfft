@@ -18,7 +18,7 @@ version(X86_64)
     version(linux)
         version = linux_x86_64;
 
-struct SSEDouble
+struct Vector
 {
     alias double2 vec;
     alias double T;
@@ -173,6 +173,3 @@ struct Options
     enum { fast_init };
 }
 
-alias FFT!(SSEDouble,Options) F;
-
-mixin Instantiate!F;

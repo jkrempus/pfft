@@ -18,7 +18,7 @@ version(X86_64)
     version(linux)
         version = linux_x86_64;
 
-struct SSE
+struct Vector 
 {
     alias float4 vec;
     alias float T;
@@ -288,4 +288,3 @@ struct Options
     enum { fast_init };
 }
 
-mixin Instantiate!(FFT!(SSE,Options));

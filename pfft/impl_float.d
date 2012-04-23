@@ -25,3 +25,9 @@ else
 {
 	public import pfft.sse;
 }
+
+import pfft.fft_impl;
+
+//mixin Instantiate!(FFT!(Vector,Options));
+
+mixin(instantiate!(FFT!(Vector, Options))());

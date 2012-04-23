@@ -17,4 +17,4 @@ struct Options
     enum { fast_init };
 }
 
-mixin Instantiate!(FFT!(Scalar!double,Options));
+alias Scalar!double Vector;
