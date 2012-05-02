@@ -689,46 +689,44 @@ template FFT(alias V, Options)
     {
         static if(is(typeof(V.interleave!vec_size)))
         {
-            foreach(i; 0 .. n / vec_size)
-            {
-                V.interleave!vec_size(
-                    (cast(vec*)even)[i], 
-                    (cast(vec*)odd)[i], 
-                    (cast(vec*)interleaved)[i * 2], 
-                    (cast(vec*)interleaved)[i * 2 + 1]);
-            }
+            if(n < vec_size)
+                FFT!(Scalar!T, Options).interleaveArray(even, odd, interleaved, n);
+            else
+                foreach(i; 0 .. n / vec_size)
+                    V.interleave!vec_size(
+                        (cast(vec*)even)[i], 
+                        (cast(vec*)odd)[i], 
+                        (cast(vec*)interleaved)[i * 2], 
+                        (cast(vec*)interleaved)[i * 2 + 1]);
         }
         else
-        {
             foreach(i; 0 .. n)
             {
                 interleaved[i * 2] = even[i];
                 interleaved[i * 2 + 1] = odd[i];
             }
-        }
     }
     
     void deinterleaveArray()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.deinterleave!vec_size)))
         {
-            foreach(i; 0 .. n / vec_size)
-            {
-                V.deinterleave!vec_size(
-                    (cast(vec*)interleaved)[i * 2], 
-                    (cast(vec*)interleaved)[i * 2 + 1], 
-                    (cast(vec*)even)[i], 
-                    (cast(vec*)odd)[i]);
-            }
+            if(n < vec_size)
+                FFT!(Scalar!T, Options).deinterleaveArray(even, odd, interleaved, n);
+            else
+                foreach(i; 0 .. n / vec_size)
+                    V.deinterleave!vec_size(
+                        (cast(vec*)interleaved)[i * 2], 
+                        (cast(vec*)interleaved)[i * 2 + 1], 
+                        (cast(vec*)even)[i], 
+                        (cast(vec*)odd)[i]);
         }
         else
-        {
             foreach(i; 0 .. n)
             {
                 even[i] = interleaved[i * 2];
                 odd[i] = interleaved[i * 2 + 1];
             }
-        }
     }
 }
 
@@ -755,7 +753,7 @@ auto instantiate(alias F)()
             return F.table_size_bytes(log2n);
         }
 
-            void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n)
+        void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n)
         {
             F.deinterleaveArray(even, odd, interleaved, n);
         }

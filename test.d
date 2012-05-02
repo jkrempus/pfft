@@ -181,6 +181,26 @@ struct StdApi(bool usePhobos = false)
     mixin ElementAccess!(a, r);
 }
 
+struct InterleavedTypedApi
+{
+    import pfft.stdapi;
+    
+    Complex!(T)[] a;
+    Complex!(T)[] r;
+    TypedFft!T fft;
+    
+    this(int log2n)
+    {
+        a = gc_aligned_array!(Complex!T)(one << log2n);
+        r = gc_aligned_array!(Complex!T)(one << log2n);
+        fft = new TypedFft!T(one << log2n);
+    }
+    
+    void compute(){ fft.fft(a, r); }
+
+    mixin ElementAccess!(a, r);
+}
+
 version(BenchFftw)
 {
     static if(is(T == float))
@@ -300,6 +320,8 @@ bool runTest(alias f)(string[] args, long mflops)
         f!(StdApi!false)(log2n, flops);
     else if(args[1] == "phobos")
         f!(StdApi!(true))(log2n, flops);
+    else if(args[1] == "interleaved-typed")
+        f!(InterleavedTypedApi)(log2n, flops);
     else if(args[1] == "split")
         f!SplitApi(log2n, flops);
     else
