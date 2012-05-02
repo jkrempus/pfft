@@ -35,7 +35,7 @@ final class TypedFft(TT)
         static assert(0, "Not implemented");
         
     
-    int log2n;
+    uint log2n;
     impl.T* re;
     impl.T* im;
     Complex!(impl.T)* return_buf = null;
@@ -51,9 +51,9 @@ final class TypedFft(TT)
         table = impl.fft_table(log2n, mem);
     }
 
-    private static bool isAligned(impl.T* p)
+    private bool isAligned(impl.T* p)
     {
-        return ((cast(size_t)p) & (impl.alignment - 1)) == 0;
+        return ((cast(size_t)p) & (impl.alignment(log2n) - 1)) == 0;
     }    
     
     private auto deinterleaveArray(R)(R range)

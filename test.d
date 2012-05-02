@@ -31,7 +31,9 @@ struct DirectApi
         import pfft.impl_double;
     else
         import pfft.impl_float;
-        
+    
+    import core.memory; 
+
     T[] _re;
     T[] _ri;
     Table table;
@@ -42,7 +44,7 @@ struct DirectApi
         log2n = _log2n;
         _re = gc_aligned_array!T(1 << log2n);
         _ri = gc_aligned_array!T(1 << log2n);
-        table = fft_table(log2n);  // will leak memory but we don't care
+        table = fft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
     }
     
     void compute(){ fft(_re.ptr, _ri.ptr, log2n, table); }
@@ -252,14 +254,14 @@ version(BenchFftw)
 void bench(F)(int log2n, long flops)
 {    
     auto f = F(log2n);
-
+    
     foreach(i; 0 .. one << log2n)
         f.re(i) = 0.0, f.im(i) = 0.0;
 
     ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
-    
+        
     StopWatch sw;
     sw.start();
     

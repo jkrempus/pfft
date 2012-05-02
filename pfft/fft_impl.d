@@ -61,30 +61,6 @@ struct FFTTable(T)
     uint * brTable;
 }
 
-version(Android)
-{
-    extern (C) void *memalign(size_t boundary, size_t size);
-}
-
-auto aligned_alloc(T)(size_t n, size_t alignment)
-{
-    version(Android)
-    {
-        return cast(T*) memalign(alignment, n * T.sizeof);
-    }
-    else
-    {
-        T * r;
-        posix_memalign(cast(void**)&r, alignment, n * T.sizeof);
-        return r;
-    }
-}
-
-auto aligned_array(T)(size_t n, size_t alignment)
-{
-    return aligned_alloc!T(n, alignment)[0 .. n];
-}
-
 version(DisableLarge)
     enum disableLarge = true;
 else 
@@ -244,18 +220,18 @@ template FFT(alias V, Options)
     
     alias FFTTable!T Table;
     
-    size_t table_size_bytes()(int log2n)
+    size_t table_size_bytes()(uint log2n)
     {
-        return ((2 * T.sizeof) << log2n) + BR.br_table_size(log2n) * uint.sizeof;
+        uint log2nbr = log2n < Options.large_limit ? 
+            log2n : 2 * Options.log2_bitreverse_large_chunk_size;
+        
+        return ((2 * T.sizeof) << log2n) + BR.br_table_size(log2nbr) * uint.sizeof;
     }
     
-    Table fft_table()(int log2n, void * p = null)
+    Table fft_table()(int log2n, void * p)
     {
         if(log2n < 2*log2(vec_size))
             return FFT!(Scalar!T, Options).fft_table(log2n, p);
-        
-        if(p == null)
-            p = cast(void*)aligned_alloc!byte(table_size_bytes(log2n), 64);
         
         Table tables;
         
@@ -263,19 +239,18 @@ template FFT(alias V, Options)
         
         fft_table_impl(log2n, cast(Pair *)(tables.table + 2));
         
+        tables.brTable = cast(uint*)(p + ((2 * T.sizeof) << log2n));
+        
         if(log2n < 4)
         {
-            tables.brTable = null;
         }
         else if(log2n < Options.large_limit)
         {
-            tables.brTable = cast(uint*)(p + ((2 * T.sizeof) << log2n));
             BR.init_br_table(tables.brTable, log2n);
         }
         else
         {
             enum log2size = 2*Options.log2_bitreverse_large_chunk_size;
-            tables.brTable = aligned_alloc!uint(BR.br_table_size(log2size), 64);
             BR.init_br_table(tables.brTable, log2size);
         }
         return tables;
@@ -738,17 +713,17 @@ auto instantiate(alias F)()
         alias F.T T;
         alias FFTTable!T Table;
 
-        void fft(T* re, T* im, int log2n, Table t)
+        void fft(T* re, T* im, uint log2n, Table t)
         {
             F.fft(re, im, log2n, t);
         }
         
-        auto fft_table(int log2n, void* p = null)
+        auto fft_table(uint log2n, void* p = null)
         {
             return F.fft_table(log2n, p);
         }
         
-        auto table_size_bytes(int log2n)
+        auto table_size_bytes(uint log2n)
         {
             return F.table_size_bytes(log2n);
         }
@@ -763,6 +738,9 @@ auto instantiate(alias F)()
             F.interleaveArray(even, odd, interleaved, n);
         }
         
-        enum alignment = F.vec_size * T.sizeof;
+        size_t alignment(uint log2n)
+        {
+            return ((cast(size_t)1) << log2n) < F.vec_size ? 1 : F.vec_size * T.sizeof;
+        }
     };
 }    
