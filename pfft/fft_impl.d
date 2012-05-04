@@ -513,9 +513,9 @@ template FFT(alias V, Options)
         auto ibuffer = aligned_ptr!vec(imem.ptr, 64);
       
         for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += chunk_size, pp += stride)
-            BR.copy_array(pb, pp, chunk_size);
+            BR.copy_array!chunk_size(pb, pp);
         for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += chunk_size, pp += stride)
-            BR.copy_array(pb, pp, chunk_size);
+            BR.copy_array!chunk_size(pb, pp);
         
         size_t m2 = l*chunk_size/2;
         size_t m2_limit = m2>>nPasses;
@@ -536,9 +536,9 @@ template FFT(alias V, Options)
         }
       
         for(vec* pp = pr, pb = rbuffer; pp < pr + N; pb += chunk_size, pp += stride)
-            BR.copy_array(pp, pb, chunk_size);
+            BR.copy_array!chunk_size(pp, pb);
         for(vec* pp = pi, pb = ibuffer; pp < pi + N; pb += chunk_size, pp += stride)
-            BR.copy_array(pp, pb, chunk_size);
+            BR.copy_array!chunk_size(pp, pb);
     }
     
     void fft_passes_recursive()(
@@ -703,6 +703,22 @@ template FFT(alias V, Options)
                 odd[i] = interleaved[i * 2 + 1];
             }
     }
+
+    static size_t alignment(uint log2n)
+    {
+        
+        static if(is(typeof(Options.prefered_alignment)) && 
+            Options.prefered_alignment > vec.sizeof)
+        {
+            enum a = Options.prefered_alignment;
+        } 
+        else
+            enum a = vec.sizeof; 
+        
+        auto bytes = T.sizeof <<  log2n;
+        return bytes < a ? bytes : a;
+        
+    }
 }
 
 auto instantiate(alias F)()
@@ -740,7 +756,7 @@ auto instantiate(alias F)()
         
         size_t alignment(uint log2n)
         {
-            return ((cast(size_t)1) << log2n) < F.vec_size ? 1 : F.vec_size * T.sizeof;
+            return F.alignment(log2n);
         }
     };
 }    

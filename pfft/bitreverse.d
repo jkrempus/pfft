@@ -27,6 +27,16 @@ template ints_up_to(int n, T...)
         alias T ints_up_to;
 }
 
+template RepeatType(T, int n, R...)
+{
+    static if(n == 0)
+        alias R RepeatType;
+    else
+        alias RepeatType!(T, n - 1, T, R) RepeatType;
+}
+
+
+
 struct BitReversdPairs
 {
     int log2n;
@@ -142,60 +152,57 @@ struct BitReverse(alias V, Options)
             V.bit_reverse_swap_16( p, p1, p2, p3, table[0], table[1]);
     }
 
-    static void swap4once()(vec * dst, vec * src)
+    private static auto highest_power_2(int a, int maxpower)
     {
-        vec a0 = src[0];
-        vec a1 = src[1];
-        vec a2 = src[2];
-        vec a3 = src[3];
-        vec a4 = dst[0];
-        vec a5 = dst[1];
-        vec a6 = dst[2];
-        vec a7 = dst[3];
-        dst[0] = a0;
-        dst[1] = a1;
-        dst[2] = a2;
-        dst[3] = a3;
-        src[0] = a4;
-        src[1] = a5;
-        src[2] = a6;
-        src[3] = a7;
+        while(a % maxpower)
+            maxpower /= 2;
+
+        return maxpower;     
     }
 
-    static void swap_array(TT)(TT *  a, TT *  b, int len)
+    static void swap_some(int n, TT)(TT* a, TT* b)
     {
-        assert(len*TT.sizeof % (vec.sizeof * 4) == 0);
+        RepeatType!(TT, 2 * n) tmp;
         
-        foreach(i; 0 .. len * TT.sizeof / 4 / vec.sizeof)
-            swap4once((cast(vec*)a) + 4 * i, (cast(vec*)b) + 4 * i);
+        foreach(i; ints_up_to!n)
+            tmp[i] = a[i];
+        foreach(i; ints_up_to!n)
+            tmp[i + n] = b[i];
+        
+        foreach(i; ints_up_to!n)
+            b[i] = tmp[i];
+        foreach(i; ints_up_to!n)
+            a[i] = tmp[i + n];
+    }
+
+    static void swap_array(int len, TT)(TT *  a, TT *  b)
+    {
+        static assert(len*TT.sizeof % vec.sizeof == 0);
+        
+        enum n = highest_power_2( len * TT.sizeof / vec.sizeof, 4);
+        
+        foreach(i; 0 .. len * TT.sizeof / n / vec.sizeof)
+            swap_some!4((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    static void copy8once()(vec * dst, vec * src)
+    static void copy_some(int n, TT)(TT* dst, TT* src)
     {
-        vec a0 = src[0];
-        vec a1 = src[1];
-        vec a2 = src[2];
-        vec a3 = src[3];
-        vec a4 = src[4];
-        vec a5 = src[5];
-        vec a6 = src[6];
-        vec a7 = src[7];
-        dst[0] = a0;
-        dst[1] = a1;
-        dst[2] = a2;
-        dst[3] = a3;
-        dst[4] = a4;
-        dst[5] = a5;
-        dst[6] = a6;
-        dst[7] = a7;
-    }
-
-    static void copy_array(TT)(TT *  a, TT *  b, int len)
-    {
-        assert((len*TT.sizeof % (vec.sizeof*8) == 0));
+        RepeatType!(TT, n) a;
         
-        foreach(i; 0 .. len * TT.sizeof / 8 / vec.sizeof)
-            copy8once((cast(vec*)a) + 8 * i, (cast(vec*)b) + 8 * i);
+        foreach(i, _; a)
+            a[i] = src[i];
+        foreach(i, _; a)
+            dst[i] = a[i];
+    }
+    
+    static void copy_array(int len, TT)(TT *  a, TT *  b)
+    {
+        static assert((len * TT.sizeof % vec.sizeof == 0));
+        
+        enum n = highest_power_2( len * TT.sizeof / vec.sizeof, 8);
+
+        foreach(i; 0 .. len * TT.sizeof / n / vec.sizeof)
+            copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
     static void bit_reverse_large()(T* p, int log2n, uint * table)
@@ -216,20 +223,20 @@ struct BitReverse(alias V, Options)
             {
           
                 for(T* pp = p + i0 * l, pb = buffer; pp < pend; pb += l, pp += m)
-                    copy_array(pb, pp, l);
+                    copy_array!l(pb, pp);
           
                 bit_reverse_small(buffer,log2l+log2l, table);
 
                 if(i1 != i0)
                 {
                     for(T* pp = p + i1 * l, pb = buffer; pp < pend; pb += l, pp += m)
-                        swap_array(pp, pb, l);
+                        swap_array!l(pp, pb);
                 
                     bit_reverse_small(buffer,log2l+log2l, table);
                 }
 
                 for(T* pp = p + i0*l, pb = buffer; pp < pend; pp += m, pb += l)
-                    copy_array(pp, pb, l);
+                    copy_array!l(pp, pb);
             }
         }
     }
