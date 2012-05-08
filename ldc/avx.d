@@ -8,3 +8,8 @@ extern(C) float4 extract128_1(float8);
 
 extern(C) float8 interleave128_lo(float8, float8);
 extern(C) float8 interleave128_hi(float8, float8);
+
+extern(C) float8 broadcast128(float4*);
+
+extern(C) float8 unpckhps(float8, float8);
+extern(C) float8 unpcklps(float8, float8);

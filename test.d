@@ -242,7 +242,7 @@ version(BenchFftw)
         {
             a = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
             r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
-            p = fftw_plan_dft_1d(1 << log2n, a, r, FFTW_FORWARD, FFTW_MEASURE);
+            p = fftw_plan_dft_1d(1 << log2n, a, r, FFTW_FORWARD, FFTW_PATIENT);
         }
         
         void compute(){ fftw_execute(p); }

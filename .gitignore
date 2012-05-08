@@ -1,7 +1,7 @@
 *.o
 *.a
 *.so
-*.s:
+*.s
 *.~
 test
 bench

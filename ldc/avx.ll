@@ -1,4 +1,4 @@
-; ModuleID = 'tmp.bc'
+; ModuleID = 'avx.bc'
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
@@ -1573,6 +1573,27 @@ entry:
   %0 = tail call <8 x float> @llvm.x86.avx.vperm2f128.ps.256(<8 x float> %a, <8 x float> %b, i8 49) nounwind
   ret <8 x float> %0
 }
+
+define <8 x float> @broadcast128(<4 x float>* %p) nounwind uwtable readonly {
+entry:
+  %0 = bitcast <4 x float>* %p to i8*
+  %1 = tail call <8 x float> @llvm.x86.avx.vbroadcastf128.ps.256(i8* %0) nounwind
+  ret <8 x float> %1
+}
+
+define <8 x float> @unpckhps(<8 x float> %a, <8 x float> %b) nounwind uwtable readnone {
+entry:
+  %shuffle.i = shufflevector <8 x float> %a, <8 x float> %b, <8 x i32> <i32 2, i32 10, i32 3, i32 11, i32 6, i32 14, i32 7, i32 15>
+  ret <8 x float> %shuffle.i
+}
+
+define <8 x float> @unpcklps(<8 x float> %a, <8 x float> %b) nounwind uwtable readnone {
+entry:
+  %shuffle.i = shufflevector <8 x float> %a, <8 x float> %b, <8 x i32> <i32 0, i32 8, i32 1, i32 9, i32 4, i32 12, i32 5, i32 13>
+  ret <8 x float> %shuffle.i
+}
+
+declare <8 x float> @llvm.x86.avx.vbroadcastf128.ps.256(i8*) nounwind readonly
 
 declare <8 x float> @llvm.x86.avx.vperm2f128.ps.256(<8 x float>, <8 x float>, i8) nounwind readnone
 

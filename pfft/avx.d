@@ -20,6 +20,71 @@ struct Vector
     import pfft.avx_declarations;
 
     static auto v(T* p){ return cast(float4*) p; }
+    static auto v8(T* p){ return cast(float8*) p; }
+    
+    static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
+    {
+        static if(n == 8)
+            deinterleave!8(v8(arr)[0], v8(arr)[1], rr, ri);
+        else static if (n == 4)
+        {
+            vec a = *v8(arr);
+            rr = shufps!(2, 2, 0, 0)(a, a);
+            ri = shufps!(3, 3, 1, 1)(a, a);
+        }
+        else static if(n == 2)
+        {
+            rr = insert128_0(rr, arr[0]);
+            rr = insert128_1(rr, arr[2]);
+            ri = insert128_0(ri,  arr[1]);
+            ri = insert128_1(ri,  arr[3]);
+        }
+        else
+            static assert(0);
+    }
+    
+    static void interleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        static if(interleaved == 8)
+        {
+            vec a0_tmp = unpcklps(a0, a1);
+            a1 =         unpckhps(a0, a1);
+            deinterleave!2(a0_tmp, a1, r0, r1);
+        }
+        else static if(interleaved == 4)
+        {
+            vec a0_tmp = shufps!(1,0,1,0)(a0, a1);
+            a1 =         shufps!(3,2,3,2)(a0, a1);
+            deinterleave!2(a0_tmp, a1, r0, r1);
+        }
+        else static if(interleaved == 2)
+            deinterleave!2(a0, a1, r0, r1);
+        else
+            static assert(0);
+    }
+    
+    static void deinterleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        static if(interleaved == 8)
+        {
+            deinterleave!2(a0, a1, a0, a1); 
+            r0 = shufps!(2,0,2,0)(a0, a1);
+            r1 = shufps!(3,1,3,1)(a0, a1);
+        }
+        else static if(interleaved == 4)
+        {
+            deinterleave!2(a0, a1, a0, a1); 
+            r0 = shufps!(1,0,1,0)(a0, a1);
+            r1 = shufps!(3,2,3,2)(a0, a1);
+        }
+        else static if(interleaved == 2)
+        {
+            r0 = interleave128_lo(a0, a1);
+            r1 = interleave128_hi(a0, a1);
+        }
+        else
+            static assert(0);
+    }
 
     static void bit_reverse_swap_16(float * p0, float * p1, float * p2, float * p3, size_t i1, size_t i2)
     {
