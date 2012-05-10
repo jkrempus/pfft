@@ -169,7 +169,8 @@ template FFT(alias V, Options)
             fft_table_sines_cosines(log2n, r);
                 
         int n_reversed_loops = 
-            log2n >= Options.large_limit ? 0 : log2(vec_size);
+            (log2n >= Options.large_limit || log2n < 2 * log2(vec_size)) ?
+                 0 : log2(vec_size);
                 
         auto p = r;
         for (int s = 0; s < log2n; ++s)
@@ -230,7 +231,7 @@ template FFT(alias V, Options)
     
     Table fft_table()(int log2n, void * p)
     {
-        if(log2n < 2*log2(vec_size))
+        if(log2n <= log2(vec_size))
             return FFT!(Scalar!T, Options).fft_table(log2n, p);
         
         Table tables;
@@ -602,17 +603,10 @@ template FFT(alias V, Options)
                     nextN, table, tableI + 2*i, tableRowLen);
         }
     }
-    
-    void fft_small()(T * re, T * im, int log2n, Table tables)
+   
+    void bit_reverse_small_two(int minLog2n)(T* re, T* im, int log2n, uint* brTable)
     {
-        assert(log2n >= 2*log2(vec_size));
-        
-        size_t N = (1<<log2n);
-        auto re_vec = cast(vec*) re;
-        auto im_vec = cast(vec*) im;
-        fft_passes(re_vec, im_vec, N / vec_size, tables.table + 2);
-        
-        static if(2*log2(vec_size) < 4)
+        static if(minLog2n < 4)
         {
             if(log2n < 4)
             {
@@ -621,25 +615,50 @@ template FFT(alias V, Options)
             }
             else
             {
-                BR.bit_reverse_small(re, log2n, tables.brTable); 
-                BR.bit_reverse_small(im, log2n, tables.brTable);
+                BR.bit_reverse_small(re, log2n, brTable); 
+                BR.bit_reverse_small(im, log2n, brTable);
             }
         }
         else                                                            //we already know that log2n >= 4 here.
         {
-            BR.bit_reverse_small(re, log2n, tables.brTable); 
-            BR.bit_reverse_small(im, log2n, tables.brTable);
-        }
-        fft_passes_bit_reversed( re_vec, im_vec , N / vec_size, cast(vec*) tables.table, N/vec_size/vec_size);
+            BR.bit_reverse_small(re, log2n, brTable); 
+            BR.bit_reverse_small(im, log2n, brTable);
+        }   
+    }
+
+    auto v(T* p){ return cast(vec*) p; }
+
+    void fft_tiny()(T * re, T * im, int log2n, Table tables)
+    {
+        assert(log2n > log2(vec_size));
+        
+        size_t N = (1<<log2n);
+        fft_passes(v(re), v(im), N / vec_size, tables.table + 2);
+        
+        fft_passes_fractional(v(re), v(im), v(re) + N / vec_size, 
+            tables.table + 2 * N / vec_size, 0, 2 * N  / vec_size);
+
+        bit_reverse_small_two!(log2(vec_size) + 1)(re, im, log2n, tables.brTable);
+    }
+
+    void fft_small()(T * re, T * im, int log2n, Table tables)
+    {
+        assert(log2n >= 2*log2(vec_size));
+        
+        size_t N = (1<<log2n);
+        fft_passes(v(re), v(im), N / vec_size, tables.table + 2);
+        
+        bit_reverse_small_two!(2 * log2(vec_size))(re, im, log2n, tables.brTable);
+
+        fft_passes_bit_reversed(v(re), v(im) , N / vec_size, 
+            cast(vec*) tables.table, N/vec_size/vec_size);
     }
     
     void fft_large()(T * re, T * im, int log2n, Table tables)
     {
         size_t N = (1<<log2n);
-        auto re_vec = cast(vec*) re;
-        auto im_vec = cast(vec*) im;
         
-        fft_passes_recursive(re_vec, im_vec, N / vec_size, tables.table + 2, 0, 2);
+        fft_passes_recursive(v(re), v(im), N / vec_size, tables.table + 2, 0, 2);
         
         BR.bit_reverse_large(re, log2n, tables.brTable); 
         BR.bit_reverse_large(im, log2n, tables.brTable);
@@ -647,8 +666,10 @@ template FFT(alias V, Options)
     
     void fft()(T * re, T * im, int log2n, Table tables)
     {
-        if(log2n < 2*log2(vec_size))
+        if(log2n <= log2(vec_size))
             return FFT!(Scalar!T, Options).fft_small(re, im, log2n, tables);
+        else if(log2n < 2 * log2(vec_size))
+            return fft_tiny(re, im, log2n, tables);
         else if( log2n < Options.large_limit || disableLarge)
             return fft_small(re, im, log2n, tables);
         else 
