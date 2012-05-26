@@ -16,7 +16,6 @@ version(LDC)
 else version(GNU)
 {
     import gcc.builtins;
-    alias __vector(float[8]) float8;
 
     template shuf_mask(int a3, int a2, int a1, int a0)
     { 
