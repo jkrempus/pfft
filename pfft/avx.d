@@ -9,6 +9,71 @@ import core.simd;
 
 import pfft.fft_impl;
 
+version(LDC)
+{
+    import pfft.avx_declarations;
+}
+else version(GNU)
+{
+    import gcc.builtins;
+    alias __vector(float[8]) float8;
+
+    template shuf_mask(int a3, int a2, int a1, int a0)
+    { 
+        enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
+    }
+
+    float8 insert128_0(float8 a, float4 b)
+    {
+        return __builtin_ia32_vinsertf128_ps256(a, b, 0);
+    }
+
+    float8 insert128_1(float8 a, float4 b)
+    {
+        return __builtin_ia32_vinsertf128_ps256(a, b, 1);
+    }
+
+    float4 extract128_0(float8 a)
+    {
+        return __builtin_ia32_vextractf128_ps256(a, 0);
+    }
+
+    float4 extract128_1(float8 a)
+    {
+        return __builtin_ia32_vextractf128_ps256(a, 1);
+    }
+
+    float8 interleave128_lo(float8 a, float8 b)
+    {
+        return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,2,0,0));
+    }
+
+    float8 interleave128_hi(float8 a, float8 b)
+    {
+        return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,3,0,1));
+    }
+
+    float8 broadcast128(float4* p)
+    {
+        return __builtin_ia32_vbroadcastf128_ps256(p);
+    }
+
+    float8 unpcklps(float8 a, float8 b)
+    {
+        return __builtin_ia32_unpcklps256(a, b);
+    }
+
+    float8 unpckhps(float8 a, float8 b)
+    {
+        return __builtin_ia32_unpckhps256(a, b);
+    }
+
+    auto shufps(param...)(float8 a, float8 b)
+    {
+        return __builtin_ia32_shufps256(a, b, shuf_mask!param);
+    }
+
+}
 
 struct Vector 
 {
@@ -17,7 +82,8 @@ struct Vector
     
     enum vec_size = 8;
    
-    import pfft.avx_declarations;
+    
+    
 
     static auto v(T* p){ return cast(float4*) p; }
     static auto v8(T* p){ return cast(float8*) p; }

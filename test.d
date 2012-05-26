@@ -110,28 +110,23 @@ struct SimpleFft(T)
         log2n = _log2n;
         
         a = gc_aligned_array!(Complex!T)(one << log2n);
-        w = gc_aligned_array!(Complex!T)(one << log2n);
+        w = gc_aligned_array!(Complex!T)(one << (log2n - 1));
 
-        auto p = w;
-        for (int s = 1; s <= log2n; ++s)
+        size_t n = 1 << log2n;
+        T dphi = 4.0 * asin(to!T(1.0)) / n;
+        for(size_t i=0; i< n/2; i++)
         {
-            size_t m = 1 << s;
-            T dphi = 4.0 * asin(to!T(1.0)) / m;
-            for(size_t i=0; i< m/2; i++)
-            {
-                p[i].re = cos(dphi * i);
-                p[i].im = -sin(dphi * i);
-            }
-            bit_reverse(s - 1, p[0 .. m / 2]);
-            p = p[m / 2 .. $];
+            w[i].re = cos(dphi * i);
+            w[i].im = -sin(dphi * i);
         }
+        bit_reverse(log2n - 1, w[0 .. n / 2]);
     }
     
     void compute()
     {
-        auto table = w.ptr;
         for (size_t m2 = (one << log2n) / 2; m2; m2 >>= 1)
         {
+            auto table = w.ptr;
             size_t m = m2 + m2;
             for(auto p = a.ptr; p < a.ptr + (one << log2n); p += m )
             {
