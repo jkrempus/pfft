@@ -256,26 +256,26 @@ extern(C) float8 shufps253(float8, float8);
 extern(C) float8 shufps254(float8, float8);
 extern(C) float8 shufps255(float8, float8);
 
-auto shufps(int m0, int m1, int m2, int m3)(float8 a, float8 b)
-{
-    
-    enum sm = m3 | (m2<<2) | (m1<<4) | (m0<<6);
-    mixin("auto r = shufps" ~ sm.stringof ~ "(a, b);");
-    return r;
-}    
+    auto shufps(int m0, int m1, int m2, int m3)(float8 a, float8 b)
+    {
 
-import core.simd;
+        enum sm = m3 | (m2<<2) | (m1<<4) | (m0<<6);
+        mixin("auto r = shufps" ~ sm.stringof ~ "(a, b);");
+        return r;
+    }    
 
-extern(C) float8 insert128_0(float8, float4);
-extern(C) float8 insert128_1(float8, float4);
 
-extern(C) float4 extract128_0(float8);
-extern(C) float4 extract128_1(float8);
+    extern(C) float8 insert128_0(float8, float4);
+    extern(C) float8 insert128_1(float8, float4);
 
-extern(C) float8 interleave128_lo(float8, float8);
-extern(C) float8 interleave128_hi(float8, float8);
+    extern(C) float4 extract128_0(float8);
+    extern(C) float4 extract128_1(float8);
 
-extern(C) float8 broadcast128(float4*);
+    extern(C) float8 interleave128_lo(float8, float8);
+    extern(C) float8 interleave128_hi(float8, float8);
 
-extern(C) float8 unpckhps(float8, float8);
-extern(C) float8 unpcklps(float8, float8);
+    extern(C) float8 broadcast128(float4*);
+
+    extern(C) float8 unpckhps(float8, float8);
+    extern(C) float8 unpcklps(float8, float8);
+

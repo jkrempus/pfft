@@ -20,7 +20,9 @@ template splitElementAccess(alias _re, alias _ri)
     ref result_im(size_t i){ return _ri[i]; }
 }
 
-version(Double)
+version(Real)
+    alias real T;
+else version(Double)
     alias double T;
 else
     alias float T;
@@ -202,7 +204,7 @@ version(BenchFftw)
 {
     static if(is(T == float))
     {
-        pragma (msg, "Using FFTW - you should link to libfftw3f.a. Note that the resulting binary will be covered by GPL (see FFTW license).");
+        pragma (msg, "Using FFTW - you should link to libfftw3f.a. Note that the resulting binary will be covered by the GPL (see FFTW license).");
         
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
@@ -212,13 +214,25 @@ version(BenchFftw)
         alias fftwf_plan_dft_1d fftw_plan_dft_1d;
         alias fftwf_execute fftw_execute;
     }
-    else
+    else static if(is(T == double))
     {
-        pragma (msg, "Using FFTW - you should link to libfftw3.a. Note that the resulting binary will be covered by GPL (see FFTW license).");
+        pragma (msg, "Using FFTW - you should link to libfftw3.a. Note that the resulting binary will be covered by the GPL (see FFTW license).");
         
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
         extern(C) void fftw_execute(void *);
+    }
+    else
+    {
+        pragma (msg, "Using FFTW - you should link to libfftw3q.a. Note that the resulting binary will be covered by the GPL (see FFTW license).");
+        
+        extern(C) void* fftwl_malloc(size_t);
+        extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
+        extern(C) void fftwl_execute(void *);
+        
+        alias fftwl_malloc fftw_malloc;
+        alias fftwl_plan_dft_1d fftw_plan_dft_1d;
+        alias fftwl_execute fftw_execute;
     }
 
     enum FFTW_FORWARD = -1;

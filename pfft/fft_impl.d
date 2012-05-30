@@ -66,11 +66,21 @@ version(DisableLarge)
 else 
     enum disableLarge = false;
 
+import core.stdc.math;
+
+auto sin(float a){ return sinf(a); }
+auto sin(real a){ return sinl(a); }
+auto cos(float a){ return cosf(a); }
+auto cos(real a){ return cosl(a); }
+auto asin(float a){ return asinf(a); }
+auto asin(real a){ return asinl(a); }
+
+
 template FFT(alias V, Options)
 {    
-    import core.bitop, core.stdc.math, core.stdc.stdlib;
+    import core.bitop, core.stdc.stdlib;
     import pfft.bitreverse;
-    
+   
     alias BitReverse!(V, Options) BR;
     
     alias V.vec_size vec_size;
@@ -119,7 +129,7 @@ template FFT(alias V, Options)
         auto p1 = p0 + 1;
         auto p1end = p0 + (1<<log2n) - 1;
         
-        real dphi = - asin(1.0);
+        T dphi = - asin(cast(T)1.0);
         
         (*p0)[0] = 1;
         (*p0)[1] = 0;

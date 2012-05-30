@@ -30,7 +30,7 @@ final class TypedFft(TT)
     else static if(is(TT == double))
         import impl = pfft.impl_double;
     else static if(is(TT == real))
-        import impl = pfft.scalar_real;
+        import impl = pfft.impl_real;
     else    
         static assert(0, "Not implemented");
         

@@ -3,7 +3,7 @@
 *.so
 *.s
 *.~
-test
+test/test
 bench
 bench_scalar
 bench_stdapi
