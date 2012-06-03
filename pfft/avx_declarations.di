@@ -279,3 +279,9 @@ extern(C) float8 shufps255(float8, float8);
     extern(C) float8 unpckhps(float8, float8);
     extern(C) float8 unpcklps(float8, float8);
 
+    extern(C) double4 unpckhpd(double4, double4);
+    extern(C) double4 unpcklpd(double4, double4);
+
+    extern(C) double4 interleave128_lo_d(double4, double4);
+    extern(C) double4 interleave128_hi_d(double4, double4);
+

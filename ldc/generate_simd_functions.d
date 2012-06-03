@@ -37,6 +37,12 @@ q{
 
     extern(C) float8 unpckhps(float8, float8);
     extern(C) float8 unpcklps(float8, float8);
+
+    extern(C) double4 unpckhpd(double4, double4);
+    extern(C) double4 unpcklpd(double4, double4);
+
+    extern(C) double4 interleave128_lo_d(double4, double4);
+    extern(C) double4 interleave128_hi_d(double4, double4);
 };
 
 enum avxCCode = 
@@ -55,6 +61,11 @@ q{
     __m256 unpckhps(__m256 a, __m256 b) { return _mm256_unpackhi_ps(a, b); }
     __m256 unpcklps(__m256 a, __m256 b) { return _mm256_unpacklo_ps(a, b); }
     
+    __m256d unpckhpd(__m256d a, __m256d b) { return _mm256_unpackhi_pd(a, b); }
+    __m256d unpcklpd(__m256d a, __m256d b) { return _mm256_unpacklo_pd(a, b); }
+    
+    __m256d interleave128_lo_d(__m256d a, __m256d b){ return _mm256_permute2f128_pd(a, b, _MM_SHUFFLE(0,2,0,0)); }
+    __m256d interleave128_hi_d(__m256d a, __m256d b){ return _mm256_permute2f128_pd(a, b, _MM_SHUFFLE(0,3,0,1)); }
 };
 
 enum sseDCode = 

@@ -1593,6 +1593,32 @@ entry:
   ret <8 x float> %shuffle.i
 }
 
+define <4 x double> @unpckhpd(<4 x double> %a, <4 x double> %b) nounwind uwtable readnone {
+entry:
+  %shuffle.i = shufflevector <4 x double> %a, <4 x double> %b, <4 x i32> <i32 1, i32 5, i32 3, i32 7>
+  ret <4 x double> %shuffle.i
+}
+
+define <4 x double> @unpcklpd(<4 x double> %a, <4 x double> %b) nounwind uwtable readnone {
+entry:
+  %shuffle.i = shufflevector <4 x double> %a, <4 x double> %b, <4 x i32> <i32 0, i32 4, i32 2, i32 6>
+  ret <4 x double> %shuffle.i
+}
+
+define <4 x double> @interleave128_lo_d(<4 x double> %a, <4 x double> %b) nounwind uwtable readnone {
+entry:
+  %0 = tail call <4 x double> @llvm.x86.avx.vperm2f128.pd.256(<4 x double> %a, <4 x double> %b, i8 32) nounwind
+  ret <4 x double> %0
+}
+
+define <4 x double> @interleave128_hi_d(<4 x double> %a, <4 x double> %b) nounwind uwtable readnone {
+entry:
+  %0 = tail call <4 x double> @llvm.x86.avx.vperm2f128.pd.256(<4 x double> %a, <4 x double> %b, i8 49) nounwind
+  ret <4 x double> %0
+}
+
+declare <4 x double> @llvm.x86.avx.vperm2f128.pd.256(<4 x double>, <4 x double>, i8) nounwind readnone
+
 declare <8 x float> @llvm.x86.avx.vbroadcastf128.ps.256(i8*) nounwind readonly
 
 declare <8 x float> @llvm.x86.avx.vperm2f128.ps.256(<8 x float>, <8 x float>, i8) nounwind readnone

@@ -29,7 +29,6 @@ auto simdModuleName(SIMD simd, string type)
 {
     enum dict = [
         "sse_real" : "scalar_real",
-        "avx_double" : "scalar_double",
         "avx_real" : "scalar_real"];
     
     auto s = fm("%s_%s", toLower(to!string(simd)), type);

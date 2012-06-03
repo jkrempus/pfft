@@ -11,7 +11,7 @@ version(Scalar)
 }
 else version(AVX)
 {
-    public import pfft.scalar_double;
+    public import pfft.avx_double;
 }
 else version(X86)
 {
