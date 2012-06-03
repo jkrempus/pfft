@@ -17,6 +17,11 @@ else version(GNU)
 {
     import gcc.builtins;
 
+    template shuf_mask(int a3, int a2, int a1, int a0)
+    { 
+        enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
+    }
+
     double4 interleave128_lo_d(double4 a, double4 b)
     {
         return __builtin_ia32_vperm2f128_pd256(a, b, shuf_mask!(0,2,0,0));
@@ -49,8 +54,6 @@ struct Vector
     
     static void bit_reverse_swap_16(double * p0, double * p1, double * p2, double * p3, size_t i1, size_t i2)
     {
-        //Scalar!(T).bit_reverse_swap_16(p0, p1, p2, p3, i1, i2);
-        
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
         a0 = *v(p0 + i1);
@@ -96,8 +99,6 @@ struct Vector
 
     static void bit_reverse_16(double * p0, double * p1, double * p2, double * p3, size_t i)
     {
-        //Scalar!(T).bit_reverse_16(p0, p1, p2, p3, i);
-
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
         a0 = *v(p0 + i);

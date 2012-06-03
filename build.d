@@ -63,62 +63,6 @@ void buildDummy(string ccpath)
     shellf("%s %s -c", ccpath, buildPath("..", "c", "dummy.c")); 
 }
 
-void buildDmd(SIMD simd, string dcpath, string ccpath, bool clib)
-{
-    auto simdStr = to!string(simd);
-    auto src = sources(simd, clib ? ["capi"] : ["stdapi", "splitapi"]);
-    auto path = buildPath("lib", "libpfft.a");
-
-    shellf("%s -O -inline -release -lib -of%s -version=%s %s", 
-        dcpath, path, simdStr, src);
-}
-
-void buildLdc(SIMD simd, string dcpath, string ccpath, bool clib)
-{
-    enum mattrDict = [SIMD.SSE : "sse2"];
-
-    auto simdStr = to!string(simd);
-    auto simdStrLC = toLower(simdStr);
-    auto llcMattr = mattrDict.get(simd, simdStrLC);
-    
-    auto src = sources(simd, clib ? ["capi"] : ["stdapi"]);
-    auto path = buildPath("lib", "libpfft.a");
-
-    if(simd == SIMD.Scalar)
-        shellf("%s -O3 -release -lib -of%s -d-version=%s %s", 
-            dcpath, path, simdStr, src);
-    else
-    {
-        execute(
-            fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
-                dcpath,  simdStr, src),
-            fm("llvm-link %s pfft.bc -o both.bc", 
-                buildPath("..", "ldc", simdStrLC ~ ".ll")),
-            "opt -O3 -std-link-opts -std-compile-opts both.bc -o both.bc",
-            fm("llc both.bc -o both.s -mattr=+%s", llcMattr),
-            fm("%s both.s -c", ccpath),
-            fm("ar cr %s both.o", path));
-    }
-}
-
-string gdcCommonCmd(SIMD simd, string dcpath)
-{
-    enum mflagDict = [SIMD.SSE : "sse2"];
-    
-    auto simdStr = to!string(simd);
-    auto mflag = mflagDict.get(simd, toLower(simdStr));
-
-    return fm("%s -O -inline -release -version=%s -m%s", dcpath, simdStr, mflag);
-}
-
-void buildGdcImpl(SIMD simd, string dcpath, string ccpath, string flags, bool clib)
-{
-    auto src = sources(simd, clib ? ["capi"] : ["stdapi", "splitapi"]);
-    execute(
-        fm("%s %s %s -ofpfft.o -c", gdcCommonCmd(simd, dcpath), flags, src),
-        fm("ar cr %s pfft.o", libPath));
-}
-
 void buildTests(SIMD simd, string dcpath, Compiler c, string outDir, 
     bool optimized = true, string flags = "")
 {
@@ -161,6 +105,59 @@ void runBenchmarks()
     }
     
     f("float"); f("real"); f("double");
+}
+
+
+void buildDmd(SIMD simd, string dcpath, string ccpath, bool clib)
+{
+    auto simdStr = to!string(simd);
+    auto src = sources(simd, clib ? ["capi"] : ["stdapi", "splitapi"]);
+    auto path = buildPath("lib", "libpfft.a");
+
+    shellf("%s -O -inline -release -lib -of%s -version=%s %s", 
+        dcpath, path, simdStr, src);
+}
+
+void buildLdc(SIMD simd, string dcpath, string ccpath, bool clib)
+{
+    enum mattrDict = [SIMD.SSE : "sse2"];
+
+    auto simdStr = to!string(simd);
+    auto simdStrLC = toLower(simdStr);
+    auto llcMattr = mattrDict.get(simd, simdStrLC);
+    
+    auto src = sources(simd, clib ? ["capi"] : ["stdapi"]);
+    auto path = buildPath("lib", "libpfft.a");
+
+    if(simd == SIMD.Scalar)
+        shellf("%s -O3 -release -lib -of%s -d-version=%s %s", 
+            dcpath, path, simdStr, src);
+    else
+    {
+        execute(
+            fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
+                dcpath,  simdStr, src),
+            fm("llvm-link %s pfft.bc -o both.bc", 
+                buildPath("..", "ldc", simdStrLC ~ ".ll")),
+            "opt -O3 -std-link-opts -std-compile-opts both.bc -o both.bc",
+            fm("llc both.bc -o both.s -mattr=+%s", llcMattr),
+            fm("%s both.s -c", ccpath),
+            fm("ar cr %s both.o", path));
+    }
+}
+
+void buildGdcImpl(SIMD simd, string dcpath, string ccpath, string flags, bool clib)
+{
+    enum mflagDict = [SIMD.SSE : "sse2"];
+    
+    auto simdStr = to!string(simd);
+    auto mflag = mflagDict.get(simd, toLower(simdStr));
+    auto src = sources(simd, clib ? ["capi"] : ["stdapi", "splitapi"]);
+    
+    execute(
+        fm("%s -O -inline -release -version=%s -m%s %s %s -ofpfft.o -c", 
+            dcpath, simdStr, mflag, flags, src),
+        fm("ar cr %s pfft.o", libPath));
 }
 
 void buildGdc(SIMD simd, string dcpath, string ccpath, bool pgo, bool clib)
