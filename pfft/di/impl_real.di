@@ -1,4 +1,4 @@
-module pfft.impl_float;
+module pfft.impl_real;
 
 alias real T;
 alias void* Table;
