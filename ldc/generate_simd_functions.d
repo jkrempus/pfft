@@ -54,7 +54,19 @@ q{
 
     __m256 unpckhps(__m256 a, __m256 b) { return _mm256_unpackhi_ps(a, b); }
     __m256 unpcklps(__m256 a, __m256 b) { return _mm256_unpacklo_ps(a, b); }
+    
+};
 
+enum sseDCode = 
+q{
+    extern(C) double2 unpcklpd(double2, double2);
+    extern(C) double2 unpckhpd(double2, double2);
+};
+
+enum sseCCode = 
+q{
+    __m128d unpcklpd(__m128d a, __m128d b){ return _mm_unpacklo_pd(a, b); }
+    __m128d unpckhpd(__m128d a, __m128d b){ return _mm_unpackhi_pd(a, b); }
 };
 
 void printUsage(string[] args)
@@ -72,13 +84,15 @@ void main(string[] args)
         auto t = args[2] == "avx" ? "__m256" : "__m128";
         auto s = args[2] == "avx" ? "256" : "";
 
-        writefln("#include <%smmintrin.h>", args[2] == "avx" ? "i" : "x");
+        writefln("#include <%smmintrin.h>", args[2] == "avx" ? "i" : "e");
              
         foreach(i; 0 .. 256)
             writefln("%s shufps%d(%s a, %s b){ return _mm%s_shuffle_ps(a, b, %d); }", t, i, t, t, s, i);
         
         if(args[2] == "avx")
             writefln(avxCCode);
+        else
+            writeln(sseCCode);
     }
     else if(args[1] == "d")
     {
@@ -92,7 +106,9 @@ void main(string[] args)
         writefln(shufpsTemplate, t, t);
         
         if(args[2] == "avx")
-            writefln(avxDCode);
+            writeln(avxDCode);
+        else
+            writeln(sseDCode);
     }
     else
         printUsage(args);

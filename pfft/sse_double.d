@@ -41,7 +41,23 @@ struct Vector
             r1 = __builtin_ia32_unpckhpd(a0, a1);
         }
     }
-    else version(DigitalMars)
+    else version(LDC)
+    {
+        import pfft.sse_declarations;
+        
+        static vec scalar_to_vector(T a)
+        {
+            return a;
+        }
+        
+        static void interleave(int interleaved)( 
+            vec a0,  vec a1, ref vec r0, ref vec r1)
+        {
+            r0 = unpcklpd(a0, a1);
+            r1 = unpckhpd(a0, a1);
+        }
+    }
+    else 
     {
         static vec scalar_to_vector(T a)
         {

@@ -9,6 +9,10 @@ version(Scalar)
 {
     public import pfft.scalar_double;
 }
+else version(AVX)
+{
+    public import pfft.scalar_double;
+}
 else version(X86)
 {
     public import pfft.sse_double;

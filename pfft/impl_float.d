@@ -7,7 +7,7 @@ module pfft.impl_float;
 
 version(Scalar)
 {
-    public import pfft.scalar;
+    public import pfft.scalar_float;
 }
 else version(Neon)
 {
@@ -19,11 +19,11 @@ else version(StdSimd)
 }
 else version(AVX)
 {
-    public import pfft.avx;
+    public import pfft.avx_float;
 }
 else
 {
-    public import pfft.sse;
+    public import pfft.sse_float;
 }
 
 import pfft.fft_impl;

@@ -29,7 +29,9 @@ else
 
 struct DirectApi
 {
-    static if(is(T == double))
+    static if(is(T == real))
+        import pfft.impl_real;
+    else static if(is(T == double))
         import pfft.impl_double;
     else
         import pfft.impl_float;
@@ -367,6 +369,7 @@ void main(string[] args)
         if(p && runTest!precision(args, mflops))
             return;
     }
-    
+   
+    writeln(args); 
     writeln("You're using it wrong.");
 }

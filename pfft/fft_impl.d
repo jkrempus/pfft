@@ -8,10 +8,6 @@ module pfft.fft_impl;
 import core.sys.posix.stdlib;
 import pfft.bitreverse;
 
-size_t _one(){ return cast(size_t) 1; }
-
-enum one = _one();
-
 struct Scalar(_T)
 {
     alias _T vec;
@@ -69,12 +65,14 @@ else
 import core.stdc.math;
 
 auto sin(float a){ return sinf(a); }
+auto sin(double a){ return core.stdc.math.sin(a); }
 auto sin(real a){ return sinl(a); }
 auto cos(float a){ return cosf(a); }
+auto cos(double a){ return core.stdc.math.cos(a); }
 auto cos(real a){ return cosl(a); }
 auto asin(float a){ return asinf(a); }
+auto asin(double a){ return core.stdc.math.asin(a); }
 auto asin(real a){ return asinl(a); }
-
 
 template FFT(alias V, Options)
 {    
@@ -86,7 +84,13 @@ template FFT(alias V, Options)
     alias V.vec_size vec_size;
     alias V.T T;
     alias V.vec vec;
-    
+   
+    template sz(alias a)
+    {
+        auto to_size_t(typeof(a) aa){ return cast(size_t) aa; }
+        enum sz = to_size_t(a);
+    }
+
     struct _Tuple(A...)
     {
         A a;
@@ -589,7 +593,7 @@ template FFT(alias V, Options)
             log2n - Options.log2_optimal_n;
 
         int log2m = log2n - Options.passes_per_recursive_call;
-        size_t m = one << log2m;
+        size_t m = sz!1 << log2m;
         
         T *  tableOld = table;
         size_t tableIOld = tableI;

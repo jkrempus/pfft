@@ -1537,3 +1537,15 @@ entry:
   %shuffle = shufflevector <4 x float> %a, <4 x float> %b, <4 x i32> <i32 3, i32 3, i32 7, i32 7>
   ret <4 x float> %shuffle
 }
+
+define <2 x double> @unpcklpd(<2 x double> %a, <2 x double> %b) nounwind uwtable readnone {
+entry:
+  %shuffle.i = shufflevector <2 x double> %a, <2 x double> %b, <2 x i32> <i32 0, i32 2>
+  ret <2 x double> %shuffle.i
+}
+
+define <2 x double> @unpckhpd(<2 x double> %a, <2 x double> %b) nounwind uwtable readnone {
+entry:
+  %shuffle.i = shufflevector <2 x double> %a, <2 x double> %b, <2 x i32> <i32 1, i32 3>
+  ret <2 x double> %shuffle.i
+}
