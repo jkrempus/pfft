@@ -19,3 +19,6 @@ test_nophobos
 *.gcda
 *.ignore
 *.swp
+generated
+generated-c
+
