@@ -148,7 +148,7 @@ void buildLdc(SIMD simd, string dcpath, string ccpath, bool clib)
 
 void buildGdcImpl(SIMD simd, string dcpath, string ccpath, string flags, bool clib)
 {
-    enum mflagDict = [SIMD.SSE : "sse2"];
+    enum mflagDict = [SIMD.SSE : "sse2", SIMD.Scalar : "sse2"];
     
     auto simdStr = to!string(simd);
     auto mflag = mflagDict.get(simd, toLower(simdStr));

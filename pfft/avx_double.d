@@ -51,7 +51,58 @@ struct Vector
     enum vec_size = 4;
     
     static auto v(T* p){ return cast(vec*) p; }
-    
+
+    static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
+    {
+        static if (n == 4)
+            deinterleave!4(v(arr)[0], v(arr)[1], rr, ri);
+        else static if(n == 2)
+        {
+            vec a = *v(arr);
+            rr = unpcklpd(a, a);
+            ri = unpckhpd(a, a);
+        }
+        else
+            static assert(0);
+    }
+      
+    static void deinterleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        static if(interleaved == 4)
+        {
+            vec b0, b1;
+            
+            deinterleave!2(a0, a1, b0, b1);
+
+            r0 = unpcklpd(b0, b1);
+            r1 = unpckhpd(b0, b1);
+        }
+        else static if(interleaved == 2)
+        {
+            r0 = interleave128_lo_d(a0, a1);
+            r1 = interleave128_hi_d(a0, a1);
+        }
+        else
+            static assert(0);
+    }
+
+    static void interleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        static if(interleaved == 4)
+        {
+            vec b0, b1;
+            
+            b0 = unpcklpd(a0, a1);
+            b1 = unpckhpd(a0, a1);
+
+            deinterleave!2(b0, b1, r0, r1);
+        }
+        else static if(interleaved == 2)
+            deinterleave!2(a0, a1, r0, r1);
+        else
+            static assert(0);
+    }
+
     static void bit_reverse_swap_16(double * p0, double * p1, double * p2, double * p3, size_t i1, size_t i2)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
