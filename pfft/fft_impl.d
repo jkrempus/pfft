@@ -224,9 +224,9 @@ template FFT(alias V, Options)
                 a3[0] = a2[0] * a1[0] - a2[1] * a1[1];
                 a3[1] = a2[0] * a1[1] + a2[1] * a1[0];
                 
-                p[i] = a1;
-                p[m / 2 + 2 * i] = a2;
-                p[m / 2 + 2 * i + 1] = a3;
+                p[3 * i] = a1;
+                p[3 * i + 1] = a2;
+                p[3 * i + 2] = a3;
             }
             
             p += m / 2 + m;
@@ -340,7 +340,7 @@ template FFT(alias V, Options)
         }
     }
         
-    void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, const size_t m2)
+    void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend ; pr += m, pi += m)
@@ -362,24 +362,22 @@ template FFT(alias V, Options)
         }
     }
     
-    void fft_two_passes()(vec *pr, vec *pi, vec *pend, 
-                          T *table0, T *table1,  size_t m2)
+    void fft_two_passes()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
         for(; pr < pend ; pr += m, pi += m)
         {
-            vec w1r = V.scalar_to_vector(table0[0]);
-            vec w1i = V.scalar_to_vector(table0[1]);
+            vec w1r = V.scalar_to_vector(table[0]);
+            vec w1i = V.scalar_to_vector(table[1]);
             
-            vec w2r = V.scalar_to_vector(table1[0]);
-            vec w2i = V.scalar_to_vector(table1[1]);
+            vec w2r = V.scalar_to_vector(table[2]);
+            vec w2i = V.scalar_to_vector(table[3]);
             
-            vec w3r = V.scalar_to_vector(table1[2]);
-            vec w3i = V.scalar_to_vector(table1[3]);
+            vec w3r = V.scalar_to_vector(table[4]);
+            vec w3i = V.scalar_to_vector(table[5]);
             
-            table0 += 2;
-            table1 += 4;
+            table += 6;
             
             for (size_t k0 = 0, k1 = m4, k2 = m2, k3 = m2 + m4; k0<m4; k0++, k1++, k2++, k3++) 
             {                 
@@ -459,9 +457,8 @@ template FFT(alias V, Options)
         
         for (; m2 > 1 ; m2 >>= 2)
         {
-            auto next_table = table + tableRowLen;
-            fft_two_passes(re, im, pend, table, next_table, m2);
-            table = next_table;
+            fft_two_passes(re, im, pend, table, m2);
+            table += tableRowLen;
             tableRowLen += tableRowLen;
             table += tableRowLen;
             tableRowLen += tableRowLen;
@@ -571,9 +568,8 @@ template FFT(alias V, Options)
             size_t m2 = N >> 1;
             for (; m2 > 1 ; m2 >>= 2)
             {
-                auto tmp = table + tableI;
+                fft_two_passes(pr, pi, pr + N, table + 3 * tableI, m2);
                 nextTableRow(table, tableRowLen, tableI); 
-                fft_two_passes(pr, pi, pr + N, tmp, table + tableI, m2);
                 nextTableRow(table, tableRowLen, tableI);  
             }
             if (m2 != 0)
