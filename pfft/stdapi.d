@@ -38,7 +38,8 @@ final class TypedFft(TT)
     uint log2n;
     impl.T* re;
     impl.T* im;
-    Complex!(impl.T)* return_buf = null;
+    alias Complex!(impl.T) C;
+    C* return_buf = null;
     impl.Table table;
     
     
@@ -100,11 +101,17 @@ final class TypedFft(TT)
     
     auto fft(R)(R range)
     {
-        alias Complex!(impl.T) C;
         if(return_buf == null)
             return_buf = cast(C*)GC.malloc(C.sizeof << log2n);
         fft(range, return_buf);
         return return_buf[0 .. (1 << log2n)];
+    }
+
+    static C[] allocate(size_t n)
+    {
+        auto r = cast(C*) GC.malloc(n * C.sizeof);
+        assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
+        return r[0 .. n];
     }
 }
 
@@ -112,19 +119,19 @@ final class Fft
 {
     import std.variant;
 
-    private void*[string] implDict;
+    private void*[TypeInfo] implDict;
 
     size_t n;
     
     private @property auto impl(T)()
     {
-        auto p = T.stringof in implDict;
+        auto p = typeid(T) in implDict;
         if(p)
             return cast(TypedFft!T)*p;
         else
         {
             auto t = new TypedFft!T(n);
-            implDict[T.stringof] = cast(void*)t;
+            implDict[typeid(T)] = cast(void*)t;
             return t;
         }
     }
@@ -142,6 +149,11 @@ final class Fft
     auto fft(R, Ret)(R r, Ret ret) 
     {
         impl!(typeof(ret[0].re)).fft(r, ret);
+    }
+
+    auto allocate(T)(size_t n)
+    {
+        return TypedFft!(typeof(T.init.re)).allocate(n);
     }
 }
 

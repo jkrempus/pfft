@@ -69,7 +69,7 @@ void buildTests(SIMD simd, string dcpath, Compiler c, string outDir,
     auto srcPath = buildPath("..", "test", "test.d");
     auto simdStr = to!string(simd);
 
-    auto f(string type)
+    void f(string type)
     {
         auto binPath = buildPath(outDir, "test_" ~ type);
         auto ver = capitalize(type);
@@ -93,15 +93,19 @@ void buildTests(SIMD simd, string dcpath, Compiler c, string outDir,
         }
     }
 
+    import std.parallelism;
+
     f("float"); f("real"); f("double");
 }
 
 void runBenchmarks()
 {
+    import std.parallelism;
+
     void f(string type)
     {
-        foreach(i; 4 .. 21)
-            system(fm("./test_%s -s -m 1000 split %s", type, i));
+        foreach(i; taskPool.parallel(iota(4,21)))
+            shell(fm("./test_%s -s -m 1000 split %s", type, i));
     }
     
     f("float"); f("real"); f("double");

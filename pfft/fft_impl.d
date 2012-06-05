@@ -566,7 +566,7 @@ template FFT(alias V, Options)
         vec * pr, vec *  pi, size_t N , 
         T * table, size_t tableI, size_t tableRowLen)
     {
-        if(N == (1<<Options.log2_optimal_n))
+        if(N <= (1<<Options.log2_optimal_n))
         {
             size_t m2 = N >> 1;
             for (; m2 > 1 ; m2 >>= 2)

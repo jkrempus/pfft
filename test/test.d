@@ -59,8 +59,9 @@ struct DirectApi
 struct SplitApi
 {
     import pfft.splitapi;
-    
-    SplitFft!T f;
+   
+    alias SplitFft!T F; 
+    F f;
     T[] _re;
     T[] _im;
     
@@ -68,8 +69,8 @@ struct SplitApi
     {
         size_t n = 1U << log2n; 
         f = new SplitFft!T(n);
-        _re = gc_aligned_array!T(n);
-        _im = gc_aligned_array!T(n);
+        _re = F.allocate(n);
+        _im = F.allocate(n);
     }
     
     void compute(){ f.fft(_re, _im); }
@@ -188,12 +189,13 @@ struct InterleavedTypedApi
     
     Complex!(T)[] a;
     Complex!(T)[] r;
-    TypedFft!T fft;
+    alias TypedFft!T F;
+    F fft;
     
     this(int log2n)
     {
-        a = gc_aligned_array!(Complex!T)(one << log2n);
-        r = gc_aligned_array!(Complex!T)(one << log2n);
+        a = F.allocate(one << log2n);
+        r = F.allocate(one << log2n);
         fft = new TypedFft!T(one << log2n);
     }
     

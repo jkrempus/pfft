@@ -31,8 +31,15 @@ final class SplitFft(TT)
     
     void fft(impl.T[] re, impl.T[] im)
     {
-        assert(re.length == im.length && re.length >> log2n == 1U);
+        assert(re.length == im.length && re.length == (1UL << log2n));
         
         impl.fft(re.ptr, im.ptr, log2n, table);
+    }
+
+    static TT[] allocate(size_t n)
+    {
+        auto r = cast(TT*) GC.malloc(n * TT.sizeof);
+        assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
+        return r[0 .. n];
     }
 }
