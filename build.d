@@ -2,7 +2,7 @@ import std.stdio, std.process, std.string, std.array, std.algorithm,
        std.conv, std.range, std.getopt, std.file, std.path : buildPath;
 
 enum SIMD{ AVX, SSE, Scalar }
-enum Compiler{ DMD, GDC, LDC }
+enum Compiler{ DMD, GDMD, LDC }
 
 struct Types{ SIMD simd; string[] types; }
 
@@ -87,7 +87,7 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
         final switch(c)
         {
             case Compiler.DMD:
-            case Compiler.GDC:
+            case Compiler.GDMD:
                 auto opt = optimized ? "-O -inline -release" : "";
                 shellf("%s %s -version=%s -version=%s", 
                     dcpath, opt, simdStr , common);
@@ -170,8 +170,8 @@ void buildGdc(Types t, string dcpath, string ccpath, bool pgo, bool clib, string
 {
     if(pgo)
     {
-        buildGdcImpl(t, dcpath, ccpath, clib, "-fprofile-generate");
-        buildTests(t, dcpath, Compiler.GDC, ".", false, "-fprofile-generate");
+        buildGdcImpl(t, dcpath, ccpath, false, "-fprofile-generate");
+        buildTests(t, dcpath, Compiler.GDMD, ".", false, "-fprofile-generate");
         runBenchmarks(t);
         buildGdcImpl(t, dcpath, ccpath, clib, fm("-fprofile-use %s", flags));
     }
@@ -197,7 +197,43 @@ void copyIncludes()
         buildPath("include", "pfft", "splitapi.d"));
 }
 
-enum usage = "";
+void deleteDOutput()
+{
+    try
+    {
+        rmdirRecurse(buildPath("include", "pfft"));
+        remove(libPath);
+    }
+    catch{};
+}
+
+enum usage = `
+Usage: rdmd build [options]
+build.d is an rdmd script used to build the pfft library. It saves the 
+generated library and include files to ./generated or to ./generated-c when 
+building with --clib. The script must be run from the directory it resides in.
+
+Options:
+  --dc DC               Specifies D compiler to use. DC must be one of DMD, 
+                        GDMD and LDC.
+  --dc-path PATH        A path to D compiler
+  --cc-path PATH        A path to C compiler (used when building with --clib
+                        or with LDC)
+  --simd SIMD           SIMD instruction set to use. Must be one of SSE, AVX
+                        and Scalar.
+  --type TYPE           Arithmetic type that the resulting library will support.
+                        TYPE must be one of float, double and real. There can
+                        be more than one --type flag. Omitting this flag is 
+                        equivalent to --type float --type double --type real.
+  --clib                Build a C library
+  --tests               Build tests. Executables will be saved to test
+                        directory. Can not be used with --clib.
+  --no-pgo              Disable profile guided optimization. This flag can
+                        only be used with GDMD. Using this flag will result
+                        in slightly worse performance, but the build will be 
+                        much faster.
+  --dflags FLAGS        Additional D flags.
+`;
 
 void invalidCmd(string message = "")
 {
@@ -213,11 +249,12 @@ void main(string[] args)
     auto t = Types(SIMD.SSE, []);
     string dcpath = "";
     string ccpath = "gcc";
-    auto clib = false;
-    bool nopgo = false;
-    bool tests = false;
+    bool clib;
+    bool nopgo;
+    bool tests;
+    bool help;
     string flags = "";
-    Compiler dc = Compiler.GDC;
+    Compiler dc = Compiler.GDMD;
 
     getopt(args, 
         "simd", &t.simd, 
@@ -228,15 +265,24 @@ void main(string[] args)
         "dc", &dc,
         "tests", &tests,
         "no-pgo", &nopgo,
-        "flags", &flags);
+        "dflags", &flags,
+        "help", &help);
+
+    if(help)
+    {
+        writeln(usage);
+        return;
+    }
   
     if(tests && clib)
         invalidCmd("Can not build tests for the c library.");
 
+    t.types = array(uniq(sort(t.types)));
+
     if(dcpath == "")
         dcpath = [
             Compiler.DMD : "dmd", 
-            Compiler.GDC : "gdmd", 
+            Compiler.GDMD : "gdmd", 
             Compiler.LDC : "ldc2"][dc];
    
     if(t.types == [])
@@ -255,7 +301,7 @@ void main(string[] args)
     if(clib)
         buildCObjects(t, dcpath, ccpath);
     
-    if(dc == Compiler.GDC)
+    if(dc == Compiler.GDMD)
         buildGdc(t, dcpath, ccpath, !nopgo, clib, flags);
     else if(dc == Compiler.LDC)
         buildLdc(t, dcpath, ccpath, clib);
@@ -268,4 +314,6 @@ void main(string[] args)
     foreach(e; dirEntries(".", SpanMode.shallow, false))
         if(e.isFile)
             remove(e.name);
+    if(clib)
+        deleteDOutput();
 }
