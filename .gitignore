@@ -4,6 +4,7 @@
 *.s
 *.~
 test/test
+test/test_*
 bench
 bench_scalar
 bench_stdapi
