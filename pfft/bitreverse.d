@@ -35,39 +35,28 @@ template RepeatType(T, int n, R...)
         alias RepeatType!(T, n - 1, T, R) RepeatType;
 }
 
-
-
-struct BitReversdPairs
+void iter_bit_reversed_pairs(alias dg, A...)(int log2n, A args)
 {
-    int log2n;
-    int opApply(int delegate(ref uint, ref uint) dg)
-    {
-        int mask = (0xffffffff<<(log2n));
-        uint i2 = ~mask; 
-        uint i1 = i2;
-        
-        while(i1 != (0U - 1U))
-        {
-            auto r = dg(i1, i2);
-            if(r)
-                return r;
-            i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
-            --i1;
-        }
-        return 0;
-    }
-}
+    int mask = (0xffffffff<<(log2n));
+    uint i2 = ~mask; 
+    uint i1 = i2;
 
-auto bit_reversed_pairs(int _log2n)
-{   
-    return BitReversdPairs(_log2n);
+    while(i1 != (0U - 1U))
+    {
+        dg(i1, i2, args);
+        i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
+        --i1;
+    }
 }
 
 void bit_reverse_simple(T)(T* p, int log2n)
 {
-    foreach(i0, i1; bit_reversed_pairs(log2n))
+    iter_bit_reversed_pairs!(function (int i0, int i1, T* p)
+    {
         if(i1 > i0)
             _swap(p[i0],p[i1]);
+    })
+    (log2n, p);
 }
 
 void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
@@ -120,18 +109,24 @@ struct BitReverse(alias V, Options)
     
     static void init_br_table()(uint * table, int log2n)
     {
-        int j = 0;
-        foreach(i0, i1; bit_reversed_pairs(log2n - 4))
+        iter_bit_reversed_pairs!(function (int i0, int i1, uint** p)
+        {
             if(i1 == i0)
-                (table[j] = i0<<2), j++;
-        foreach(i0, i1; bit_reversed_pairs(log2n - 4))
+                (**p = i0<<2), (*p)++;
+        })
+        (log2n - 4, &table);
+
+        iter_bit_reversed_pairs!(function (int i0, int i1, uint** p)
+        {
             if(i1 < i0)
             {
-                table[j] = i0<<2;
-                j++;
-                table[j] = i1<<2;
-                j++;
+                **p = i0<<2;
+                (*p)++;
+                **p = i1<<2;
+                (*p)++;
             }
+        })
+        (log2n - 4, &table);
     }
     
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
@@ -217,7 +212,8 @@ struct BitReverse(alias V, Options)
         size_t m = 1<<log2m, n = 1<<log2n;
         T * pend = p + n;
       
-        foreach(i0, i1; bit_reversed_pairs(log2m-log2l))
+        iter_bit_reversed_pairs!(function (int i0, int i1, T* buffer, 
+            size_t m, T* p, T* pend, uint* table)
         {
             if(i1 >= i0)
             {
@@ -238,6 +234,7 @@ struct BitReverse(alias V, Options)
                 for(T* pp = p + i0*l, pb = buffer; pp < pend; pp += m, pb += l)
                     copy_array!l(pp, pb);
             }
-        }
+        })
+        (log2m-log2l, buffer, m, p, pend, table);
     }
 }

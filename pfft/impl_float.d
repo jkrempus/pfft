@@ -28,4 +28,4 @@ else
 
 import pfft.fft_impl;
 
-mixin(instantiate!(FFT!(Vector, Options))());
+mixin(instantiate!(FFT!(Vector, Options)));

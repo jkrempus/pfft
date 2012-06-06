@@ -758,11 +758,11 @@ template FFT(alias V, Options)
     }
 }
 
-auto instantiate(alias F)()
+template instantiate(alias F)
 {
-    return
-    q{
-        private alias } ~ F.stringof ~ q{ F;
+    enum instantiate = 
+    ` 
+        private alias `~F.stringof~` F;
         alias F.T T;
         alias void* Table;
 
@@ -795,5 +795,5 @@ auto instantiate(alias F)()
         {
             return F.alignment(log2n);
         }
-    };
+    `;
 }    

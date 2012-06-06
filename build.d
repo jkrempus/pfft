@@ -4,11 +4,14 @@ import std.stdio, std.process, std.string, std.array, std.algorithm,
 enum SIMD{ AVX, SSE, Scalar }
 enum Compiler{ DMD, GDC, LDC }
 
+struct Types{ SIMD simd; string[] types; }
+
 alias format fm;
 
 auto shellf(A...)(A a){writeln(fm(a)); return shell(fm(a)); }
 
 enum libPath = buildPath("lib", "libpfft.a");
+enum clibPath = buildPath("lib", "libpfft-c.a");
 
 void execute(Cmds...)(Cmds cmds)
 {
@@ -35,18 +38,16 @@ auto simdModuleName(SIMD simd, string type)
     return dict.get(s, s);    
 }
 
-string sources(SIMD simd, string[] additional)
+string sources(Types t, string[] additional)
 {
     auto moduleName(string a)
     {
-        return simdModuleName(simd, a);
+        return simdModuleName(t.simd, a);
     }
 
-    auto types = ["float", "double", "real"];
-
     auto m = 
-        array(map!moduleName(types)) ~ 
-        array(map!q{"impl_" ~ a}(types)) ~
+        array(map!moduleName(t.types)) ~ 
+        array(map!q{"impl_" ~ a}(t.types)) ~
         ["fft_impl", "bitreverse"] ~
         additional; 
 
@@ -58,18 +59,24 @@ string sources(SIMD simd, string[] additional)
     return join(map!fileName(m), " "); 
 }
 
-void buildDummy(string ccpath)
+void buildCObjects(Types t, string dcpath, string ccpath)
 {
+    auto typeFlags = join(
+        map!(a => "-version=" ~ capitalize(a))(t.types), 
+        " "); 
+
+    shellf("%s -O -inline -release -c -Iinclude %s %s", 
+            dcpath, typeFlags,  buildPath("..", "pfft", "clib.d"));
     shellf("%s %s -c", ccpath, buildPath("..", "c", "dummy.c")); 
 }
 
-void buildTests(SIMD simd, string dcpath, Compiler c, string outDir, 
+void buildTests(Types t, string dcpath, Compiler c, string outDir, 
     bool optimized = true, string flags = "")
 {
     auto srcPath = buildPath("..", "test", "test.d");
-    auto simdStr = to!string(simd);
+    auto simdStr = to!string(t.simd);
 
-    void f(string type)
+    foreach(type; t.types)
     {
         auto binPath = buildPath(outDir, "test_" ~ type);
         auto ver = capitalize(type);
@@ -92,48 +99,42 @@ void buildTests(SIMD simd, string dcpath, Compiler c, string outDir,
                     dcpath, opt, simdStr, common);
         }
     }
-
-    import std.parallelism;
-
-    f("float"); f("real"); f("double");
 }
 
-void runBenchmarks()
+void runBenchmarks(Types t)
 {
     import std.parallelism;
 
-    void f(string type)
+    foreach(type; t.types)
     {
         foreach(i; taskPool.parallel(iota(4,21)))
             shell(fm("./test_%s -s -m 1000 split %s", type, i));
     }
-    
-    f("float"); f("real"); f("double");
 }
 
 
-void buildDmd(SIMD simd, string dcpath, string ccpath, bool clib)
+void buildDmd(Types t, string dcpath, string ccpath, bool clib)
 {
-    auto simdStr = to!string(simd);
-    auto src = sources(simd, clib ? ["capi"] : ["stdapi", "splitapi"]);
+    auto simdStr = to!string(t.simd);
+    auto src = sources(t, clib ? ["capi"] : ["stdapi", "splitapi"]);
     auto path = buildPath("lib", "libpfft.a");
 
     shellf("%s -O -inline -release -lib -of%s -version=%s %s", 
         dcpath, path, simdStr, src);
 }
 
-void buildLdc(SIMD simd, string dcpath, string ccpath, bool clib)
+void buildLdc(Types t, string dcpath, string ccpath, bool clib)
 {
     enum mattrDict = [SIMD.SSE : "sse2"];
 
-    auto simdStr = to!string(simd);
+    auto simdStr = to!string(t.simd);
     auto simdStrLC = toLower(simdStr);
-    auto llcMattr = mattrDict.get(simd, simdStrLC);
+    auto llcMattr = mattrDict.get(t.simd, simdStrLC);
     
-    auto src = sources(simd, clib ? ["capi"] : ["stdapi"]);
+    auto src = sources(t, clib ? ["capi"] : ["stdapi"]);
     auto path = buildPath("lib", "libpfft.a");
 
-    if(simd == SIMD.Scalar)
+    if(t.simd == SIMD.Scalar)
         shellf("%s -O3 -release -lib -of%s -d-version=%s %s", 
             dcpath, path, simdStr, src);
     else
@@ -150,31 +151,32 @@ void buildLdc(SIMD simd, string dcpath, string ccpath, bool clib)
     }
 }
 
-void buildGdcImpl(SIMD simd, string dcpath, string ccpath, string flags, bool clib)
+void buildGdcImpl(Types t, string dcpath, string ccpath, bool clib, string flags)
 {
     enum mflagDict = [SIMD.SSE : "sse2", SIMD.Scalar : "sse2"];
     
-    auto simdStr = to!string(simd);
-    auto mflag = mflagDict.get(simd, toLower(simdStr));
-    auto src = sources(simd, clib ? ["capi"] : ["stdapi", "splitapi"]);
-    
+    auto simdStr = to!string(t.simd);
+    auto mflag = mflagDict.get(t.simd, toLower(simdStr));
+    auto src = sources(t, clib ? [] : ["stdapi", "splitapi"]);
+   
     execute(
         fm("%s -O -inline -release -version=%s -m%s %s %s -ofpfft.o -c", 
             dcpath, simdStr, mflag, flags, src),
-        fm("ar cr %s pfft.o", libPath));
+        fm("ar cr %s pfft.o %s", 
+            clib ? clibPath : libPath, clib ? "dummy.o clib.o" : ""));
 }
 
-void buildGdc(SIMD simd, string dcpath, string ccpath, bool pgo, bool clib)
+void buildGdc(Types t, string dcpath, string ccpath, bool pgo, bool clib, string flags)
 {
     if(pgo)
     {
-        buildGdcImpl(simd, dcpath, ccpath, "-fprofile-generate", false);
-        buildTests(simd, dcpath, Compiler.GDC, ".", false, "-fprofile-generate");
-        runBenchmarks();
-        buildGdcImpl(simd, dcpath, ccpath, "-fprofile-use", clib);
+        buildGdcImpl(t, dcpath, ccpath, clib, "-fprofile-generate");
+        buildTests(t, dcpath, Compiler.GDC, ".", false, "-fprofile-generate");
+        runBenchmarks(t);
+        buildGdcImpl(t, dcpath, ccpath, clib, fm("-fprofile-use %s", flags));
     }
     else
-        buildGdcImpl(simd, dcpath, ccpath, "", clib);
+        buildGdcImpl(t, dcpath, ccpath, clib, flags);
 }
 
 void copyIncludes()
@@ -195,31 +197,51 @@ void copyIncludes()
         buildPath("include", "pfft", "splitapi.d"));
 }
 
+enum usage = "";
+
+void invalidCmd(string message = "")
+{
+    if(message != "")
+        stderr.writefln("Invalid command line: %s", message);
+    
+    stderr.writeln(usage); 
+    core.stdc.stdlib.abort();
+}
+
 void main(string[] args)
 {
-    SIMD simd = SIMD.SSE;
+    auto t = Types(SIMD.SSE, []);
     string dcpath = "";
     string ccpath = "gcc";
     auto clib = false;
     bool nopgo = false;
     bool tests = false;
+    string flags = "";
     Compiler dc = Compiler.GDC;
 
     getopt(args, 
-        "simd", &simd, 
+        "simd", &t.simd, 
+        "type", &t.types, 
         "dc-path", &dcpath, 
         "cc-path", &ccpath,
         "clib", &clib,
         "dc", &dc,
         "tests", &tests,
-        "no-pgo", &nopgo);
-    
+        "no-pgo", &nopgo,
+        "flags", &flags);
+  
+    if(tests && clib)
+        invalidCmd("Can not build tests for the c library.");
+
     if(dcpath == "")
         dcpath = [
             Compiler.DMD : "dmd", 
             Compiler.GDC : "gdmd", 
             Compiler.LDC : "ldc2"][dc];
-    
+   
+    if(t.types == [])
+        t.types = ["float", "double", "real"];
+
     auto buildDir = clib ? "generated-c" : "generated";
     try rmdirRecurse(buildDir); catch{}
     mkdir(buildDir);
@@ -228,22 +250,20 @@ void main(string[] args)
     mkdir("include");
     mkdir(buildPath("include", "pfft"));
 
+    copyIncludes();
+
     if(clib)
-    {
-        buildDummy(ccpath);
-    }
-    else
-        copyIncludes();
-
+        buildCObjects(t, dcpath, ccpath);
+    
     if(dc == Compiler.GDC)
-        buildGdc(simd, dcpath, ccpath, !nopgo, clib);
+        buildGdc(t, dcpath, ccpath, !nopgo, clib, flags);
     else if(dc == Compiler.LDC)
-        buildLdc(simd, dcpath, ccpath, clib);
+        buildLdc(t, dcpath, ccpath, clib);
     else
-        buildDmd(simd, dcpath, ccpath, clib);
+        buildDmd(t, dcpath, ccpath, clib);
 
-    if(!clib && tests)
-        buildTests(simd, dcpath, dc, buildPath("..", "test")); 
+    if(tests)
+        buildTests(t, dcpath, dc, buildPath("..", "test")); 
 
     foreach(e; dirEntries(".", SpanMode.shallow, false))
         if(e.isFile)
