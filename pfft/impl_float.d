@@ -11,7 +11,7 @@ version(Scalar)
 }
 else version(Neon)
 {
-    public import pfft.neon;
+    public import pfft.neon_float;
 }
 else version(StdSimd)
 {

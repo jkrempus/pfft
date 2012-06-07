@@ -62,18 +62,6 @@ version(DisableLarge)
 else 
     enum disableLarge = false;
 
-import core.stdc.math;
-
-auto sin(float a){ return sinf(a); }
-auto sin(double a){ return core.stdc.math.sin(a); }
-auto sin(real a){ return sinl(a); }
-auto cos(float a){ return cosf(a); }
-auto cos(double a){ return core.stdc.math.cos(a); }
-auto cos(real a){ return cosl(a); }
-auto asin(float a){ return asinf(a); }
-auto asin(double a){ return core.stdc.math.asin(a); }
-auto asin(real a){ return asinl(a); }
-
 template FFT(alias V, Options)
 {    
     import core.bitop, core.stdc.stdlib;
@@ -84,12 +72,31 @@ template FFT(alias V, Options)
     alias V.vec_size vec_size;
     alias V.T T;
     alias V.vec vec;
-   
-    template sz(alias a)
+  
+    import core.stdc.math;
+
+    static if(is(T == float))
     {
-        auto to_size_t(typeof(a) aa){ return cast(size_t) aa; }
-        enum sz = to_size_t(a);
+        alias sinf _sin;
+        alias cosf _cos;
+        alias asinf _asin;
     }
+    else static if(is(T == double))
+    {
+        alias sin _sin;
+        alias cos _cos;
+        alias asin _asin;
+    }
+    else static if(is(T == real))
+    {
+        alias sinl _sin;
+        alias cosl _cos;
+        alias asinl _asin;
+    }
+    else
+        static assert(0);
+
+    template st(alias a){ enum st = cast(size_t) a; }
 
     struct _Tuple(A...)
     {
@@ -133,14 +140,14 @@ template FFT(alias V, Options)
         auto p1 = p0 + 1;
         auto p1end = p0 + (1<<log2n) - 1;
         
-        T dphi = - asin(cast(T)1.0);
+        T dphi = - _asin(cast(T)1.0);
         
         (*p0)[0] = 1;
         (*p0)[1] = 0;
         while(p1 < p1end)
         {
-            T cdphi = cos(dphi);
-            T sdphi = sin(dphi);
+            T cdphi = _cos(dphi);
+            T sdphi = _sin(dphi);
             dphi *= cast(T)0.5;
                         
             auto p0end = p1;
@@ -165,11 +172,11 @@ template FFT(alias V, Options)
         for (int s = 1; s <= log2n; ++s)
         {
             size_t m = 1 << s;
-            T dphi = 4.0*asin(1.0) / m;
+            T dphi = 4.0*_asin(1.0) / m;
             for(size_t i=0; i< m/2; i++)
             {
-                p[i][0] = cos(dphi*i);
-                p[i][1] = -sin(dphi*i);
+                p[i][0] = _cos(dphi*i);
+                p[i][1] = -_sin(dphi*i);
             }
             p += m/2;
         }
@@ -595,7 +602,7 @@ template FFT(alias V, Options)
             log2n - Options.log2_optimal_n;
 
         int log2m = log2n - Options.passes_per_recursive_call;
-        size_t m = sz!1 << log2m;
+        size_t m = st!1 << log2m;
         
         T *  tableOld = table;
         size_t tableIOld = tableI;

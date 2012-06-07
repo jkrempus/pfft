@@ -6,8 +6,8 @@
 import std.stdio, std.process, std.string, std.array, std.algorithm, 
        std.conv, std.range, std.getopt, std.file, std.path : buildPath;
 
-enum SIMD{ AVX, SSE, Scalar }
-enum Compiler{ DMD, GDMD, LDC }
+enum SIMD{ AVX, SSE, Neon, Scalar }
+enum Compiler{ DMD, GDMD, LDC}
 
 struct Types{ SIMD simd; string[] types; }
 
@@ -171,15 +171,18 @@ void buildLdc(Types t, string dcpath, string ccpath, bool clib)
 
 void buildGdcImpl(Types t, string dcpath, string ccpath, bool clib, string flags)
 {
-    enum mflagDict = [SIMD.SSE : "sse2", SIMD.Scalar : "sse2"];
+    enum archFlagDict = [
+        SIMD.SSE : "-msse2", 
+        SIMD.Neon : "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a8",
+        SIMD.Scalar : ""];
     
     auto simdStr = to!string(t.simd);
-    auto mflag = mflagDict.get(t.simd, toLower(simdStr));
+    auto archFlag = archFlagDict.get(t.simd, "-m" ~ toLower(simdStr));
     auto src = sources(t, clib ? [] : ["stdapi", "pfft"]);
    
     execute(
-        fm("%s -O -inline -release -version=%s -m%s %s %s -ofpfft.o -c", 
-            dcpath, simdStr, mflag, flags, src),
+        fm("%s -O -inline -release -version=%s %s %s %s -ofpfft.o -c", 
+            dcpath, simdStr, archFlag, flags, src),
         fm("ar cr %s pfft.o %s", 
             clib ? clibPath : libPath, clib ? "dummy.o clib.o" : ""));
 }
@@ -260,19 +263,20 @@ Options:
   --dc-path PATH        A path to D compiler
   --cc-path PATH        A path to C compiler (used when building with --clib
                         or with LDC)
-  --simd SIMD           SIMD instruction set to use. Must be one of SSE, AVX
-                        and Scalar.
+  --simd SIMD           SIMD instruction set to use. Must be one of SSE, AVX,
+                        Neon and Scalar.
   --type TYPE           Arithmetic type that the resulting library will support.
                         TYPE must be one of float, double and real. There can
                         be more than one --type flag. Omitting this flag is 
                         equivalent to --type float --type double --type real.
   --clib                Build a C library
-  --tests               Build tests. Executables will be saved to test
-                        directory. Can not be used with --clib.
+  --tests               Build tests. Executables will be saved to ./test. 
+                        Can not be used with --clib or when cross compiling.
   --no-pgo              Disable profile guided optimization. This flag can
                         only be used with GDMD. Using this flag will result
                         in slightly worse performance, but the build will be 
-                        much faster.
+                        much faster. You must use this flag when cross
+                        compiling with GDMD.
   --dflags FLAGS        Additional flags to be passed to D compiler.
   -v, --verbose         Be verbose.
   -h, --help            Print this message to stdout.

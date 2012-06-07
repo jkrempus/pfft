@@ -7,6 +7,62 @@ module pfft.stdapi;
 
 import core.memory, std.complex, std.traits, core.bitop, std.typetuple;
 
+version(GNU) version(ARM)
+{
+    template staticReduce(alias r, alias accumulate, args...)
+    {
+        static if(args.length == 0)
+            enum staticReduce = r;
+        else
+            enum staticReduce = 
+                staticReduce!(accumulate!(r, args[0]), accumulate, args[1..$]);
+    }
+
+    template mathLfunc(alias r, alias name)
+    {
+        enum mathLfunc = "
+            extern(C) auto "~name~"l(real a) 
+            { 
+                return cast(real) 
+                    core.stdc.math."~name~"(cast(double) a); 
+            }
+            " ~ r; 
+    }
+    
+    template twoArgMathLfunc(alias r, alias name) 
+    {
+        enum twoArgMathLfunc = "
+            extern(C) auto "~name~"l(real a, real b) 
+            { 
+                return cast(real) 
+                    core.stdc.math."~name~"(cast(double) a, cast(double) b); 
+            }
+            " ~ r; 
+    }
+      
+    mixin(staticReduce!("", mathLfunc, 
+        "sin", "cos", "asin", "tan", "sqrt", "atan", "logb"));
+    mixin(staticReduce!("", twoArgMathLfunc,"remainder", "fmod", "atan2"));
+
+    extern(C) auto modfl(real a, real* b) 
+    {
+        double tmp = *b;
+        auto r = cast(real) core.stdc.math.modf(cast(double) a, &tmp);
+        *b = tmp;
+        return r;
+    }
+
+    extern(C) auto llrintl(real a)
+    {
+        return core.stdc.math.llrint(cast(double) a);
+    }
+
+    extern(C) auto remquol(real a, real b, int *i)
+    {
+       return cast(real) core.stdc.math.remquo(cast(double) a,cast(double) b, i); 
+    } 
+}
+
 auto isComplexArray(R, T)()
 {
     static if(
