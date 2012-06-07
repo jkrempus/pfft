@@ -13,7 +13,15 @@ struct Types{ SIMD simd; string[] types; }
 
 alias format fm;
 
-auto shellf(A...)(A a){writeln(fm(a)); return shell(fm(a)); }
+bool verbose;
+
+auto shellf(A...)(A a)
+{
+    if(verbose) 
+        writeln(fm(a)); 
+    
+    return shell(fm(a)); 
+}
 
 enum libPath = buildPath("lib", "libpfft.a");
 enum clibPath = buildPath("lib", "libpfft-c.a");
@@ -22,7 +30,9 @@ void execute(Cmds...)(Cmds cmds)
 {
     foreach(c; cmds)
     {
-        writeln(c);
+        if(verbose)
+            writeln(c);
+        
         shell(c);
     }
 }
@@ -112,6 +122,9 @@ void runBenchmarks(Types t)
 
     foreach(type; t.types)
     {
+        if(verbose)
+            writefln("Running benchmarks for type %s.", type);
+
         foreach(i; taskPool.parallel(iota(4,21)))
             shell(fm("./test_%s -s -m 1000 split %s", type, i));
     }
@@ -260,7 +273,9 @@ Options:
                         only be used with GDMD. Using this flag will result
                         in slightly worse performance, but the build will be 
                         much faster.
-  --dflags FLAGS        Additional D flags.
+  --dflags FLAGS        Additional flags to be passed to D compiler.
+  -v, --verbose         Be verbose.
+  -h, --help            Print this message to stdout.
 `;
 
 void invalidCmd(string message = "")
@@ -272,7 +287,7 @@ void invalidCmd(string message = "")
     core.stdc.stdlib.abort();
 }
 
-void main(string[] args)
+void doit(string[] args)
 {
     auto t = Types(SIMD.SSE, []);
     string dcpath = "";
@@ -294,7 +309,8 @@ void main(string[] args)
         "tests", &tests,
         "no-pgo", &nopgo,
         "dflags", &flags,
-        "help", &help);
+        "h|help", &help,
+        "v|verbose", &verbose);
 
     if(help)
     {
@@ -344,4 +360,16 @@ void main(string[] args)
             remove(e.name);
     if(clib)
         deleteDOutput();
+}
+
+void main(string[] args)
+{
+    try 
+        doit(args);
+    catch(Exception e)
+    {
+        auto s = findSplit(to!string(e), "---")[0];
+        stderr.writefln("Exception was thrown: %s", s);
+        stderr.writeln(usage); 
+    }
 }
