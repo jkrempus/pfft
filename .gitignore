@@ -22,4 +22,5 @@ test_nophobos
 *.swp
 generated
 generated-c
+examples/*_example
 
