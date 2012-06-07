@@ -64,7 +64,7 @@ private template code(string type, string suffix)
             return cast(`~type~`*) p;
         }
 
-        extern(C) void pfft_free_`~suffix~`(void* p)
+        extern(C) void pfft_free_`~suffix~`(`~type~`* p)
         {
             free(p);
         }
@@ -80,7 +80,7 @@ version(Float)
     mixin(code!("float", "f"));
 
 version(Double)
-    mixin(code!("Double", "d"));
+    mixin(code!("double", "d"));
 
 version(Real)
     mixin(code!("real", "l"));

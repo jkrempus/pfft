@@ -179,9 +179,36 @@ void buildGdc(Types t, string dcpath, string ccpath, bool pgo, bool clib, string
         buildGdcImpl(t, dcpath, ccpath, clib, flags);
 }
 
-void copyIncludes()
+void copyIncludes(Types t, bool clib)
 {
-    foreach(type; ["float", "double", "real"])
+    if(clib)
+    {
+        auto suffixDict = [
+            "float" : "f", 
+            "double" : "d", 
+            "real" : "l"];
+
+        auto typeDict = [
+            "float" : "float",
+            "double" : "double",
+            "real" : "long double"];
+
+        auto iStr = readText(buildPath("..", "c", "pfft.template"));
+        auto oStr = "";
+
+        foreach(type; t.types)
+        {
+            auto tmp = replace(iStr, "{type}", typeDict[type]);
+            auto s = suffixDict[type];
+            tmp = replace(tmp, "{suffix}", s);
+            tmp = replace(tmp, "{Suffix}", toUpper(s));
+            oStr ~= tmp;
+        }
+        
+        std.file.write(buildPath("include", "pfft.h"), oStr);
+    }
+
+    foreach(type; t.types)
     {
         auto name = fm("impl_%s.di", type);
         copy(
@@ -199,12 +226,8 @@ void copyIncludes()
 
 void deleteDOutput()
 {
-    try
-    {
-        rmdirRecurse(buildPath("include", "pfft"));
-        remove(libPath);
-    }
-    catch{};
+    try rmdirRecurse(buildPath("include", "pfft")); catch{}
+    try remove(libPath); catch{}
 }
 
 enum usage = `
@@ -296,7 +319,7 @@ void main(string[] args)
     mkdir("include");
     mkdir(buildPath("include", "pfft"));
 
-    copyIncludes();
+    copyIncludes(t, clib);
 
     if(clib)
         buildCObjects(t, dcpath, ccpath);
