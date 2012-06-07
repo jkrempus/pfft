@@ -1,0 +1,14 @@
+typedef struct
+{
+    void* p;
+    size_t log2n;
+} PfftTable{Suffix};
+
+PfftTable{Suffix} pfft_table_{suffix}(size_t, void*);
+void pfft_fft_{suffix}({type}*, {type}*, PfftTable{Suffix});
+size_t pfft_table_size_bytes_{suffix}(size_t);
+size_t pfft_alignment_{suffix}(size_t);
+{type}* pfft_allocate_{suffix}(size_t);
+void pfft_free_{suffix}({type}*);
+void pfft_table_free_{suffix}(PfftTable{Suffix});
+
