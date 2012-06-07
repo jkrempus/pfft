@@ -126,7 +126,7 @@ void runBenchmarks(Types t)
             writefln("Running benchmarks for type %s.", type);
 
         foreach(i; taskPool.parallel(iota(4,21)))
-            shell(fm("./test_%s -s -m 1000 split %s", type, i));
+            shell(fm("./test_%s -s -m 1000 pfft %s", type, i));
     }
 }
 
@@ -134,7 +134,7 @@ void runBenchmarks(Types t)
 void buildDmd(Types t, string dcpath, string ccpath, bool clib)
 {
     auto simdStr = to!string(t.simd);
-    auto src = sources(t, clib ? ["capi"] : ["stdapi", "splitapi"]);
+    auto src = sources(t, clib ? ["capi"] : ["stdapi", "pfft"]);
     auto path = buildPath("lib", "libpfft.a");
 
     shellf("%s -O -inline -release -lib -of%s -version=%s %s", 
@@ -175,7 +175,7 @@ void buildGdcImpl(Types t, string dcpath, string ccpath, bool clib, string flags
     
     auto simdStr = to!string(t.simd);
     auto mflag = mflagDict.get(t.simd, toLower(simdStr));
-    auto src = sources(t, clib ? [] : ["stdapi", "splitapi"]);
+    auto src = sources(t, clib ? [] : ["stdapi", "pfft"]);
    
     execute(
         fm("%s -O -inline -release -version=%s -m%s %s %s -ofpfft.o -c", 
@@ -238,8 +238,8 @@ void copyIncludes(Types t, bool clib)
         buildPath("..", "pfft", "stdapi.d"), 
         buildPath("include", "pfft", "stdapi.d"));
     copy(
-        buildPath("..", "pfft", "splitapi.d"), 
-        buildPath("include", "pfft", "splitapi.d"));
+        buildPath("..", "pfft", "pfft.d"), 
+        buildPath("include", "pfft", "pfft.d"));
 }
 
 void deleteDOutput()

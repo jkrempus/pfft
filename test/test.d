@@ -56,9 +56,9 @@ struct DirectApi
     mixin splitElementAccess!(_re, _ri);
 }
 
-struct SplitApi
+struct PfftApi
 {
-    import pfft.splitapi;
+    import pfft.pfft;
    
     alias SplitFft!T F; 
     F f;
@@ -337,8 +337,8 @@ bool runTest(alias f)(string[] args, long mflops)
         f!(StdApi!(true))(log2n, flops);
     else if(args[1] == "interleaved-typed")
         f!(InterleavedTypedApi)(log2n, flops);
-    else if(args[1] == "split")
-        f!SplitApi(log2n, flops);
+    else if(args[1] == "pfft")
+        f!PfftApi(log2n, flops);
     else
     {
         version(BenchFftw)
