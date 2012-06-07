@@ -7,7 +7,7 @@ module pfft.pfft;
 
 import core.memory, core.bitop;
 
-final class SplitFft(TT)
+final class Pfft(TT)
 {
     static if(is(TT == float))
         import impl = pfft.impl_float;

@@ -60,7 +60,7 @@ struct PfftApi
 {
     import pfft.pfft;
    
-    alias SplitFft!T F; 
+    alias Pfft!T F; 
     F f;
     T[] _re;
     T[] _im;
@@ -68,7 +68,7 @@ struct PfftApi
     this(int log2n)
     {
         size_t n = 1U << log2n; 
-        f = new SplitFft!T(n);
+        f = new F(n);
         _re = F.allocate(n);
         _im = F.allocate(n);
     }
