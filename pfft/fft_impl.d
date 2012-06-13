@@ -55,16 +55,16 @@ struct Scalar(_T)
     static T reverse(T a){ return a; }           
 }
 
-struct FFTTable(T)
-{
-    T * table;
-    uint * brTable;
-}
-
 version(DisableLarge)
     enum disableLarge = true;
 else 
     enum disableLarge = false;
+
+struct _Tuple(A...)
+{
+    A a;
+    alias a this;
+}
 
 template FFT(alias V, Options)
 {    
@@ -102,11 +102,6 @@ template FFT(alias V, Options)
 
     template st(alias a){ enum st = cast(size_t) a; }
 
-    struct _Tuple(A...)
-    {
-        A a;
-        alias a this;
-    }
     alias _Tuple!(T,T) Pair;
     
     void complex_array_to_vector()(Pair * pairs, size_t n)
@@ -707,13 +702,23 @@ template FFT(alias V, Options)
             }
         }
     }
-   
-    static auto rtable_size_bytes(int log2n)
+  
+    alias T* RTable;
+ 
+    static auto rtable_size_bytes()(int log2n)
     {
         return T.sizeof << (log2n - 1);
     }
 
-    static auto rfft_table(int log2n, void *p)
+    enum supportsReal = is(typeof(
+    {
+        T a;
+        vec v = V.unaligned_load(&a);
+        v = V.reverse(v);
+        V.unaligned_store(&a, v);
+    }));
+
+    static auto rfft_table()(int log2n, void *p) if(supportsReal)
     {
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
 
@@ -723,27 +728,41 @@ template FFT(alias V, Options)
             e[0] = cos(arg);
             e[1] = sin(arg);
         }
-
+        
         complex_array_to_vector(r.ptr, r.length);
 
-        return r.ptr;
+        return cast(RTable) r.ptr;
     }
 
-    static void rfft(T* data, T* rr, T* ri, int log2n, Table table, Pair* rtable)
+    static auto rfft_table()(int log2n, void *p) if(!supportsReal)
     {
-        static vec* v(T* a){ return cast(vec*) a; }
-    
-        auto n = st!1 << log2n;
+        return FFT!(Scalar!T, Options).rfft_table(log2n, p);
+    }
 
+    static void rfft()(T* data, T* rr, T* ri, int log2n, Table table, RTable rtable) 
+    {
+        auto n = st!1 << log2n;
         deinterleaveArray(rr, ri, data, n / 2);
         fft(rr, ri, log2n - 1, table);
+        
+        rfft_last_pass(rr, ri, log2n, rtable);
+    }
+
+    static void rfft_last_pass()(T* rr, T* ri, int log2n, RTable rtable) if(supportsReal)
+    {
+        static vec* v(T* a){ return cast(vec*) a; }
+
+        auto n = st!1 << log2n;
 
         vec half = V.scalar_to_vector(cast(T) 0.5);
 
-        for(size_t i0 = 1, i1 = n / 2 - vec_size; i0 <= i1; i0 += vec_size, i1 -= vec_size)
+        for(
+            size_t i0 = 1, i1 = n / 2 - vec_size, iw = 0; 
+            i0 <= i1; 
+            i0 += vec_size, i1 -= vec_size, iw += 2*vec_size)
         {
-            vec wr = *cast(vec*)(rtable + i0 - 1);
-            vec wi = *cast(vec*)(rtable + i0 - 1 + vec_size/2);
+            vec wr = *v(rtable + iw);
+            vec wi = *v(rtable + iw + vec_size);
 
             vec r0r = V.unaligned_load(&rr[i0]);
             vec r0i = V.unaligned_load(&ri[i0]);
@@ -774,7 +793,12 @@ template FFT(alias V, Options)
             ri[0] = r0r - r0i;
         }
     }
- 
+    
+    static void rfft_last_pass()(T* rr, T* ri, int log2n, RTable rtable) if(!supportsReal)
+    {
+        FFT!(Scalar!T, Options).rfft_last_pass(rr, ri, log2n, rtable); 
+    }
+
     void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.interleave!vec_size)))
@@ -842,16 +866,19 @@ template instantiate(alias F)
     ` 
         private alias `~F.stringof~` F;
         alias F.T T;
-        alias void* Table;
+        
+        //alias void* Table;
+        struct TableValue{};
+        alias TableValue* Table;
 
         void fft(T* re, T* im, uint log2n, Table t)
         {
-            F.fft(re, im, log2n, t);
+            F.fft(re, im, log2n, cast(F.Table) t);
         }
         
         auto fft_table(uint log2n, void* p = null)
         {
-            return F.fft_table(log2n, p);
+            return cast(Table) F.fft_table(log2n, p);
         }
         
         auto table_size_bytes(uint log2n)
@@ -872,6 +899,24 @@ template instantiate(alias F)
         size_t alignment(uint log2n)
         {
             return F.alignment(log2n);
+        }
+
+        struct RTableValue{};
+        alias RTableValue* RTable;
+
+        void rfft(T* data, T* re, T* im, uint log2n, Table t, RTable rt)
+        {
+            F.rfft(data, re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
+        }
+        
+        auto rfft_table(uint log2n, void* p = null)
+        {
+            return cast(RTable) F.rfft_table(log2n, p);
+        }
+
+        size_t rtable_size_bytes(int log2n)
+        {
+            return F.rtable_size_bytes(log2n);
         }
     `;
 }    

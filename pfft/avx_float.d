@@ -52,20 +52,17 @@ else version(GNU)
         return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,3,0,1));
     }
 
-    float8 broadcast128(float4* p)
+    float8  reverse128(float8 v)
     {
-        return __builtin_ia32_vbroadcastf128_ps256(p);
+        return __builtin_ia32_vperm2f128_ps256(v, v, shuf_mask!(0, 0, 0, 1));
     }
 
-    float8 unpcklps(float8 a, float8 b)
-    {
-        return __builtin_ia32_unpcklps256(a, b);
-    }
-
-    float8 unpckhps(float8 a, float8 b)
-    {
-        return __builtin_ia32_unpckhps256(a, b);
-    }
+    alias __builtin_ia32_unpcklps256 unpcklps;
+    alias __builtin_ia32_unpckhps256 unpckhps;
+    alias __builtin_ia32_vbroadcastf128_ps256 broadcast128;
+    alias __builtin_ia32_loadups256 loadups;
+    alias __builtin_ia32_storeups256 storeups;
+    
 
     auto shufps(param...)(float8 a, float8 b)
     {
@@ -81,9 +78,6 @@ struct Vector
     
     enum vec_size = 8;
    
-    
-    
-
     static auto v(T* p){ return cast(float4*) p; }
     static auto v8(T* p){ return cast(float8*) p; }
     
@@ -216,18 +210,18 @@ struct Vector
 
     static vec unaligned_load(T* p)
     {
-        return __builtin_ia32_loadups256(p);
+        return loadups(p);
     }
 
     static void unaligned_store(T* p, vec v)
     {
-        __builtin_ia32_storeups256(p, v);
+        storeups(p, v);
     }
 
     static vec reverse(vec v)
     {
-        v = __builtin_ia32_shufps256(v, v, shuf_mask!(0, 1, 2, 3));
-        return __builtin_ia32_vperm2f128_ps256(v, v, shuf_mask!(0, 0, 0, 1));
+        v = shufps!(0, 1, 2, 3)(v, v);
+        return reverse128(v);
     }
 }
 

@@ -82,6 +82,22 @@ struct Vector
             }
         }
         
+        
+        static vec unaligned_load(T* p)
+        {
+            return __builtin_ia32_loadups(p);
+        }
+
+        static void unaligned_store(T* p, vec v)
+        {
+            return __builtin_ia32_storeups(p, v);
+        }
+
+        static vec reverse(vec v)
+        {
+            return __builtin_ia32_shufps(v, v, shuf_mask!(0, 1, 2, 3));
+        }
+    
         private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
         {
             return __builtin_ia32_shufps(a, b, shuf_mask!(m0, m1, m2, m3));
