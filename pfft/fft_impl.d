@@ -76,6 +76,7 @@ template FFT(alias V, Options)
     alias V.vec_size vec_size;
     alias V.T T;
     alias V.vec vec;
+    alias FFT!(Scalar!T, Options) SFFT;
   
     import core.stdc.math;
 
@@ -260,9 +261,11 @@ template FFT(alias V, Options)
     }
     
     Table fft_table()(int log2n, void * p)
-    {
-        if(log2n <= log2(vec_size))
-            return FFT!(Scalar!T, Options).fft_table(log2n, p);
+    {   
+        if(log2n == 0)
+            return p;
+        else if(log2n <= log2(vec_size))
+            return SFFT.fft_table(log2n, p);
         
         Table tables = p;
         
@@ -519,7 +522,7 @@ template FFT(alias V, Options)
         else
             for (size_t m2 = vec_size >> 1; m2 > 0 ; m2 >>= 1)
             {
-                FFT!(Scalar!T, Options).fft_pass(
+                SFFT.fft_pass(
                     cast(T*) pr, cast(T*) pi, cast(T*)pend, table + tableI, m2);
                 nextTableRow(table, tableRowLen, tableI);  
             }
@@ -688,19 +691,17 @@ template FFT(alias V, Options)
     
     void fft()(T * re, T * im, int log2n, Table tables)
     {
-        if(log2n <= log2(vec_size))
-            return FFT!(Scalar!T, Options).fft_small(re, im, log2n, tables);
+        if(log2n == 0)
+            return;
+        else if(log2n <= log2(vec_size))
+            return SFFT.fft_small(re, im, log2n, tables);
         else if(log2n < 2 * log2(vec_size))
             return fft_tiny(re, im, log2n, tables);
         else if( log2n < Options.large_limit || disableLarge)
             return fft_small(re, im, log2n, tables);
         else 
-        {
             static if(!disableLarge)
-            {
                 fft_large(re, im, log2n, tables);
-            }
-        }
     }
   
     alias T* RTable;
@@ -718,8 +719,13 @@ template FFT(alias V, Options)
         V.unaligned_store(&a, v);
     }));
 
-    static auto rfft_table()(int log2n, void *p) if(supportsReal)
+    static RTable rfft_table()(int log2n, void *p) if(supportsReal)
     {
+        if(log2n < 2)
+            return cast(RTable) p;
+        else if(st!1 << log2n < 4 * vec_size)
+            return SFFT.rfft_table(log2n, p);
+
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
 
         foreach(long i, ref e; r)
@@ -736,11 +742,20 @@ template FFT(alias V, Options)
 
     static auto rfft_table()(int log2n, void *p) if(!supportsReal)
     {
-        return FFT!(Scalar!T, Options).rfft_table(log2n, p);
+        return SFFT.rfft_table(log2n, p);
     }
 
     static void rfft()(T* data, T* rr, T* ri, int log2n, Table table, RTable rtable) 
     {
+        if(log2n == 0)
+            return;
+        else if(log2n == 1)
+        {
+            rr[0] = data[0] + data[1];
+            ri[0] = data[0] - data[1];
+            return;
+        }
+
         auto n = st!1 << log2n;
         deinterleaveArray(rr, ri, data, n / 2);
         fft(rr, ri, log2n - 1, table);
@@ -750,6 +765,9 @@ template FFT(alias V, Options)
 
     static void rfft_last_pass()(T* rr, T* ri, int log2n, RTable rtable) if(supportsReal)
     {
+        if(st!1 << log2n < 4 * vec_size)
+            return SFFT.rfft_last_pass(rr, ri, log2n, rtable);       
+ 
         static vec* v(T* a){ return cast(vec*) a; }
 
         auto n = st!1 << log2n;
@@ -796,7 +814,7 @@ template FFT(alias V, Options)
     
     static void rfft_last_pass()(T* rr, T* ri, int log2n, RTable rtable) if(!supportsReal)
     {
-        FFT!(Scalar!T, Options).rfft_last_pass(rr, ri, log2n, rtable); 
+        SFFT.rfft_last_pass(rr, ri, log2n, rtable); 
     }
 
     void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
@@ -804,7 +822,7 @@ template FFT(alias V, Options)
         static if(is(typeof(V.interleave!vec_size)))
         {
             if(n < vec_size)
-                FFT!(Scalar!T, Options).interleaveArray(even, odd, interleaved, n);
+                SFFT.interleaveArray(even, odd, interleaved, n);
             else
                 foreach(i; 0 .. n / vec_size)
                     V.interleave!vec_size(
@@ -826,7 +844,7 @@ template FFT(alias V, Options)
         static if(is(typeof(V.deinterleave!vec_size)))
         {
             if(n < vec_size)
-                FFT!(Scalar!T, Options).deinterleaveArray(even, odd, interleaved, n);
+                SFFT.deinterleaveArray(even, odd, interleaved, n);
             else
                 foreach(i; 0 .. n / vec_size)
                     V.deinterleave!vec_size(

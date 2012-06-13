@@ -124,7 +124,9 @@ struct SimpleFft(T)
             w[i].re = cos(dphi * i);
             w[i].im = -sin(dphi * i);
         }
-        bit_reverse(log2n - 1, w[0 .. n / 2]);
+
+        if(log2n != 0)
+            bit_reverse(log2n - 1, w[0 .. n / 2]);
     }
     
     void compute()
