@@ -209,10 +209,25 @@ struct Vector
 
     }
 
-    
     static vec scalar_to_vector(T a)
     {
         return a;
+    }
+
+    static vec unaligned_load(T* p)
+    {
+        return __builtin_ia32_loadups256(p);
+    }
+
+    static void unaligned_store(T* p, vec v)
+    {
+        __builtin_ia32_storeups256(p, v);
+    }
+
+    static vec reverse(vec v)
+    {
+        v = __builtin_ia32_shufps256(v, v, shuf_mask!(0, 1, 2, 3));
+        return __builtin_ia32_vperm2f128_ps256(v, v, shuf_mask!(0, 0, 0, 1));
     }
 }
 

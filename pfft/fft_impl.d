@@ -48,7 +48,11 @@ struct Scalar(_T)
         _swap(p1[1+i],p2[2+i]);
         _swap(p1[3+i],p3[2+i]);
         _swap(p2[3+i],p3[1+i]);
-    }            
+    }
+
+    static T unaligned_load(T* p){ return *p; }
+    static void unaligned_store(T* p, T a){ *p = a; }
+    static T reverse(T a){ return a; }           
 }
 
 struct FFTTable(T)
@@ -703,7 +707,74 @@ template FFT(alias V, Options)
             }
         }
     }
+   
+    static auto rtable_size_bytes(int log2n)
+    {
+        return T.sizeof << (log2n - 1);
+    }
+
+    static auto rfft_table(int log2n, void *p)
+    {
+        auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
+
+        foreach(long i, ref e; r)
+        {
+            T arg = - (asin(1.0) * (i + 1)) / r.length;
+            e[0] = cos(arg);
+            e[1] = sin(arg);
+        }
+
+        complex_array_to_vector(r.ptr, r.length);
+
+        return r.ptr;
+    }
+
+    static void rfft(T* data, T* rr, T* ri, int log2n, Table table, Pair* rtable)
+    {
+        static vec* v(T* a){ return cast(vec*) a; }
     
+        auto n = st!1 << log2n;
+
+        deinterleaveArray(rr, ri, data, n / 2);
+        fft(rr, ri, log2n - 1, table);
+
+        vec half = V.scalar_to_vector(cast(T) 0.5);
+
+        for(size_t i0 = 1, i1 = n / 2 - vec_size; i0 <= i1; i0 += vec_size, i1 -= vec_size)
+        {
+            vec wr = *cast(vec*)(rtable + i0 - 1);
+            vec wi = *cast(vec*)(rtable + i0 - 1 + vec_size/2);
+
+            vec r0r = V.unaligned_load(&rr[i0]);
+            vec r0i = V.unaligned_load(&ri[i0]);
+            vec r1r = V.reverse(*v(rr + i1));
+            vec r1i = - V.reverse(*v(ri + i1));
+
+            vec ar = half * (r0r + r1r);
+            vec ai = half * (r0i + r1i);
+            vec br = half * (r0r - r1r);
+            vec bi = half * (r0i - r1i);
+
+            vec tmp = br * wi + bi * wr;
+            br = br * wr - bi * wi;
+            bi = tmp;
+
+            V.unaligned_store(rr + i0, ar + bi);
+            V.unaligned_store(ri + i0, ai - br);
+
+            *v(rr + i1) = V.reverse(ar - bi);
+            *v(ri + i1) = V.reverse(- ai - br);
+        }
+
+        {
+            auto r0r = rr[0];
+            auto r0i = ri[0];
+
+            rr[0] = r0r + r0i;
+            ri[0] = r0r - r0i;
+        }
+    }
+ 
     void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.interleave!vec_size)))

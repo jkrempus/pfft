@@ -7,6 +7,8 @@ module pfft.stdapi;
 
 import core.memory, std.complex, std.traits, core.bitop, std.typetuple;
 
+// Current GDC branch for android insists on using sinl and friends when
+// std.math is imported, so we need to do this:
 version(GNU) version(ARM)
 {
     template staticReduce(alias r, alias accumulate, args...)
@@ -113,36 +115,37 @@ final class TypedFft(TT)
         return ((cast(size_t)p) & (impl.alignment(log2n) - 1)) == 0;
     }    
     
-    private auto deinterleaveArray(R)(R range)
+    private bool fastInterleave(R)(R range)
     {
-        if(isComplexArray!(R, TT)() && isAligned(&(range[0].re)))
-        {
-            impl.deinterleaveArray(re, im, &(range[0].re), (cast(size_t)1) << log2n);
-        }
-        else
-        {
-            foreach(i; 0 .. (cast(size_t)1) << log2n)
-            {
-                re[i] = range[i].re;
-                im[i] = range[i].im;
-            }
-        }
+        return isComplexArray!(R, TT)() && isAligned(&(range[0].re));
     }
     
-    
+    private void deinterleaveArray(R)(R range)
+    {
+        static if(is(typeof(range[0].re) == impl.T))
+            if(fastInterleave(range))
+                return impl.deinterleaveArray(
+                    re, im, &(range[0].re), (cast(size_t)1) << log2n);
+        
+        foreach(i; 0 .. (cast(size_t)1) << log2n)
+        {
+            re[i] = range[i].re;
+            im[i] = range[i].im;
+        }
+    }
+   
     private auto interleaveArray(R)(R range)
     {
-        if(isComplexArray!(R, TT)() && isAligned(&(range[0].re)))
+
+        static if(is(typeof(range[0].re) == impl.T))
+            if(fastInterleave(range))
+                return impl.interleaveArray(
+                    re, im, &(range[0].re), (cast(size_t)1) << log2n);
+        
+        foreach(i; 0 .. (cast(size_t)1) << log2n)
         {
-            impl.interleaveArray(re, im, &(range[0].re), (cast(size_t)1) << log2n);
-        }
-        else
-        {
-            foreach(i; 0 .. (cast(size_t)1) << log2n)
-            {
-                range[i].re = re[i];
-                range[i].im = im[i];
-            }
+            range[i].re = re[i];
+            range[i].im = im[i];
         }
     }
     
@@ -155,7 +158,7 @@ final class TypedFft(TT)
     }
     
     
-    auto fft(R)(R range)
+    const(C[]) fft(R)(R range)
     {
         if(return_buf == null)
             return_buf = cast(C*)GC.malloc(C.sizeof << log2n);
@@ -166,51 +169,93 @@ final class TypedFft(TT)
     static C[] allocate(size_t n)
     {
         auto r = cast(C*) GC.malloc(n * C.sizeof);
+        assert((n & (n - 1)) == 0);
         assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
         return r[0 .. n];
     }
 }
 
+/**
+A class for calculating discrete fourier transforms using fast fourier 
+transform. This class mimics std.numeric.Fft, but works a bit differently
+internally. The Fft in phobos does all the initialization when the
+constructor is called. Because pfft uses different tables for each
+combination of type and size, it can't do all the initialization up front.
+Instead, it calculates a table for a combination of type T and size n the 
+first time the fft() method is called with a template parameter T a parameter
+of size n and then stores this table for later use.   
+ */
 final class Fft
 {
     import std.variant;
 
-    private void*[TypeInfo] implDict;
-
-    size_t n;
+    private struct Key{ TypeInfo ti; size_t n; }
     
-    private @property auto impl(T)()
+    private void*[Key] implDict;
+
+    size_t nmax;
+    
+    private auto impl(T)(size_t n)
     {
-        auto p = typeid(T) in implDict;
+        auto key = Key(typeid(T), n);
+        
+        auto p = key in implDict;
         if(p)
             return cast(TypedFft!T)*p;
         else
         {
             auto t = new TypedFft!T(n);
-            implDict[typeid(T)] = cast(void*)t;
+            implDict[key] = cast(void*)t;
             return t;
         }
     }
     
-    this(size_t _n)
+/** 
+Fft constructor. $(D_PARAM nmax) is the maximal fft size this instance of Fft will be 
+able to perform and should be a power of two.
+ */
+    this(size_t nmax)
     {
-        n = _n;
+        assert((nmax & (nmax - 1)) == 0);
+        this.nmax = nmax;
     }
+   
     
+/**
+This computes the table for type $(D_PARAM T) and size r.length if it hasn't already been
+computed and stores it. Then it computes the fourier transform of data in r 
+and returns it. Data in r isn't changed. The length of r should be less than or 
+equal to the size passed to the constructor. 
+ */
     auto fft(T, R)(R r) 
     {
-        return impl!T.fft(r);
+        auto n = r.length;
+        assert(n <= nmax);
+        assert((n & (n - 1)) == 0);
+        return impl!T(n).fft(r);
     }
-    
+   
+/**
+Does the same as the method above, but stores the results in a user provided 
+buffer ret instead of returning it. Ret must be a random access range of complex
+numbers with length defined.  
+ */ 
     auto fft(R, Ret)(R r, Ret ret) 
     {
-        impl!(typeof(ret[0].re)).fft(r, ret);
+        auto n = r.length;
+        assert(n <= nmax);
+        assert((n & (n - 1)) == 0);
+        impl!(typeof(ret[0].re))(r.length).fft(r, ret);
     }
-
-    auto allocate(T)(size_t n)
+/**
+Allocates an array of size n aligned appropriately for use as parameters to
+fft() methods. Both fft methods will still work correctly even if the 
+parameters are not propperly aligned, they will just be a bit slower.
+ */
+    static auto allocate(T)(size_t n)
     {
+        assert((n & (n - 1)) == 0);
         return TypedFft!(typeof(T.init.re)).allocate(n);
     }
 }
-
 

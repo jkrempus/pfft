@@ -7,6 +7,7 @@ module pfft.pfft;
 
 import core.memory, core.bitop;
 
+///
 final class Pfft(TT)
 {
     static if(is(TT == float))
@@ -31,7 +32,11 @@ final class Pfft(TT)
     
     void fft(impl.T[] re, impl.T[] im)
     {
-        assert(re.length == im.length && re.length == (1UL << log2n));
+        assert(
+            re.length == im.length && 
+            re.length == (1UL << log2n) &&
+            ((impl.alignment(log2n) - 1) & cast(size_t) re.ptr) == 0 &&
+            ((impl.alignment(log2n) - 1) & cast(size_t) im.ptr) == 0);
         
         impl.fft(re.ptr, im.ptr, log2n, table);
     }
