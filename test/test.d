@@ -111,7 +111,7 @@ struct PfftApi(bool isReal) if(!isReal)
 {
     import pfft.pfft;
    
-    alias Pfft!T F; 
+    alias Fft!T F; 
     F f;
     T[] _re;
     T[] _im;
@@ -133,17 +133,24 @@ struct PfftApi(bool isReal) if(isReal)
 {
     import pfft.pfft;
    
-    alias Pfft!T F; 
+    alias Rfft!T F;
+    F f;
     T[] _re;
     T[] _im;
+    T[] data;
     
     this(int log2n)
     {
+        size_t n = 1U << log2n; 
+        f = new F(n);
+        _re = F.allocate(n / 2);
+        _im = F.allocate(n / 2);
+        data = F.allocate(n);
     }
     
-    void compute(){ }
+    void compute(){ f.rfft(data, _re, _im); }
     
-    mixin splitElementAccess!(_re, _im);
+    mixin realSplitElementAccess!(data, _re, _im);
 }
 
 template ElementAccess(alias a, alias r)
