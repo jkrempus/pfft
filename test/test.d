@@ -4,7 +4,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
-    std.random, std.numeric, std.math, std.algorithm;
+    std.random, std.numeric, std.math, std.algorithm, std.exception;
 
 auto gc_aligned_array(A)(size_t n)
 {
@@ -20,6 +20,21 @@ template splitElementAccess(alias _re, alias _ri)
     ref result_im(size_t i){ return _ri[i]; }
 }
 
+template realSplitElementAccess(alias data, alias _re, alias _ri)
+{
+    ref re(size_t i){ return data[i]; }
+
+    auto result_re(size_t i)
+    { 
+        return i == _re.length ? _im[0] : _re[i]; 
+    }
+    
+    T result_im(size_t i)
+    { 
+        return i == 0 ? 0.0 : i >= _im.length ?  0.0 : _im[i]; 
+    }
+}
+
 version(Real)
     alias real T;
 else version(Double)
@@ -27,7 +42,7 @@ else version(Double)
 else
     alias float T;
 
-struct DirectApi
+template ImportDirect()
 {
     static if(is(T == real))
         import pfft.impl_real;
@@ -35,11 +50,15 @@ struct DirectApi
         import pfft.impl_double;
     else
         import pfft.impl_float;
-    
+}
+
+struct DirectApi(bool isReal) if(!isReal)
+{
+    mixin ImportDirect!();
     import core.memory; 
 
     T[] _re;
-    T[] _ri;
+    T[] _im;
     Table table;
     int log2n;
     
@@ -47,16 +66,48 @@ struct DirectApi
     {
         log2n = _log2n;
         _re = gc_aligned_array!T(1 << log2n);
-        _ri = gc_aligned_array!T(1 << log2n);
+        _im = gc_aligned_array!T(1 << log2n);
         table = fft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
     }
     
-    void compute(){ fft(_re.ptr, _ri.ptr, log2n, table); }
+    void compute(){ fft(_re.ptr, _im.ptr, log2n, table); }
     
-    mixin splitElementAccess!(_re, _ri);
+    mixin splitElementAccess!(_re, _im);
 }
 
-struct PfftApi
+struct DirectApi(bool isReal) if(isReal)
+{
+    mixin ImportDirect!();
+    import core.memory; 
+   
+    T[] data;
+    RTable rtable;
+    int log2n;
+    DirectApi!false c;
+    T[] _re;
+    T[] _im;
+    
+    this(int log2n)
+    {
+        c = DirectApi!false(log2n - 1);
+        _re = c._re;
+        _im = c._im;
+
+        data = gc_aligned_array!T(1 << log2n);
+
+        this.log2n = log2n;
+        rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
+    }
+    
+    void compute()
+    { 
+        rfft(data.ptr, _re.ptr, _im.ptr, log2n, c.table, rtable); 
+    }
+    
+    mixin realSplitElementAccess!(data, _re, _im);
+}
+
+struct PfftApi(bool isReal) if(!isReal)
 {
     import pfft.pfft;
    
@@ -74,6 +125,23 @@ struct PfftApi
     }
     
     void compute(){ f.fft(_re, _im); }
+    
+    mixin splitElementAccess!(_re, _im);
+}
+
+struct PfftApi(bool isReal) if(isReal)
+{
+    import pfft.pfft;
+   
+    alias Pfft!T F; 
+    T[] _re;
+    T[] _im;
+    
+    this(int log2n)
+    {
+    }
+    
+    void compute(){ }
     
     mixin splitElementAccess!(_re, _im);
 }
@@ -115,6 +183,7 @@ struct SimpleFft(T)
         log2n = _log2n;
         
         a = gc_aligned_array!(Complex!T)(one << log2n);
+        a[] = Complex!T(0, 0);
         w = gc_aligned_array!(Complex!T)(one << (log2n - 1));
 
         size_t n = 1 << log2n;
@@ -176,6 +245,7 @@ struct StdApi(bool usePhobos = false)
     this(int log2n)
     {
         a = gc_aligned_array!(Complex!T)(one << log2n);
+        a[] = Complex!T(0, 0);
         r = gc_aligned_array!(Complex!T)(one << log2n);
         fft = new Fft(one << log2n);
     }
@@ -197,6 +267,7 @@ struct InterleavedTypedApi
     this(int log2n)
     {
         a = F.allocate(one << log2n);
+        a[] = Complex!T(0, 0);
         r = F.allocate(one << log2n);
         fft = new TypedFft!T(one << log2n);
     }
@@ -256,6 +327,7 @@ version(BenchFftw)
         this(int log2n)
         {
             a = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
+            a[] = Complex!T(0, 0);
             r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
             p = fftw_plan_dft_1d(1 << log2n, a, r, FFTW_FORWARD, FFTW_PATIENT);
         }
@@ -266,14 +338,18 @@ version(BenchFftw)
     }
 }
 
-void bench(F)(int log2n, long flops)
+void bench(F, bool isReal)(int log2n, long flops)
 {    
     auto f = F(log2n);
     
     foreach(i; 0 .. one << log2n)
-        f.re(i) = 0.0, f.im(i) = 0.0;
+    {
+        f.re(i) = 0.0;
+        static if(!isReal)
+            f.im(i) = 0.0;
+    }
 
-    ulong flopsPerIter = 5UL * log2n * (1UL << log2n); 
+    ulong flopsPerIter = 5UL * log2n * (1UL << log2n) / (isReal ? 2 : 1); 
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
         
@@ -289,7 +365,7 @@ void bench(F)(int log2n, long flops)
 
 auto sq(T)(T a){ return a * a; }
 
-void precision(F)(int log2n, long flops)
+void precision(F, bool isReal)(int log2n, long flops)
 {
     auto tested = F(log2n);
     auto simple = SimpleFft!real(log2n);
@@ -298,11 +374,15 @@ void precision(F)(int log2n, long flops)
     foreach(i; 0 .. 1 << log2n)
     {
         auto re = uniform(0.0,1.0);
-        auto im = uniform(0.0,1.0);
         simple.re(i) = re;
-        simple.im(i) = im;
         tested.re(i) = re;
-        tested.im(i) = im;
+        
+        static if(!isReal)
+        {
+            auto im = uniform(0.0,1.0);
+            simple.im(i) = im;
+            tested.im(i) = im;
+        }
     }
     
     simple.compute();
@@ -312,7 +392,7 @@ void precision(F)(int log2n, long flops)
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
-    foreach(i; 0 .. 1 << log2n)
+    foreach(i; 0 .. (1 << log2n) / 2)
     {
         auto tre = tested.result_re(i);
         auto tim = tested.result_im(i);
@@ -324,56 +404,62 @@ void precision(F)(int log2n, long flops)
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
-bool runTest(alias f)(string[] args, long mflops)
+void runTest(alias f, bool isReal)(string[] args, long mflops)
 {
     int log2n = to!int(args[2]);
     long flops = mflops * 1000_000;
-    
-    if(args[1] == "simple")
-        f!(SimpleFft!T)(log2n, flops);
-    else if(args[1] == "direct")
-        f!DirectApi(log2n, flops);
-    else if(args[1] == "std")
-        f!(StdApi!false)(log2n, flops);
-    else if(args[1] == "phobos")
-        f!(StdApi!(true))(log2n, flops);
-    else if(args[1] == "interleaved-typed")
-        f!(InterleavedTypedApi)(log2n, flops);
-    else if(args[1] == "pfft")
-        f!PfftApi(log2n, flops);
+   
+    auto a = args[1];
+ 
+    if(a == "simple")
+        f!(SimpleFft!T, isReal)(log2n, flops);
+    else if(a == "direct")
+        f!(DirectApi!(isReal), isReal)(log2n, flops);
+    else if(a == "std")
+        f!(StdApi!false, isReal)(log2n, flops);
+    else if(a == "phobos")
+        f!(StdApi!true, isReal)(log2n, flops);
+    else if(a == "interleaved-typed")
+        f!(InterleavedTypedApi, isReal)(log2n, flops);
+    else if(a == "pfft")
+        f!(PfftApi!isReal, isReal)(log2n, flops);
     else
     {
         version(BenchFftw)
         {
-            if(args[1] == "fftw")
-                f!FFTW(log2n, flops);
+            if(a == "fftw")
+                f!(FFTW, isReal)(log2n, flops);
             else 
-                return false;
+                throw new Exception(
+                    "Implementation \"" ~ a ~ "\" is not supported" );
         }
-        else
-            return false;
+        throw new Exception(
+            "Implementation \"" ~ a ~ "\" is not supported" );
     }
-    
-    return true;
 }
 
 void main(string[] args)
 {
-    bool s = false;
-    bool p = false;
+    bool s;
+    bool r;
     int mflops = 10_000;
     
-    getopt(args, "s", &s, "p", &p, "m", &mflops);
+    getopt(args, "s", &s, "r", &r, "m", &mflops);
     
-    if(args.length == 3)
-    {
-        if(s && runTest!bench(args, mflops))
-            return;
+    enforce(args.length == 3, "There must be exactly two non option arguments.");
 
-        if(p && runTest!precision(args, mflops))
-            return;
+    if(r)
+    {
+        if(s)
+            runTest!(bench, true)(args, mflops);
+        else 
+            runTest!(precision, true)(args, mflops);
     }
-   
-    writeln(args); 
-    writeln("You're using it wrong.");
+    else
+    {
+        if(s)
+            runTest!(bench, false)(args, mflops);
+        else 
+            runTest!(precision, false)(args, mflops);
+    }
 }

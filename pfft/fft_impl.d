@@ -730,9 +730,10 @@ template FFT(alias V, Options)
 
         foreach(long i, ref e; r)
         {
-            T arg = - (asin(1.0) * (i + 1)) / r.length;
-            e[0] = cos(arg);
-            e[1] = sin(arg);
+            T arg = - (asin(1.0) * (i + 1)) / r.length; 
+            // set absolute value to 0.5 so we don't have to multiply with 0.5 later.
+            e[0] = cos(arg) * cast(T)0.5;
+            e[1] = sin(arg) * cast(T)0.5;
         }
         
         complex_array_to_vector(r.ptr, r.length);
@@ -785,22 +786,22 @@ template FFT(alias V, Options)
             vec r0r = V.unaligned_load(&rr[i0]);
             vec r0i = V.unaligned_load(&ri[i0]);
             vec r1r = V.reverse(*v(rr + i1));
-            vec r1i = - V.reverse(*v(ri + i1));
+            vec r1i = V.reverse(*v(ri + i1));
 
             vec ar = half * (r0r + r1r);
-            vec ai = half * (r0i + r1i);
-            vec br = half * (r0r - r1r);
-            vec bi = half * (r0i - r1i);
+            vec ai = half * (r1i - r0i);
+            vec br = r0r - r1r;
+            vec bi = r0i + r1i;
 
             vec tmp = br * wi + bi * wr;
-            br = br * wr - bi * wi;
+            br = bi * wi - br * wr;
             bi = tmp;
 
             V.unaligned_store(rr + i0, ar + bi);
-            V.unaligned_store(ri + i0, ai - br);
+            V.unaligned_store(ri + i0, br - ai);
 
             *v(rr + i1) = V.reverse(ar - bi);
-            *v(ri + i1) = V.reverse(- ai - br);
+            *v(ri + i1) = V.reverse(ai + br);
         }
 
         {
