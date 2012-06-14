@@ -32,15 +32,10 @@ else version(GNU)
         return __builtin_ia32_vperm2f128_pd256(a, b, shuf_mask!(0,3,0,1));
     }
 
-    double4 unpcklpd(double4 a, double4 b)
-    {
-        return __builtin_ia32_unpcklpd256(a, b);
-    }
-
-    double4 unpckhpd(double4 a, double4 b)
-    {
-        return __builtin_ia32_unpckhpd256(a, b);
-    }
+    alias __builtin_ia32_unpcklpd256 unpcklpd;
+    alias __builtin_ia32_unpckhpd256 unpckhpd;
+    alias __builtin_ia32_loadupd256 loadupd;
+    alias __builtin_ia32_storeupd256 storeupd;
 }
 
 struct Vector 
@@ -166,13 +161,28 @@ struct Vector
         *v(p1 + i) = interleave128_hi_d(b0, b1);
         *v(p2 + i) = interleave128_lo_d(b2, b3);
         *v(p3 + i) = interleave128_hi_d(b2, b3);
-
     }
 
-    
     static vec scalar_to_vector(T a)
     {
         return a;
+    }
+    
+    static vec unaligned_load(T* p)
+    {
+        return loadupd(p);
+    }
+
+    static void unaligned_store(T* p, vec v)
+    {
+        storeupd(p, v);
+    }
+
+    static vec reverse(vec v)
+    {
+        v = __builtin_ia32_shufpd256(v, v, 0x5);
+        v = __builtin_ia32_vperm2f128_pd256(v, v, shuf_mask!(0,0,0,1));
+        return v;
     }
 }
 
