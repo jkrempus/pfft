@@ -40,6 +40,22 @@ struct Vector
             r0 = __builtin_ia32_unpcklpd(a0, a1);
             r1 = __builtin_ia32_unpckhpd(a0, a1);
         }
+
+        
+        static vec unaligned_load(T* p)
+        {
+            return __builtin_ia32_loadupd(p);
+        }
+
+        static void unaligned_store(T* p, vec v)
+        {
+            return __builtin_ia32_storeupd(p, v);
+        }
+
+        static vec reverse(vec v)
+        {
+            return __builtin_ia32_shufpd(v, v, 0x1);
+        }
     }
     else version(LDC)
     {
