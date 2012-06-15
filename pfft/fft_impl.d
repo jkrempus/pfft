@@ -635,7 +635,7 @@ template FFT(V, Options)
         int log2n = bsf(N);
 
         int nPasses = 
-            log2n > Options.passes_per_recursive_call + Options.log2_optimal_n ? 
+            log2n > Options.passes_per_recursive_call + Options.log2_optimal_n ?
                 Options.passes_per_recursive_call : 
                 log2n - Options.log2_optimal_n;
 
@@ -775,12 +775,12 @@ template FFT(V, Options)
 
         foreach(long i, ref e; r)
         {
-            T arg = - (asin(1.0) * (i + 1)) / r.length;
+            T phi = - (_asin(1.0) * (i + 1)) / r.length;
  
             // set absolute value to 0.5 so we don't 
             // have to multiply with 0.5 later.
-            e[0] = cos(arg) * cast(T)0.5;
-            e[1] = sin(arg) * cast(T)0.5;
+            e[0] = _cos(phi) * cast(T)0.5;
+            e[1] = _sin(phi) * cast(T)0.5;
         }
         
         complex_array_to_vector(r.ptr, r.length);
