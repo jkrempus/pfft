@@ -74,7 +74,8 @@ auto isComplexArray(R, T)()
         typeof(R.init[0]).sizeof == 2*T.sizeof))
     {
         typeof(R.init[0]) e;
-        return cast(typeof(e.re)*)&e == &(e.re) && 
+        return 
+            cast(typeof(e.re)*)&e == &(e.re) && 
             &(e.re) + 1 == &(e.im);
     }
     else
@@ -99,6 +100,7 @@ final class TypedFft(TT)
     alias Complex!(impl.T) C;
     C* return_buf = null;
     impl.Table table;
+    impl.RTable rtable;
     
     
     this(size_t n)
@@ -106,8 +108,12 @@ final class TypedFft(TT)
         log2n  = bsf(n);
         re = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
         im = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
+        
         auto mem = GC.malloc( impl.table_size_bytes(log2n));
         table = impl.fft_table(log2n, mem);
+
+        mem = GC.malloc( impl.rtable_size_bytes(log2n + 1));
+        rtable = impl.rfft_table(log2n + 1, mem);
     }
 
     private bool isAligned(impl.T* p)
@@ -141,6 +147,25 @@ final class TypedFft(TT)
             if(fastInterleave(range))
                 return impl.interleaveArray(
                     re, im, &(range[0].re), (cast(size_t)1) << log2n);
+        
+        foreach(i; 0 .. (cast(size_t)1) << log2n)
+        {
+            range[i].re = re[i];
+            range[i].im = im[i];
+        }
+    }
+
+    private auto copyArray(R)(R range)
+    {
+
+        static if(is(typeof(range[0].re) == impl.T))
+            if(isComplexArray!(R, TT)())
+            {
+                memcpy(
+                    cast(void*)re.ptr, 
+                    cast(void*) &range[0].re,
+                    TT.sizeof * (st!1 << log2n)); 
+            }
         
         foreach(i; 0 .. (cast(size_t)1) << log2n)
         {

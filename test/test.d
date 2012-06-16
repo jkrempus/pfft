@@ -6,6 +6,8 @@
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
     std.random, std.numeric, std.math, std.algorithm, std.exception;
 
+template st(alias a){ enum st = cast(size_t) a; }
+
 auto gc_aligned_array(A)(size_t n)
 {
     import core.memory;
@@ -101,7 +103,8 @@ struct DirectApi(bool isReal) if(isReal)
     
     void compute()
     { 
-        rfft(data.ptr, _re.ptr, _im.ptr, log2n, c.table, rtable); 
+        deinterleaveArray(data.ptr, _re.ptr, _im.ptr, st!1 << (log2n - 1));
+        rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
     }
     
     mixin realSplitElementAccess!(data, _re, _im);

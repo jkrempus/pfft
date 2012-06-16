@@ -82,8 +82,9 @@ final class Rfft(TT)
         assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
         assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
         assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
-
-        impl.rfft(data.ptr, re.ptr, im.ptr, log2n, _complex.table, rtable);   
+        
+        impl.deinterleaveArray(re.ptr, im.ptr, data.ptr, st!1 << (log2n - 1));
+        impl.rfft(re.ptr, im.ptr, log2n, _complex.table, rtable);   
     }
 
     alias Fft!(TT).allocate allocate;

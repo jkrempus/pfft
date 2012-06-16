@@ -67,7 +67,7 @@ struct _Tuple(A...)
     alias a this;
 }
 
-template FFT(V, Options)
+struct FFT(V, Options)
 {    
     import core.bitop, core.stdc.stdlib;
     import pfft.bitreverse;
@@ -79,25 +79,25 @@ template FFT(V, Options)
     alias V.vec vec;
     alias FFT!(Scalar!T, Options) SFFT;
   
-    import core.stdc.math;
+    import cmath = core.stdc.math;
 
     static if(is(T == float))
     {
-        alias sinf _sin;
-        alias cosf _cos;
-        alias asinf _asin;
+        alias cmath.sinf _sin;
+        alias cmath.cosf _cos;
+        alias cmath.asinf _asin;
     }
     else static if(is(T == double))
     {
-        alias sin _sin;
-        alias cos _cos;
-        alias asin _asin;
+        alias cmath.sin _sin;
+        alias cmath.cos _cos;
+        alias cmath.asin _asin;
     }
     else static if(is(T == real))
     {
-        alias sinl _sin;
-        alias cosl _cos;
-        alias asinl _asin;
+        alias cmath.sinl _sin;
+        alias cmath.cosl _cos;
+        alias cmath.asinl _asin;
     }
     else
         static assert(0);
@@ -106,7 +106,7 @@ template FFT(V, Options)
 
     alias _Tuple!(T,T) Pair;
     
-    void complex_array_to_vector()(Pair * pairs, size_t n)
+    static void complex_array_to_vector()(Pair * pairs, size_t n)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
@@ -124,7 +124,7 @@ template FFT(V, Options)
         }
     }
 
-    int log2()(int a)
+    static int log2()(int a)
     {
         int r = 0;
         while(a)
@@ -135,7 +135,7 @@ template FFT(V, Options)
         return r - 1;
     }
     
-    void fft_table_sines_cosines_fast()(int log2n,  Pair * r)
+    static void fft_table_sines_cosines_fast()(int log2n,  Pair * r)
     {
         auto p0 = r;
         auto p1 = p0 + 1;
@@ -167,7 +167,7 @@ template FFT(V, Options)
         }
     }
     
-    void fft_table_sines_cosines()(int log2n,  Pair * r)
+    static void fft_table_sines_cosines()(int log2n,  Pair * r)
     {
         auto p = r;
         for (int s = 1; s <= log2n; ++s)
@@ -183,7 +183,7 @@ template FFT(V, Options)
         }
     }
     
-    void fft_table_impl()(int log2n, Pair * r)
+    static void fft_table_impl()(int log2n, Pair * r)
     {
         static if(is(typeof(Options.fast_init)))
             fft_table_sines_cosines_fast(log2n, r);
@@ -247,17 +247,17 @@ template FFT(V, Options)
     
     alias void* Table;
     
-    T* table_ptr(void* p, int log2n)
+    static T* table_ptr(void* p, int log2n)
     { 
         return cast(T*)p;
     }
     
-    uint* br_table_ptr(void* p, int log2n)
+    static uint* br_table_ptr(void* p, int log2n)
     {
         return cast(uint*)(p + ((2 * T.sizeof) << log2n));
     }
     
-    size_t table_size_bytes()(uint log2n)
+    static size_t table_size_bytes()(uint log2n)
     {
         uint log2nbr = log2n < Options.large_limit ? 
             log2n : 2 * Options.log2_bitreverse_large_chunk_size;
@@ -266,7 +266,7 @@ template FFT(V, Options)
             ((2 * T.sizeof) << log2n) + BR.br_table_size(log2nbr) * uint.sizeof;
     }
     
-    Table fft_table()(int log2n, void * p)
+    static Table fft_table()(int log2n, void * p)
     {   
         if(log2n == 0)
             return p;
@@ -292,7 +292,7 @@ template FFT(V, Options)
         return tables;
     }
     
-    void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
+    static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride = 1)
     {
         table += start_stride + start_stride;
@@ -323,7 +323,7 @@ template FFT(V, Options)
         }
     }
     
-    void first_fft_passes()(vec* pr, vec* pi, size_t n)
+    static void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
 
@@ -355,7 +355,7 @@ template FFT(V, Options)
         }
     }
         
-    void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    static void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend ; pr += m, pi += m)
@@ -377,7 +377,7 @@ template FFT(V, Options)
         }
     }
     
-    void fft_two_passes()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    static void fft_two_passes()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
@@ -454,7 +454,7 @@ template FFT(V, Options)
         }
     }
     
-    void fft_passes()(vec* re, vec* im, size_t N , T* table)
+    static void fft_passes()(vec* re, vec* im, size_t N , T* table)
     {
         vec * pend = re + N;
 
@@ -490,7 +490,7 @@ template FFT(V, Options)
         }
     }
     
-    void nextTableRow()(
+    static void nextTableRow()(
         ref T*  table, ref size_t tableRowLen, ref size_t tableI)
     {
         table += tableRowLen;
@@ -518,7 +518,7 @@ template FFT(V, Options)
         }
     }
     
-    static void fft_passes_fractional()(
+    static static void fft_passes_fractional()(
         vec * pr, vec * pi, vec * pend, 
         T * table, size_t tableI, size_t tableRowLen)
     {
@@ -542,7 +542,7 @@ template FFT(V, Options)
             }
     }
     
-    void fft_passes_strided(int l, int chunk_size)(
+    static void fft_passes_strided(int l, int chunk_size)(
         vec * pr, vec * pi, size_t N , 
         ref T * table, ref size_t tableI, ref size_t tableRowLen, 
         size_t stride, int nPasses)
@@ -604,7 +604,7 @@ template FFT(V, Options)
         }
     }
     
-    void fft_passes_recursive()(
+    static void fft_passes_recursive()(
         vec * pr, vec *  pi, size_t N , 
         T * table, size_t tableI, size_t tableRowLen)
     {
@@ -666,7 +666,7 @@ template FFT(V, Options)
         }
     }
    
-    void bit_reverse_small_two(int minLog2n)(
+    static void bit_reverse_small_two(int minLog2n)(
         T* re, T* im, int log2n, uint* brTable)
     {
         static if(minLog2n < 4)
@@ -691,9 +691,9 @@ template FFT(V, Options)
         }   
     }
 
-    auto v(T* p){ return cast(vec*) p; }
+    static auto v(T* p){ return cast(vec*) p; }
 
-    void fft_tiny()(T * re, T * im, int log2n, Table tables)
+    static void fft_tiny()(T * re, T * im, int log2n, Table tables)
     {
         assert(log2n > log2(vec_size));
         
@@ -707,7 +707,7 @@ template FFT(V, Options)
             re, im, log2n, br_table_ptr(tables, log2n));
     }
 
-    void fft_small()(T * re, T * im, int log2n, Table tables)
+    static void fft_small()(T * re, T * im, int log2n, Table tables)
     {
         assert(log2n >= 2*log2(vec_size));
         
@@ -722,7 +722,7 @@ template FFT(V, Options)
             cast(vec*) table_ptr(tables, log2n), N/vec_size/vec_size);
     }
     
-    void fft_large()(T * re, T * im, int log2n, Table tables)
+    static void fft_large()(T * re, T * im, int log2n, Table tables)
     {
         size_t N = (1<<log2n);
         
@@ -734,7 +734,7 @@ template FFT(V, Options)
         BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n));
     }
     
-    void fft()(T * re, T * im, int log2n, Table tables)
+    static void fft()(T * re, T * im, int log2n, Table tables)
     {
         if(log2n == 0)
             return;
@@ -794,21 +794,19 @@ template FFT(V, Options)
     }
 
     static void rfft()(
-        T* data, T* rr, T* ri, int log2n, Table table, RTable rtable) 
+        T* rr, T* ri, int log2n, Table table, RTable rtable) 
     {
         if(log2n == 0)
             return;
         else if(log2n == 1)
         {
-            rr[0] = data[0] + data[1];
-            ri[0] = data[0] - data[1];
+            auto rr0 = rr[0], ri0 = ri[0];
+            rr[0] = rr0 + ri0;
+            ri[0] = rr0 - ri0;
             return;
         }
 
-        auto n = st!1 << log2n;
-        deinterleaveArray(rr, ri, data, n / 2);
         fft(rr, ri, log2n - 1, table);
-        
         rfft_last_pass(rr, ri, log2n, rtable);
     }
 
@@ -868,7 +866,7 @@ template FFT(V, Options)
         SFFT.rfft_last_pass(rr, ri, log2n, rtable); 
     }
 
-    void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
+    static void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.interleave!vec_size)))
         {
@@ -890,7 +888,7 @@ template FFT(V, Options)
             }
     }
     
-    void deinterleaveArray()(T* even, T* odd, T* interleaved, size_t n)
+    static void deinterleaveArray()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.deinterleave!vec_size)))
         {
@@ -973,9 +971,9 @@ template instantiate(alias F)
         struct RTableValue{};
         alias RTableValue* RTable;
 
-        void rfft(T* data, T* re, T* im, uint log2n, Table t, RTable rt)
+        void rfft(T* re, T* im, uint log2n, Table t, RTable rt)
         {
-            F.rfft(data, re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
+            F.rfft(re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
         }
         
         auto rfft_table(uint log2n, void* p = null)

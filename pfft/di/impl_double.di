@@ -12,7 +12,7 @@ size_t table_size_bytes(uint log2n);
 struct RTableValue{};
 alias RTableValue* RTable;
 
-void rfft(T* data, T* re, T* im, uint log2n, Table t, RTable rt);
+void rfft(T* re, T* im, uint log2n, Table t, RTable rt);
 RTable rfft_table(uint log2n, void* p = null);
 size_t rtable_size_bytes(int log2n);
 
