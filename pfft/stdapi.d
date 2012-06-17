@@ -5,7 +5,7 @@
 
 module pfft.stdapi;
 
-import core.memory, std.complex, std.traits, core.bitop, std.typetuple;
+import core.memory, std.complex, std.traits, core.bitop, std.typetuple, std.range;
 
 // Current GDC branch for android insists on using sinl and friends when
 // std.math is imported, so we need to do this:
@@ -65,6 +65,8 @@ version(GNU) version(ARM)
     } 
 }
 
+template st(alias a){ enum st = cast(size_t) a; } 
+
 auto isComplexArray(R, T)()
 {
     static if(
@@ -90,7 +92,7 @@ final class TypedFft(TT)
         import impl = pfft.impl_double;
     else static if(is(TT == real))
         import impl = pfft.impl_real;
-    else    
+    else 
         static assert(0, "Not implemented");
         
     
@@ -98,7 +100,7 @@ final class TypedFft(TT)
     impl.T* re;
     impl.T* im;
     alias Complex!(impl.T) C;
-    C* return_buf = null;
+    C* return_buf = null, real_return_buf;
     impl.Table table;
     impl.RTable rtable;
     
@@ -131,50 +133,29 @@ final class TypedFft(TT)
         static if(is(typeof(range[0].re) == impl.T))
             if(fastInterleave(range))
                 return impl.deinterleaveArray(
-                    re, im, &(range[0].re), (cast(size_t)1) << log2n);
+                    re, im, &(range[0].re), st!1 << log2n);
         
-        foreach(i; 0 .. (cast(size_t)1) << log2n)
+        foreach(i, e; range)
         {
-            re[i] = range[i].re;
-            im[i] = range[i].im;
+            re[i] = e.re;
+            im[i] = e.im;
         }
     }
    
-    private auto interleaveArray(R)(R range)
+    private void interleaveArray(R)(R range)
     {
-
         static if(is(typeof(range[0].re) == impl.T))
             if(fastInterleave(range))
                 return impl.interleaveArray(
-                    re, im, &(range[0].re), (cast(size_t)1) << log2n);
+                    re, im, &(range[0].re), st!1 << log2n);
         
-        foreach(i; 0 .. (cast(size_t)1) << log2n)
+        foreach(i, ref e; range)
         {
-            range[i].re = re[i];
-            range[i].im = im[i];
+            e.re = re[i];
+            e.im = im[i];
         }
     }
 
-    private auto copyArray(R)(R range)
-    {
-
-        static if(is(typeof(range[0].re) == impl.T))
-            if(isComplexArray!(R, TT)())
-            {
-                memcpy(
-                    cast(void*)re.ptr, 
-                    cast(void*) &range[0].re,
-                    TT.sizeof * (st!1 << log2n)); 
-            }
-        
-        foreach(i; 0 .. (cast(size_t)1) << log2n)
-        {
-            range[i].re = re[i];
-            range[i].im = im[i];
-        }
-    }
-    
-    
     void fft(Ret, R)(R range, Ret buf)
     {
         deinterleaveArray(range);
@@ -182,23 +163,50 @@ final class TypedFft(TT)
         interleaveArray(buf);
     }
     
+    void rfft(Ret, R)(R range, Ret buf)
+    {
+        deinterleaveArray(cast(Complex!(ElementType!R)[])range);
+        impl.rfft(re, im, log2n + 1, table, rtable);
+        interleaveArray(buf);
+       
+        auto n = st!1 << log2n; 
+        buf[n] = Complex!TT(buf[0].im, 0);
+        buf[0].im = 0;
+        
+        foreach(i; 1 .. n)
+        {
+            buf[2*n - i].re = buf[i].re;
+            buf[2*n - i].im = -buf[i].im;
+        }
+    }
     
     const(C[]) fft(R)(R range)
     {
         if(return_buf == null)
-            return_buf = cast(C*)GC.malloc(C.sizeof << log2n);
+            return_buf = cast(C*)GC.malloc(C.sizeof << (log2n + 1));
+        
         fft(range, return_buf);
         return return_buf[0 .. (1 << log2n)];
+    }
+
+    const(C[]) rfft(R)(R range)
+    {
+        auto n = st!1 << log2n;
+        if(return_buf == null)
+            return_buf = cast(C*)GC.malloc(C.sizeof << (log2n + 1));
+        
+        rfft(range, return_buf[0 .. 2 * n]);
+        return return_buf[0 .. 2 * n];
     }
 
     static C[] allocate(size_t n)
     {
         auto r = cast(C*) GC.malloc(n * C.sizeof);
-        assert((n & (n - 1)) == 0);
         assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
         return r[0 .. n];
     }
 }
+
 
 /**
 A class for calculating discrete fourier transforms using fast fourier 
@@ -218,8 +226,6 @@ final class Fft
     
     private void*[Key] implDict;
 
-    size_t nmax;
-    
     private auto impl(T)(size_t n)
     {
         auto key = Key(typeid(T), n);
@@ -236,51 +242,73 @@ final class Fft
     }
     
 /** 
-Fft constructor. $(D_PARAM nmax) is the maximal fft size this instance of Fft will be 
-able to perform and should be a power of two.
+Fft constructor. $(D_PARAM nmax) is there just for compatibility with std.numeric.Fft.
  */
-    this(size_t nmax)
+    this(size_t nmax = size_t.init)
     {
-        assert((nmax & (nmax - 1)) == 0);
-        this.nmax = nmax;
     }
    
     
 /**
-This computes the table for type $(D_PARAM T) and size r.length if it hasn't already been
-computed and stores it. Then it computes the fourier transform of data in r 
-and returns it. Data in r isn't changed. The length of r should be less than or 
-equal to the size passed to the constructor. 
+Computes  the fourier transform of data in r  and returns it. Data in r 
+isn't changed.  R must be a forward range with complex or floating point 
+elements. The number of elements in $(D_PARAM r) must be a power of two.
+T must be a floating point type. The length of the returned array is the
+same as the number of elements in $(D_PARAM r).
  */
-    auto fft(T, R)(R r) 
+    const Complex!(T)[] fft(T, R)(R r) if(!isNumeric!(ElementType!R)) 
     {
-        auto n = r.length;
-        assert(n <= nmax);
+        auto n = walkLength(r);
         assert((n & (n - 1)) == 0);
         return impl!T(n).fft(r);
     }
+
+    const Complex!(T)[] fft(T, R)(R r) if(isNumeric!(ElementType!R)) 
+    {
+        auto n = walkLength(r);
+        assert((n & (n - 1)) == 0);
+        return impl!T(n / 2).rfft(r);
+    }
    
 /**
-Does the same as the method above, but stores the results in a user provided 
-buffer ret instead of returning it. Ret must be a random access range of complex
-numbers with length defined.  
+Computes the fourier transform of dat in r and stores the results in a user 
+provided buffer ret. Data in r isn't changed. R must be a forward range with 
+complex or floating point elements.Here a complex type is a type with  
+assignable properties .re and .im. Ret must be an input range with complex 
+elements. $(D_PARAM r) and $(D_PARAM ret) must have the same number of elements
+and that number must be a power of two.
  */ 
-    auto fft(R, Ret)(R r, Ret ret) 
+    auto fft(R, Ret)(R r, Ret ret) if(!isNumeric!(ElementType!R))
     {
-        auto n = r.length;
-        assert(n <= nmax);
+        static if(is(typeof(ret.save)))
+            ret.save();
+        
+        r.save();
+
+        auto n = walkLength(r);
         assert((n & (n - 1)) == 0);
-        impl!(typeof(ret[0].re))(r.length).fft(r, ret);
+        impl!(typeof(ret[0].re))(n).fft(r, ret);
     }
+
+    auto fft(R, Ret)(R r, Ret ret) if(isNumeric!(ElementType!R))
+    {
+        r.save();
+        auto n = walkLength(r);
+        assert((n & (n - 1)) == 0);
+        impl!(typeof(ret[0].re))(r.length / 2).rfft(r, ret);
+    }
+
 /**
 Allocates an array of size n aligned appropriately for use as parameters to
 fft() methods. Both fft methods will still work correctly even if the 
-parameters are not propperly aligned, they will just be a bit slower.
+parameters are not propperly aligned (or even if they aren't arrays at all), 
+they will just be a bit slower.
  */
-    static auto allocate(T)(size_t n)
+    static T[] allocate(T)(size_t n)
     {
         assert((n & (n - 1)) == 0);
-        return TypedFft!(typeof(T.init.re)).allocate(n);
+        auto r = cast(T*) GC.malloc(n * T.sizeof);
+        return r[0 .. n];
     }
 }
 

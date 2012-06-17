@@ -241,28 +241,45 @@ struct SimpleFft(T)
     ref result_im(size_t i){ return a[i].im; }
 }
 
-struct StdApi(bool usePhobos = false)
+struct StdApi(bool usePhobos = false, bool isReal)
 {
     static if(usePhobos)
         import std.numeric;
     else
         import pfft.stdapi;
     
-    Complex!(T)[] a;
+    static if(isReal)
+        T[] a;
+    else
+        Complex!(T)[] a;
+        
     Complex!(T)[] r;
+    
     Fft fft;
     
     this(int log2n)
     {
-        a = gc_aligned_array!(Complex!T)(one << log2n);
-        a[] = Complex!T(0, 0);
+        a = gc_aligned_array!(typeof(a[0]))(one << log2n);
         r = gc_aligned_array!(Complex!T)(one << log2n);
+
+        static if(isReal)
+            a[] = cast(T) 0;
+        else
+            a[] = Complex!T(0, 0);
+        
         fft = new Fft(one << log2n);
     }
     
     void compute(){ fft.fft(a, r); }
-
-    mixin ElementAccess!(a, r);
+    
+    static if(isReal)
+    {
+        @property ref re(size_t i){ return a[i]; }
+        @property ref result_re(size_t i){ return r[i].re; }
+        @property ref result_im(size_t i){ return r[i].im; }
+    }
+    else
+        mixin ElementAccess!(a, r);
 }
 
 struct InterleavedTypedApi
@@ -426,9 +443,9 @@ void runTest(alias f, bool isReal)(string[] args, long mflops)
     else if(a == "direct")
         f!(DirectApi!(isReal), isReal)(log2n, flops);
     else if(a == "std")
-        f!(StdApi!false, isReal)(log2n, flops);
+        f!(StdApi!(false, isReal), isReal)(log2n, flops);
     else if(a == "phobos")
-        f!(StdApi!true, isReal)(log2n, flops);
+        f!(StdApi!(true, isReal), isReal)(log2n, flops);
     else if(a == "interleaved-typed")
         f!(InterleavedTypedApi, isReal)(log2n, flops);
     else if(a == "pfft")

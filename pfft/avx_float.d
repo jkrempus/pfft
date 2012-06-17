@@ -22,36 +22,43 @@ else version(GNU)
         enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
     }
 
+    pragma(attribute, always_inline);
     float8 insert128_0(float8 a, float4 b)
     {
         return __builtin_ia32_vinsertf128_ps256(a, b, 0);
     }
 
+    pragma(attribute, always_inline);
     float8 insert128_1(float8 a, float4 b)
     {
         return __builtin_ia32_vinsertf128_ps256(a, b, 1);
     }
 
+    pragma(attribute, always_inline);
     float4 extract128_0(float8 a)
     {
         return __builtin_ia32_vextractf128_ps256(a, 0);
     }
 
+    pragma(attribute, always_inline);
     float4 extract128_1(float8 a)
     {
         return __builtin_ia32_vextractf128_ps256(a, 1);
     }
 
+    pragma(attribute, always_inline);
     float8 interleave128_lo(float8 a, float8 b)
     {
         return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,2,0,0));
     }
 
+    pragma(attribute, always_inline);
     float8 interleave128_hi(float8 a, float8 b)
     {
         return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,3,0,1));
     }
 
+    pragma(attribute, always_inline);
     float8  reverse128(float8 v)
     {
         return __builtin_ia32_vperm2f128_ps256(v, v, shuf_mask!(0, 0, 0, 1));
@@ -63,7 +70,7 @@ else version(GNU)
     alias __builtin_ia32_loadups256 loadups;
     alias __builtin_ia32_storeups256 storeups;
     
-
+    pragma(attribute, always_inline);
     auto shufps(param...)(float8 a, float8 b)
     {
         return __builtin_ia32_shufps256(a, b, shuf_mask!param);
@@ -101,6 +108,13 @@ struct Vector
         else
             static assert(0);
     }
+   
+    pragma(attribute, always_inline) 
+    static void _deinterleave2(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        r0 = interleave128_lo(a0, a1);
+        r1 = interleave128_hi(a0, a1);
+    }
     
     static void interleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
     {
@@ -108,16 +122,16 @@ struct Vector
         {
             vec a0_tmp = unpcklps(a0, a1);
             a1 =         unpckhps(a0, a1);
-            deinterleave!2(a0_tmp, a1, r0, r1);
+            _deinterleave2(a0_tmp, a1, r0, r1);
         }
         else static if(interleaved == 4)
         {
             vec a0_tmp = shufps!(1,0,1,0)(a0, a1);
             a1 =         shufps!(3,2,3,2)(a0, a1);
-            deinterleave!2(a0_tmp, a1, r0, r1);
+            _deinterleave2(a0_tmp, a1, r0, r1);
         }
         else static if(interleaved == 2)
-            deinterleave!2(a0, a1, r0, r1);
+            _deinterleave2(a0, a1, r0, r1);
         else
             static assert(0);
     }
@@ -126,13 +140,13 @@ struct Vector
     {
         static if(interleaved == 8)
         {
-            deinterleave!2(a0, a1, a0, a1); 
+            _deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(2,0,2,0)(a0, a1);
             r1 = shufps!(3,1,3,1)(a0, a1);
         }
         else static if(interleaved == 4)
         {
-            deinterleave!2(a0, a1, a0, a1); 
+            _deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(1,0,1,0)(a0, a1);
             r1 = shufps!(3,2,3,2)(a0, a1);
         }
