@@ -85,8 +85,11 @@ void buildCObjects(Types t, string dcpath, string ccpath)
     shellf("%s %s -c", ccpath, buildPath("..", "c", "dummy.c")); 
 }
 
+enum dmdOpt = "-O -inline -release";
+enum dmdDbg = "-debug -g";
+
 void buildTests(Types t, string dcpath, Compiler c, string outDir, 
-    bool optimized = true, string flags = "")
+    bool optimized = true, bool dbg = false, string flags = "")
 {
     auto srcPath = buildPath("..", "test", "test.d");
     auto simdStr = to!string(t.simd);
@@ -103,7 +106,8 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
         {
             case Compiler.DMD:
             case Compiler.GDMD:
-                auto opt = optimized ? "-O -inline -release" : "";
+                auto opt = optimized ? dmdOpt : "";
+                opt ~= dbg ? dmdDbg : ""; 
                 shellf("%s %s -version=%s -version=%s", 
                     dcpath, opt, simdStr , common);
                 break;
@@ -130,15 +134,15 @@ void runBenchmarks(Types t)
     }
 }
 
-
-void buildDmd(Types t, string dcpath, string ccpath, bool clib)
+void buildDmd(Types t, string dcpath, string ccpath, bool clib, bool dbg)
 {
     auto simdStr = to!string(t.simd);
     auto src = sources(t, clib ? ["capi"] : ["stdapi", "pfft"]);
     auto path = buildPath("lib", "libpfft.a");
+    auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
-    shellf("%s -O -inline -release -lib -of%s -version=%s %s", 
-        dcpath, path, simdStr, src);
+    shellf("%s %s -lib -of%s -version=%s %s", 
+        dcpath, optOrDbg,  path, simdStr, src);
 }
 
 void buildLdc(Types t, string dcpath, string ccpath, bool clib)
@@ -169,7 +173,7 @@ void buildLdc(Types t, string dcpath, string ccpath, bool clib)
     }
 }
 
-void buildGdcImpl(Types t, string dcpath, string ccpath, bool clib, string flags)
+void buildGdcImpl(Types t, string dcpath, string ccpath, bool clib, bool dbg, string flags)
 {
     enum archFlagDict = [
         SIMD.SSE : "-msse2", 
@@ -177,27 +181,28 @@ void buildGdcImpl(Types t, string dcpath, string ccpath, bool clib, string flags
         SIMD.Scalar : ""];
     
     auto simdStr = to!string(t.simd);
-    auto archFlag = archFlagDict.get(t.simd, "-m" ~ toLower(simdStr));
+    auto arch = archFlagDict.get(t.simd, "-m" ~ toLower(simdStr));
     auto src = sources(t, clib ? [] : ["stdapi", "pfft"]);
+    auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
    
     execute(
-        fm("%s -O -inline -release -version=%s %s %s %s -ofpfft.o -c", 
-            dcpath, simdStr, archFlag, flags, src),
+        fm("%s %s -version=%s %s %s %s -ofpfft.o -c", 
+            dcpath, optOrDbg, simdStr, arch, flags, src),
         fm("ar cr %s pfft.o %s", 
             clib ? clibPath : libPath, clib ? "dummy.o clib.o" : ""));
 }
 
-void buildGdc(Types t, string dcpath, string ccpath, bool pgo, bool clib, string flags)
+void buildGdc(Types t, string dcpath, string ccpath, bool pgo, bool clib, bool dbg, string flags)
 {
     if(pgo)
     {
-        buildGdcImpl(t, dcpath, ccpath, false, "-fprofile-generate");
-        buildTests(t, dcpath, Compiler.GDMD, ".", false, "-fprofile-generate");
+        buildGdcImpl(t, dcpath, ccpath, false, dbg, "-fprofile-generate");
+        buildTests(t, dcpath, Compiler.GDMD, ".", false, dbg, "-fprofile-generate");
         runBenchmarks(t);
-        buildGdcImpl(t, dcpath, ccpath, clib, fm("-fprofile-use %s", flags));
+        buildGdcImpl(t, dcpath, ccpath, clib, dbg, fm("-fprofile-use %s", flags));
     }
     else
-        buildGdcImpl(t, dcpath, ccpath, clib, flags);
+        buildGdcImpl(t, dcpath, ccpath, clib, dbg, flags);
 }
 
 void copyIncludes(Types t, bool clib)
@@ -277,6 +282,7 @@ Options:
                         in slightly worse performance, but the build will be 
                         much faster. You must use this flag when cross
                         compiling with GDMD.
+  --debug               Turns on debug flags and turns off optimization flags.
   --dflags FLAGS        Additional flags to be passed to D compiler.
   -v, --verbose         Be verbose.
   -h, --help            Print this message to stdout.
@@ -300,6 +306,7 @@ void doit(string[] args)
     bool nopgo;
     bool tests;
     bool help;
+    bool dbg;
     string flags = "";
     Compiler dc = Compiler.GDMD;
 
@@ -314,7 +321,8 @@ void doit(string[] args)
         "no-pgo", &nopgo,
         "dflags", &flags,
         "h|help", &help,
-        "v|verbose", &verbose);
+        "v|verbose", &verbose,
+        "debug", &dbg);
 
     if(help)
     {
@@ -350,14 +358,14 @@ void doit(string[] args)
         buildCObjects(t, dcpath, ccpath);
     
     if(dc == Compiler.GDMD)
-        buildGdc(t, dcpath, ccpath, !nopgo, clib, flags);
+        buildGdc(t, dcpath, ccpath, !nopgo, clib, dbg, flags);
     else if(dc == Compiler.LDC)
         buildLdc(t, dcpath, ccpath, clib);
     else
-        buildDmd(t, dcpath, ccpath, clib);
+        buildDmd(t, dcpath, ccpath, clib, dbg);
 
     if(tests)
-        buildTests(t, dcpath, dc, buildPath("..", "test")); 
+        buildTests(t, dcpath, dc, buildPath("..", "test"), !dbg, dbg); 
 
     foreach(e; dirEntries(".", SpanMode.shallow, false))
         if(e.isFile)
