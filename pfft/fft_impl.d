@@ -910,6 +910,14 @@ struct FFT(V, Options)
             }
     }
 
+    static void scale(T* data, size_t n, T factor)
+    {
+        auto k  = V.scalar_to_vector(factor);
+        
+        foreach(ref e; cast(vec[]) data[0 .. n])
+            e *= k;
+    }
+
     static size_t alignment(uint log2n)
     {
         
@@ -962,6 +970,8 @@ template instantiate(alias F)
         {
             F.interleaveArray(even, odd, interleaved, n);
         }
+    
+        void scale(T* data, size_t n, T factor);
         
         size_t alignment(uint log2n)
         {

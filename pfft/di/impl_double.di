@@ -18,4 +18,5 @@ size_t rtable_size_bytes(int log2n);
 
 void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n);
 void interleaveArray(T* even, T* odd, T* interleaved, size_t n);
+void scale(T* data, size_t n, T factor);
 size_t alignment(uint log2n);

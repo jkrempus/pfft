@@ -282,28 +282,6 @@ struct StdApi(bool usePhobos = false, bool isReal)
         mixin ElementAccess!(a, r);
 }
 
-struct InterleavedTypedApi
-{
-    import pfft.stdapi;
-    
-    Complex!(T)[] a;
-    Complex!(T)[] r;
-    alias TypedFft!T F;
-    F fft;
-    
-    this(int log2n)
-    {
-        a = F.allocate(one << log2n);
-        a[] = Complex!T(0, 0);
-        r = F.allocate(one << log2n);
-        fft = new TypedFft!T(one << log2n);
-    }
-    
-    void compute(){ fft.fft(a, r); }
-
-    mixin ElementAccess!(a, r);
-}
-
 version(BenchFftw)
 {
     static if(is(T == float))
@@ -446,8 +424,6 @@ void runTest(alias f, bool isReal)(string[] args, long mflops)
         f!(StdApi!(false, isReal), isReal)(log2n, flops);
     else if(a == "phobos")
         f!(StdApi!(true, isReal), isReal)(log2n, flops);
-    else if(a == "interleaved-typed")
-        f!(InterleavedTypedApi, isReal)(log2n, flops);
     else if(a == "pfft")
         f!(PfftApi!isReal, isReal)(log2n, flops);
     else

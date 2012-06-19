@@ -84,7 +84,7 @@ auto isComplexArray(R, T)()
         return false;
 }
 
-final class TypedFft(TT)
+private final class TypedFft(TT)
 {    
     static if(is(TT == float))
         import impl = pfft.impl_float;
@@ -100,7 +100,6 @@ final class TypedFft(TT)
     impl.T* re;
     impl.T* im;
     alias Complex!(impl.T) C;
-    C* return_buf = null, real_return_buf;
     impl.Table table;
     impl.RTable rtable;
     
@@ -156,10 +155,21 @@ final class TypedFft(TT)
         }
     }
 
-    void fft(Ret, R)(R range, Ret buf)
+    void fft(bool inverse, Ret, R)(R range, Ret buf)
     {
         deinterleaveArray(range);
-        impl.fft(re, im, log2n, table);
+        static if(inverse)
+        {
+            auto n = st!1 << log2n; 
+            impl.fft(im, re, log2n, table);
+            impl.scale(re, n, (cast(TT) 1) / n);
+            impl.scale(im, n, (cast(TT) 1) / n);
+            pragma(msg, TT);
+            pragma(msg, typeof((cast(TT) 1) / n));
+        }
+        else
+            impl.fft(re, im, log2n, table);
+        
         interleaveArray(buf);
     }
     
@@ -180,21 +190,17 @@ final class TypedFft(TT)
         }
     }
     
-    const(C[]) fft(R)(R range)
+    C[] fft(bool inverse, R)(R range)
     {
-        if(return_buf == null)
-            return_buf = cast(C*)GC.malloc(C.sizeof << (log2n + 1));
-        
-        fft(range, return_buf);
+        auto return_buf = cast(C*)GC.malloc(C.sizeof << log2n);
+        fft!inverse(range, return_buf);
         return return_buf[0 .. (1 << log2n)];
     }
 
-    const(C[]) rfft(R)(R range)
+    C[] rfft(R)(R range)
     {
         auto n = st!1 << log2n;
-        if(return_buf == null)
-            return_buf = cast(C*)GC.malloc(C.sizeof << (log2n + 1));
-        
+        auto return_buf = cast(C*)GC.malloc(C.sizeof << (log2n + 1));
         rfft(range, return_buf[0 .. 2 * n]);
         return return_buf[0 .. 2 * n];
     }
@@ -250,20 +256,25 @@ Fft constructor. $(D_PARAM nmax) is there just for compatibility with std.numeri
    
     
 /**
-Computes  the fourier transform of data in r  and returns it. Data in r 
-isn't changed.  R must be a forward range with complex or floating point 
+Computes  the discrete fourier transform of data in r  and returns it. Data in
+r isn't changed.  R must be a forward range with complex or floating point 
 elements. The number of elements in $(D_PARAM r) must be a power of two.
 T must be a floating point type. The length of the returned array is the
 same as the number of elements in $(D_PARAM r).
  */
-    const Complex!(T)[] fft(T, R)(R r) if(!isNumeric!(ElementType!R)) 
+    Complex!(T)[] fftTemplate(bool inverse, T, R)(R r) 
     {
         auto n = walkLength(r);
         assert((n & (n - 1)) == 0);
-        return impl!T(n).fft(r);
+        return impl!T(n).fft!inverse(r);
     }
 
-    const Complex!(T)[] fft(T, R)(R r) if(isNumeric!(ElementType!R)) 
+    Complex!(T)[] fft(T, R)(R r) if(!isNumeric!(ElementType!R)) 
+    {
+        return fftTemplate!false(r);
+    }
+
+    Complex!(T)[] fft(T, R)(R r) if(isNumeric!(ElementType!R)) 
     {
         auto n = walkLength(r);
         assert((n & (n - 1)) == 0);
@@ -271,31 +282,62 @@ same as the number of elements in $(D_PARAM r).
     }
    
 /**
-Computes the fourier transform of dat in r and stores the results in a user 
-provided buffer ret. Data in r isn't changed. R must be a forward range with 
-complex or floating point elements.Here a complex type is a type with  
+Computes the discrete fourier transform of data in r and stores the result in
+the user provided buffer ret. Data in r isn't changed. R must be a forward range
+with complex or floating point elements.Here a complex type is a type with  
 assignable properties .re and .im. Ret must be an input range with complex 
 elements. $(D_PARAM r) and $(D_PARAM ret) must have the same number of elements
 and that number must be a power of two.
  */ 
-    auto fft(R, Ret)(R r, Ret ret) if(!isNumeric!(ElementType!R))
+    private void fftTemplate(bool inverse, R, Ret)(R r, Ret ret)
     {
         static if(is(typeof(ret.save)))
-            ret.save();
+            ret = ret.save();
         
-        r.save();
+        r = r.save();
 
         auto n = walkLength(r);
         assert((n & (n - 1)) == 0);
-        impl!(typeof(ret[0].re))(n).fft(r, ret);
+        impl!(typeof(ret[0].re))(n).fft!inverse(r, ret);
+    }
+
+    void fft(R, Ret)(R r, Ret ret) if(!isNumeric!(ElementType!R))
+    {
+       fftTemplate!false(r, ret); 
     }
 
     auto fft(R, Ret)(R r, Ret ret) if(isNumeric!(ElementType!R))
     {
-        r.save();
+        r = r.save();
         auto n = walkLength(r);
         assert((n & (n - 1)) == 0);
         impl!(typeof(ret[0].re))(r.length / 2).rfft(r, ret);
+    }
+
+
+/**
+Computes  the inverse discrete fourier transform of data in r  and returns it. 
+Data in r isn't changed.  R must be a forward range with complex or floating 
+point  elements. The number of elements in $(D_PARAM r) must be a power of two.
+T must be a floating point type. The length of the returned array is the
+same as the number of elements in $(D_PARAM r).
+ */
+    Complex!(T)[] inverseFft(T, R)(R r)
+    {
+        return fftTemplate!true(r);
+    }
+
+/**
+Computes the inverse discrete fourier transform of data in r and stores the 
+result in the user provided buffer ret. Data in r isn't changed. R must be a 
+forward range with complex or floating point elements.Here a complex type is 
+a type with assignable properties .re and .im. Ret must be an input range with
+complex elements. $(D_PARAM r) and $(D_PARAM ret) must have the same number of
+elements and that number must be a power of two.
+ */ 
+    void inverseFft(R, Ret)(R r, Ret ret)
+    {
+       fftTemplate!true(r, ret); 
     }
 
 /**

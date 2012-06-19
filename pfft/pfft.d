@@ -46,6 +46,11 @@ final class Fft(TT)
         
         impl.fft(re.ptr, im.ptr, log2n, table);
     }
+    
+    void ifft(impl.T[] re, impl.T[] im)
+    {
+        fft(im, re); 
+    }
 
     static TT[] allocate(size_t n)
     {
