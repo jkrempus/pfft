@@ -164,8 +164,6 @@ private final class TypedFft(TT)
             impl.fft(im, re, log2n, table);
             impl.scale(re, n, (cast(TT) 1) / n);
             impl.scale(im, n, (cast(TT) 1) / n);
-            pragma(msg, TT);
-            pragma(msg, typeof((cast(TT) 1) / n));
         }
         else
             impl.fft(re, im, log2n, table);

@@ -365,7 +365,7 @@ void doit(string[] args)
         buildDmd(t, dcpath, ccpath, clib, dbg);
 
     if(tests)
-        buildTests(t, dcpath, dc, buildPath("..", "test"), !dbg, dbg); 
+        buildTests(t, dcpath, dc, buildPath("..", "test"), !dbg, dbg, flags); 
 
     foreach(e; dirEntries(".", SpanMode.shallow, false))
         if(e.isFile)

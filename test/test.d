@@ -4,7 +4,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
-    std.random, std.numeric, std.math, std.algorithm, std.exception;
+    std.random, std.numeric, std.math, std.algorithm, std.exception, std.typetuple;
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -54,7 +54,7 @@ template ImportDirect()
         import pfft.impl_float;
 }
 
-struct DirectApi(bool isReal) if(!isReal)
+struct DirectApi(bool isReal, bool isInverse) if(!isReal)
 {
     mixin ImportDirect!();
     import core.memory; 
@@ -72,12 +72,18 @@ struct DirectApi(bool isReal) if(!isReal)
         table = fft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
     }
     
-    void compute(){ fft(_re.ptr, _im.ptr, log2n, table); }
+    void compute()
+    {
+        static if(isInverse)
+            fft(_im.ptr, _re.ptr, log2n, table);
+        else 
+            fft(_re.ptr, _im.ptr, log2n, table); 
+    }
     
     mixin splitElementAccess!(_re, _im);
 }
 
-struct DirectApi(bool isReal) if(isReal)
+struct DirectApi(bool isReal, bool isInverse) if(isReal)
 {
     mixin ImportDirect!();
     import core.memory; 
@@ -85,13 +91,13 @@ struct DirectApi(bool isReal) if(isReal)
     T[] data;
     RTable rtable;
     int log2n;
-    DirectApi!false c;
+    DirectApi!(false, isInverse) c;
     T[] _re;
     T[] _im;
     
     this(int log2n)
     {
-        c = DirectApi!false(log2n - 1);
+        c = typeof(c)(log2n - 1);
         _re = c._re;
         _im = c._im;
 
@@ -102,7 +108,10 @@ struct DirectApi(bool isReal) if(isReal)
     }
     
     void compute()
-    { 
+    {
+        static if(isInverse)
+            enforce(0, "Direct api does not currently support real inverse transform."); 
+        
         deinterleaveArray(data.ptr, _re.ptr, _im.ptr, st!1 << (log2n - 1));
         rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
     }
@@ -110,7 +119,7 @@ struct DirectApi(bool isReal) if(isReal)
     mixin realSplitElementAccess!(data, _re, _im);
 }
 
-struct PfftApi(bool isReal) if(!isReal)
+struct PfftApi(bool isReal, bool isInverse) if(!isReal)
 {
     import pfft.pfft;
    
@@ -127,12 +136,18 @@ struct PfftApi(bool isReal) if(!isReal)
         _im = F.allocate(n);
     }
     
-    void compute(){ f.fft(_re, _im); }
+    void compute()
+    {
+        static if(isInverse)
+            f.fft(_im, _re);
+        else
+            f.fft(_re, _im); 
+    }
     
     mixin splitElementAccess!(_re, _im);
 }
 
-struct PfftApi(bool isReal) if(isReal)
+struct PfftApi(bool isReal, bool isInverse) if(isReal)
 {
     import pfft.pfft;
    
@@ -151,7 +166,13 @@ struct PfftApi(bool isReal) if(isReal)
         data = F.allocate(n);
     }
     
-    void compute(){ f.rfft(data, _re, _im); }
+    void compute()
+    {
+        static if(isInverse)
+            enforce(0, "Pfft api does not currently support real inverse transform."); 
+        
+        f.rfft(data, _re, _im);
+    }
     
     mixin realSplitElementAccess!(data, _re, _im);
 }
@@ -166,7 +187,7 @@ template ElementAccess(alias a, alias r)
 
 enum one = to!size_t(1);
 
-struct SimpleFft(T)
+struct SimpleFft(T, bool isInverse)
 {    
     Complex!(T)[] a;
     Complex!(T)[] w;
@@ -210,6 +231,10 @@ struct SimpleFft(T)
     
     void compute()
     {
+        static if(isInverse)
+            foreach(ref e; a)
+                swap(e.re, e.im);
+
         for (size_t m2 = (one << log2n) / 2; m2; m2 >>= 1)
         {
             auto table = w.ptr;
@@ -233,6 +258,11 @@ struct SimpleFft(T)
             }
         }
         bit_reverse(log2n, a);
+
+        
+        static if(isInverse)
+            foreach(ref e; a)
+                swap(e.re, e.im);
     }
     
     ref re(size_t i){ return a[i].re; }
@@ -241,13 +271,15 @@ struct SimpleFft(T)
     ref result_im(size_t i){ return a[i].im; }
 }
 
-struct StdApi(bool usePhobos = false, bool isReal)
+struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
 {
     static if(usePhobos)
         import std.numeric;
     else
         import pfft.stdapi;
-    
+       
+    enum{ normalizedInverse };
+ 
     static if(isReal)
         T[] a;
     else
@@ -270,7 +302,18 @@ struct StdApi(bool usePhobos = false, bool isReal)
         fft = new Fft(one << log2n);
     }
     
-    void compute(){ fft.fft(a, r); }
+    void compute()
+    { 
+        static if(isInverse)
+        {
+            static if(usePhobos && isReal)
+                enforce(0, "TODO");
+            else 
+                fft.inverseFft(a, r); 
+        }
+        else 
+            fft.fft(a, r); 
+    }
     
     static if(isReal)
     {
@@ -318,11 +361,12 @@ version(BenchFftw)
     }
 
     enum FFTW_FORWARD = -1;
+    enum FFTW_BACKWARD = 1;
     enum FFTW_ESTIMATE = 1U << 6;
     enum FFTW_MEASURE = 0U;
     enum FFTW_PATIENT = 1U << 5;
 
-    struct FFTW
+    struct FFTW(bool isInverse)
     {        
         Complex!(T)* a;
         Complex!(T)* r;
@@ -332,9 +376,10 @@ version(BenchFftw)
         this(int log2n)
         {
             a = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
-            a[] = Complex!T(0, 0);
+            a[0 .. st!1 << log2n] = Complex!T(0, 0);
             r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
-            p = fftw_plan_dft_1d(1 << log2n, a, r, FFTW_FORWARD, FFTW_PATIENT);
+            auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
+            p = fftw_plan_dft_1d(1 << log2n, a, r, dir, FFTW_PATIENT);
         }
         
         void compute(){ fftw_execute(p); }
@@ -343,7 +388,7 @@ version(BenchFftw)
     }
 }
 
-void bench(F, bool isReal)(int log2n, long flops)
+void bench(F, bool isReal, bool isInverse)(int log2n, long flops)
 {    
     auto f = F(log2n);
     
@@ -370,10 +415,10 @@ void bench(F, bool isReal)(int log2n, long flops)
 
 auto sq(T)(T a){ return a * a; }
 
-void precision(F, bool isReal)(int log2n, long flops)
+void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 {
     auto tested = F(log2n);
-    auto simple = SimpleFft!real(log2n);
+    auto simple = SimpleFft!(real, isInverse)(log2n);
     
     rndGen.seed(1);
     foreach(i; 0 .. 1 << log2n)
@@ -397,72 +442,166 @@ void precision(F, bool isReal)(int log2n, long flops)
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
-    foreach(i; 0 .. (1 << log2n) / 2)
+    foreach(i; 0 .. (1 << log2n) / 2 + 1)
     {
         auto tre = tested.result_re(i);
         auto tim = tested.result_im(i);
         auto sre = simple.result_re(i);
         auto sim = simple.result_im(i);
+        
+        static if(is(typeof(F.normalizedInverse)))
+        {
+            sre /= (st!1 << log2n);
+            sim /= (st!1 << log2n);
+        }        
+
         sumSqDiff += sq(sre - tre) + sq(sim - tim); 
-        sumSqAvg += 0.5 * (sre + tre) + sq(sim + tim); 
+        sumSqAvg += sq(0.5 * (sre + tre)) + sq(0.5 * (sim + tim)); 
     }
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
-void runTest(alias f, bool isReal)(string[] args, long mflops)
+void runTest(bool testSpeed, bool isReal, bool isInverse)(string[] args, long mflops)
 {
+    static if(testSpeed)
+        alias bench f;
+    else
+        alias precision f;
+
     int log2n = to!int(args[2]);
     long flops = mflops * 1000_000;
    
     auto a = args[1];
  
     if(a == "simple")
-        f!(SimpleFft!T, isReal)(log2n, flops);
+        f!(SimpleFft!(T, isInverse), isReal, isInverse)(log2n, flops);
     else if(a == "direct")
-        f!(DirectApi!(isReal), isReal)(log2n, flops);
+        f!(DirectApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
     else if(a == "std")
-        f!(StdApi!(false, isReal), isReal)(log2n, flops);
+        f!(StdApi!(false, isReal, isInverse), isReal, isInverse)(log2n, flops);
     else if(a == "phobos")
-        f!(StdApi!(true, isReal), isReal)(log2n, flops);
+        f!(StdApi!(true, isReal, isInverse), isReal, isInverse)(log2n, flops);
     else if(a == "pfft")
-        f!(PfftApi!isReal, isReal)(log2n, flops);
+        f!(PfftApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
     else
     {
         version(BenchFftw)
         {
+            writefln("fftw, %s", a);
             if(a == "fftw")
-                f!(FFTW, isReal)(log2n, flops);
+                f!(FFTW!isInverse, isReal, isInverse)(log2n, flops);
             else 
                 throw new Exception(
                     "Implementation \"" ~ a ~ "\" is not supported" );
         }
-        throw new Exception(
-            "Implementation \"" ~ a ~ "\" is not supported" );
+        else
+            throw new Exception(
+                "Implementation \"" ~ a ~ "\" is not supported" );
     }
 }
 
-void main(string[] args)
-{
-    bool s;
-    bool r;
-    int mflops = 10_000;
-    
-    getopt(args, "s", &s, "r", &r, "m", &mflops);
-    
-    enforce(args.length == 3, "There must be exactly two non option arguments.");
+template Group(A...){ alias A Members; }
 
-    if(r)
-    {
-        if(s)
-            runTest!(bench, true)(args, mflops);
-        else 
-            runTest!(precision, true)(args, mflops);
-    }
+auto callInstance(alias f, alias FParams = Group!(), Params...)(Params params)
+{
+    static if(is(typeof(f!(FParams.Members)(params))))
+        return f!(FParams.Members)(params);
     else
     {
-        if(s)
-            runTest!(bench, false)(args, mflops);
-        else 
-            runTest!(precision, false)(args, mflops);
+        foreach(e; TypeTuple!(true, false))
+            if(e == params[0])
+                return callInstance!
+                    (f, Group!(FParams.Members, e))
+                    (params[1 .. $]);
+    }
+}
+
+enum usage =
+"
+Usage: %s [options] implementation log2n.
+Test program for pfft. It tests precision or, if -s option is used, speed of
+different interfaces to pfft and a few other fft implementations. log2n is
+the base 2 logarithm of the number of data points the fft will be tested on.
+implementation is a fft implementation that will be tested. Valid values
+of this parameter are listed below. 
+
+If the -s option is not used, the program will choose some random data and 
+perform fft on it twice - once using the chosen implementation and once using 
+a simple Cooley Tukey implementation that operates on extended precision 
+floating point numbers. It will then compute the sum of squares of the 
+difference of the two results and the sum of squares of the average of the 
+two results and print the square root of the quotient of the two sums.
+
+If the -s option is used the program will compute fft a number of times, time 
+it and report the speed in billions of floating point operations per second. 
+This is not the number of actual floating point operations performed by the 
+implementation - instead it is defined as the number of operations a basic
+Cooley Tukey implementation would need to perform to calculate the fft of
+the given size. For complex transforms that is:
+
+Nop = 5 * N * log2(N)
+
+and for real transforms it is:
+
+Nop = 2.5 * N * log2(N)
+
+
+Implementations:
+  simple            A simple Cooley Tukey implementation that is used 
+                    internally for testing the precision of other 
+                    implementations.
+  direct            A direct interface to pfft (modules pfft.*_impl).
+  pfft              The recommended interface to pfft (module pfft.pfft).
+  std               An interface to pfft that mimics the API of 
+                    std.numeric.Fft.(module pfft.stdapi).
+  phobos            Phobos implementation of fft (std.numeric.Fft).
+  fftw              FFTW implementation. This one is only available
+                    if the test program was compiled with -version=BenchFftw.
+
+Options:
+  -s                Test speed instead of precision.
+  -r                Test real fft instead of a complex one
+  -i                Test inverse fft.
+  -m M              Choose the number of times to run fft so that the total
+                    number of floating point operations (as defined above)
+                    will be as close to M * 10e6 as possible. If the number
+                    of floating point operations taken by one execution of fft
+                    is larger than M * 10e6, do one fft. The default value of 
+                    this parameter is 10000.
+  -h, --help        Print this message to stdout and exit.
+";
+ 
+void main(string[] args)
+{
+    try
+    {
+        bool s;
+        bool r;
+        bool i;
+        bool h;
+        int mflops = 10_000;
+
+        getopt(args, 
+            "s", &s, 
+            "r", &r, 
+            "i", &i, 
+            "m", &mflops,
+            "h|help", &h);
+
+        if(h)
+        {
+            writefln(usage, args[0]);
+            return;
+        }
+
+        enforce(args.length == 3, "There must be exactly two non option arguments.");
+
+        callInstance!runTest(s, r, i, args, mflops);
+    }
+    catch(Exception e)
+    {
+        auto s = findSplit(to!string(e), "---")[0];
+        stderr.writefln("Exception was thrown: %s", s);
+        stderr.writefln(usage, args[0]); 
     }
 }

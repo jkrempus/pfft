@@ -971,7 +971,10 @@ template instantiate(alias F)
             F.interleaveArray(even, odd, interleaved, n);
         }
     
-        void scale(T* data, size_t n, T factor);
+        void scale(T* data, size_t n, T factor)
+        {
+            F.scale(data, n, factor); 
+        }
         
         size_t alignment(uint log2n)
         {
