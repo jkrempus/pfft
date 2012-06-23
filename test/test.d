@@ -612,7 +612,8 @@ void main(string[] args)
         bool h;
         int mflops = 10_000;
 
-        getopt(args, 
+        getopt(
+            args, 
             "s", &s, 
             "r", &r, 
             "i", &i, 

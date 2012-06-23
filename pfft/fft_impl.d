@@ -773,7 +773,7 @@ struct FFT(V, Options)
 
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
 
-        foreach(long i, ref e; r)
+        foreach(size_t i, ref e; r)
         {
             T phi = - (_asin(1.0) * (i + 1)) / r.length;
  
@@ -915,7 +915,7 @@ struct FFT(V, Options)
         auto k  = V.scalar_to_vector(factor);
         
         foreach(ref e; cast(vec[]) data[0 .. n])
-            e *= k;
+            e = e * k;
     }
 
     static size_t alignment(uint log2n)

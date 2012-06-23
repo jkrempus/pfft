@@ -11,40 +11,37 @@ import core.memory, std.complex, std.traits, core.bitop, std.typetuple, std.rang
 // std.math is imported, so we need to do this:
 version(GNU) version(ARM)
 {
-    template staticReduce(alias r, alias accumulate, args...)
+    auto generateFunctions(string fmt, string[] names)
     {
-        static if(args.length == 0)
-            enum staticReduce = r;
-        else
-            enum staticReduce = 
-                staticReduce!(accumulate!(r, args[0]), accumulate, args[1..$]);
-    }
+        auto r = "";
+        
+        foreach(name; names)
+            r ~= std.array.replace(fmt, "%s", name);
 
-    template mathLfunc(alias r, alias name)
-    {
-        enum mathLfunc = "
-            extern(C) auto "~name~"l(real a) 
-            { 
-                return cast(real) 
-                    core.stdc.math."~name~"(cast(double) a); 
-            }
-            " ~ r; 
+        return r; 
     }
+  
+    enum twoArgMathL =
+    q{
+        extern(C) auto %sl(real a, real b) 
+        { 
+            return cast(real) 
+                core.stdc.math.%s(cast(double) a, cast(double) b); 
+        }
+    };
+ 
+    enum oneArgMathL =
+    q{
+        extern(C) auto %sl(real a) 
+        { 
+            return cast(real) 
+                core.stdc.math.%s(cast(double) a); 
+        }
+    };
     
-    template twoArgMathLfunc(alias r, alias name) 
-    {
-        enum twoArgMathLfunc = "
-            extern(C) auto "~name~"l(real a, real b) 
-            { 
-                return cast(real) 
-                    core.stdc.math."~name~"(cast(double) a, cast(double) b); 
-            }
-            " ~ r; 
-    }
-      
-    mixin(staticReduce!("", mathLfunc, 
-        "sin", "cos", "asin", "tan", "sqrt", "atan", "logb"));
-    mixin(staticReduce!("", twoArgMathLfunc,"remainder", "fmod", "atan2"));
+    mixin(generateFunctions(oneArgMathL, 
+        ["sin", "cos", "asin", "tan", "sqrt", "atan", "logb"]));
+    mixin(generateFunctions(twoArgMathL, ["remainder", "fmod", "atan2"]));
 
     extern(C) auto modfl(real a, real* b) 
     {
