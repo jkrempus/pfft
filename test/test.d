@@ -333,10 +333,12 @@ version(BenchFftw)
         
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
+        extern(C) void* fftwf_plan_dft_r2c_1d(int, float*, Complex!(float)*, uint);
         extern(C) void fftwf_execute(void *);
         
         alias fftwf_malloc fftw_malloc;
         alias fftwf_plan_dft_1d fftw_plan_dft_1d;
+        alias fftwf_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
         alias fftwf_execute fftw_execute;
     }
     else static if(is(T == double))
@@ -345,6 +347,7 @@ version(BenchFftw)
         
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
+        extern(C) void* fftw_plan_dft_r2c_1d(int, double*, Complex!(double)*, uint);
         extern(C) void fftw_execute(void *);
     }
     else
@@ -353,10 +356,12 @@ version(BenchFftw)
         
         extern(C) void* fftwl_malloc(size_t);
         extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
+        extern(C) void* fftwl_plan_dft_r2c_1d(int, real*, Complex!(real)*, uint);
         extern(C) void fftwl_execute(void *);
         
         alias fftwl_malloc fftw_malloc;
         alias fftwl_plan_dft_1d fftw_plan_dft_1d;
+        alias fftwl_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
         alias fftwl_execute fftw_execute;
     }
 
@@ -366,7 +371,7 @@ version(BenchFftw)
     enum FFTW_MEASURE = 0U;
     enum FFTW_PATIENT = 1U << 5;
 
-    struct FFTW(bool isInverse)
+    struct FFTW(bool isReal, bool isInverse) if(!isReal)
     {        
         Complex!(T)* a;
         Complex!(T)* r;
@@ -385,6 +390,33 @@ version(BenchFftw)
         void compute(){ fftw_execute(p); }
         
         mixin ElementAccess!(a, r);
+    }
+
+    struct FFTW(bool isReal, bool isInverse) if(isReal)
+    {        
+        T* a;
+        Complex!(T)* r;
+        
+        void* p;
+        
+        this(int log2n)
+        {
+            auto n = st!1 << log2n;
+            a = cast(T*) fftw_malloc(T.sizeof *n);
+            a[0 .. n] = 0;
+            r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * (n / 2 + 1));
+            
+            static if(isInverse)
+                enforce(0,"Benchmarking inverse real transform for fftw is not supported");                
+
+            p = fftw_plan_dft_r2c_1d(to!int(n), a, r, FFTW_PATIENT);
+        }
+        
+        void compute(){ fftw_execute(p); }
+        
+        ref re(size_t i){ return a[i]; }
+        ref result_re(size_t i){ return r[i].re; }
+        ref result_im(size_t i){ return r[i].im; }
     }
 }
 
@@ -487,9 +519,8 @@ void runTest(bool testSpeed, bool isReal, bool isInverse)(string[] args, long mf
     {
         version(BenchFftw)
         {
-            writefln("fftw, %s", a);
             if(a == "fftw")
-                f!(FFTW!isInverse, isReal, isInverse)(log2n, flops);
+                f!(FFTW!(isReal, isInverse), isReal, isInverse)(log2n, flops);
             else 
                 throw new Exception(
                     "Implementation \"" ~ a ~ "\" is not supported" );
@@ -502,16 +533,16 @@ void runTest(bool testSpeed, bool isReal, bool isInverse)(string[] args, long mf
 
 template Group(A...){ alias A Members; }
 
-auto callInstance(alias f, alias FParams = Group!(), Params...)(Params params)
+auto callInstance(alias f, int n, alias FParams = Group!(), Params...)(Params params)
 {
-    static if(is(typeof(f!(FParams.Members)(params))))
+    static if(n == 0)
         return f!(FParams.Members)(params);
     else
     {
         foreach(e; TypeTuple!(true, false))
             if(e == params[0])
                 return callInstance!
-                    (f, Group!(FParams.Members, e))
+                    (f, n - 1, Group!(FParams.Members, e))
                     (params[1 .. $]);
     }
 }
@@ -596,7 +627,7 @@ void main(string[] args)
 
         enforce(args.length == 3, "There must be exactly two non option arguments.");
 
-        callInstance!runTest(s, r, i, args, mflops);
+        callInstance!(runTest, 3)(s, r, i, args, mflops);
     }
     catch(Exception e)
     {
