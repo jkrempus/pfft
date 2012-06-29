@@ -914,7 +914,7 @@ struct FFT(V, Options)
     {
         auto k  = V.scalar_to_vector(factor);
         
-        foreach(ref e; cast(vec[]) data[0 .. n])
+        foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
             e = e * k;
     }
 

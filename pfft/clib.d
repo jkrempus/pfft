@@ -27,6 +27,13 @@ private template code(string type, string suffix)
     `
         import impl_`~type~` = pfft.impl_`~type~`;
 
+        
+        struct Table_`~type~`
+        {
+            impl_`~type~`.Table p;
+            size_t log2n;
+        }
+
         extern(C) auto pfft_table_`~suffix~`(size_t n, void* mem)
         {
             assert_power2(n);
@@ -37,10 +44,10 @@ private template code(string type, string suffix)
                 posix_memalign(&mem, impl_`~type~`.alignment(log2n), 
                     impl_`~type~`.table_size_bytes(log2n));
 
-            return Table(impl_`~type~`.fft_table(bsf(n), mem), log2n);
+            return Table_`~type~`(impl_`~type~`.fft_table(bsf(n), mem), log2n);
         }
 
-        extern(C) void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, Table table)
+        extern(C) void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, Table_`~type~` table)
         {
             impl_`~type~`.fft(re, im, cast(uint) table.log2n, table.p);
         }
@@ -74,7 +81,7 @@ private template code(string type, string suffix)
             free(p);
         }
 
-        extern(C) void pfft_table_free_`~suffix~`(Table table)
+        extern(C) void pfft_table_free_`~suffix~`(Table_`~type~` table)
         {
             free(table.p);
         }

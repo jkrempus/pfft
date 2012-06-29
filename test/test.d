@@ -535,16 +535,16 @@ template Group(A...){ alias A Members; }
 
 auto callInstance(alias f, int n, alias FParams = Group!(), Params...)(Params params)
 {
-    static if(n == 0)
-        return f!(FParams.Members)(params);
-    else
-    {
-        foreach(e; TypeTuple!(true, false))
-            if(e == params[0])
+    foreach(e; TypeTuple!(true, false))
+        if(e == params[0])
+        {
+            static if(n == 1)
+                return f!(FParams.Members, e)(params[1 .. $]);
+            else
                 return callInstance!
                     (f, n - 1, Group!(FParams.Members, e))
                     (params[1 .. $]);
-    }
+        }
 }
 
 enum usage =
@@ -629,6 +629,7 @@ void main(string[] args)
         enforce(args.length == 3, "There must be exactly two non option arguments.");
 
         callInstance!(runTest, 3)(s, r, i, args, mflops);
+        //runTest!(true, false, false)(args, mflops);
     }
     catch(Exception e)
     {
