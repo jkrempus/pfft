@@ -245,10 +245,7 @@ final class Fft
 /** 
 Fft constructor. $(D_PARAM nmax) is there just for compatibility with std.numeric.Fft.
  */
-    this(size_t nmax = size_t.init)
-    {
-    }
-   
+    this(size_t nmax = size_t.init) { }
     
 /**
 Computes  the discrete fourier transform of data in r  and returns it. Data in

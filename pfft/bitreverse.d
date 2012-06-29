@@ -51,12 +51,13 @@ void iter_bit_reversed_pairs(alias dg, A...)(int log2n, A args)
 
 void bit_reverse_simple(T)(T* p, int log2n)
 {
-    iter_bit_reversed_pairs!(function (int i0, int i1, T* p)
+    scope loopBody = (int i0, int i1)
     {
         if(i1 > i0)
             _swap(p[i0],p[i1]);
-    })
-    (log2n, p);
+    };
+
+    iter_bit_reversed_pairs!loopBody(log2n);
 }
 
 void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
@@ -109,24 +110,24 @@ struct BitReverse(alias V, Options)
     
     static void init_br_table()(uint * table, int log2n)
     {
-        iter_bit_reversed_pairs!(function (int i0, int i1, uint** p)
+        scope loopBody0 = (int i0, int i1)
         {
             if(i1 == i0)
-                (**p = i0<<2), (*p)++;
-        })
-        (log2n - 4, &table);
+                (*table = i0<<2), table++;
+        };
+        iter_bit_reversed_pairs!loopBody0(log2n - 4);
 
-        iter_bit_reversed_pairs!(function (int i0, int i1, uint** p)
+        scope loopBody1 = (int i0, int i1)
         {
             if(i1 < i0)
             {
-                **p = i0<<2;
-                (*p)++;
-                **p = i1<<2;
-                (*p)++;
+                *table = i0<<2;
+                table++;
+                *table = i1<<2;
+                table++;
             }
-        })
-        (log2n - 4, &table);
+        };
+        iter_bit_reversed_pairs!loopBody1(log2n - 4);
     }
     
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
@@ -211,9 +212,8 @@ struct BitReverse(alias V, Options)
         int log2m = log2n - log2l;
         size_t m = 1<<log2m, n = 1<<log2n;
         T * pend = p + n;
-      
-        iter_bit_reversed_pairs!(function (int i0, int i1, T* buffer, 
-            size_t m, T* p, T* pend, uint* table)
+        
+        scope loopBody = (int i0, int i1)
         {
             if(i1 >= i0)
             {
@@ -234,7 +234,7 @@ struct BitReverse(alias V, Options)
                 for(T* pp = p + i0*l, pb = buffer; pp < pend; pp += m, pb += l)
                     copy_array!l(pp, pb);
             }
-        })
-        (log2m-log2l, buffer, m, p, pend, table);
+        };
+        iter_bit_reversed_pairs!loopBody(log2m-log2l);
     }
 }

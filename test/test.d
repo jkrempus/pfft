@@ -481,7 +481,7 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
         auto sre = simple.result_re(i);
         auto sim = simple.result_im(i);
         
-        static if(is(typeof(F.normalizedInverse)))
+        static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {
             sre /= (st!1 << log2n);
             sim /= (st!1 << log2n);
