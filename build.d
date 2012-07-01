@@ -92,7 +92,6 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
     bool optimized = true, bool dbg = false, string flags = "")
 {
     auto srcPath = buildPath("..", "test", "test.d");
-    auto simdStr = to!string(t.simd);
 
     foreach(type; t.types)
     {
@@ -108,14 +107,14 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
             case Compiler.GDMD:
                 auto opt = optimized ? dmdOpt : "";
                 opt ~= dbg ? dmdDbg : ""; 
-                shellf("%s %s -version=%s -version=%s", 
-                    dcpath, opt, simdStr , common);
+                shellf("%s %s -version=%s", 
+                    dcpath, opt, common);
                 break;
 
             case Compiler.LDC:
                 auto opt = optimized ? "-O5 -release" : "";
-                shellf("%s %s -d-version=%s -d-version=%s", 
-                    dcpath, opt, simdStr, common);
+                shellf("%s %s -d-version=%s", 
+                    dcpath, opt, common);
         }
     }
 }
@@ -267,21 +266,25 @@ Options:
                         GDMD and LDC.
   --dc-path PATH        A path to D compiler
   --cc-path PATH        A path to C compiler (used when building with --clib
-                        or with LDC)
+                        or with LDC).
   --simd SIMD           SIMD instruction set to use. Must be one of SSE, AVX,
-                        Neon and Scalar.
+                        Neon and Scalar. This flag is ignored when building 
+                        tests.
   --type TYPE           Arithmetic type that the resulting library will support.
                         TYPE must be one of float, double and real. There can
                         be more than one --type flag. Omitting this flag is 
                         equivalent to --type float --type double --type real.
-  --clib                Build a C library
+  --clib                Build a C library.
   --tests               Build tests. Executables will be saved to ./test. 
                         Can not be used with --clib or when cross compiling.
+                        You must build the D library for selected types before 
+                        running building tests.
   --no-pgo              Disable profile guided optimization. This flag can
                         only be used with GDMD. Using this flag will result
                         in slightly worse performance, but the build will be 
                         much faster. You must use this flag when cross
-                        compiling with GDMD.
+                        compiling with GDMD. This flag is ignored when building
+                        tests.
   --debug               Turns on debug flags and turns off optimization flags.
   --dflags FLAGS        Additional flags to be passed to D compiler.
   -v, --verbose         Be verbose.
@@ -345,33 +348,39 @@ void doit(string[] args)
         t.types = ["float", "double", "real"];
 
     auto buildDir = clib ? "generated-c" : "generated";
-    try rmdirRecurse(buildDir); catch{}
-    mkdir(buildDir);
-    chdir(buildDir);
-    mkdir("lib");
-    mkdir("include");
-    mkdir(buildPath("include", "pfft"));
-
-    copyIncludes(t, clib);
-
-    if(clib)
-        buildCObjects(t, dcpath, ccpath);
-    
-    if(dc == Compiler.GDMD)
-        buildGdc(t, dcpath, ccpath, !nopgo, clib, dbg, flags);
-    else if(dc == Compiler.LDC)
-        buildLdc(t, dcpath, ccpath, clib);
-    else
-        buildDmd(t, dcpath, ccpath, clib, dbg);
 
     if(tests)
-        buildTests(t, dcpath, dc, buildPath("..", "test"), !dbg, dbg, flags); 
+    {
+        chdir(buildDir);
+        buildTests(t, dcpath, dc, buildPath("..", "test"), !dbg, dbg, flags);
+    }
+    else
+    {
+        try rmdirRecurse(buildDir); catch{}
+        mkdir(buildDir);
+        chdir(buildDir);
+        mkdir("lib");
+        mkdir("include");
+        mkdir(buildPath("include", "pfft"));
 
-    foreach(e; dirEntries(".", SpanMode.shallow, false))
-        if(e.isFile)
-            remove(e.name);
-    if(clib)
-        deleteDOutput();
+        copyIncludes(t, clib);
+
+        if(clib)
+            buildCObjects(t, dcpath, ccpath);
+        
+        if(dc == Compiler.GDMD)
+            buildGdc(t, dcpath, ccpath, !nopgo, clib, dbg, flags);
+        else if(dc == Compiler.LDC)
+            buildLdc(t, dcpath, ccpath, clib);
+        else
+            buildDmd(t, dcpath, ccpath, clib, dbg);
+
+        foreach(e; dirEntries(".", SpanMode.shallow, false))
+            if(e.isFile)
+                remove(e.name);
+        if(clib)
+            deleteDOutput();
+    }
 }
 
 void main(string[] args)
@@ -382,6 +391,7 @@ void main(string[] args)
     {
         auto s = findSplit(to!string(e), "---")[0];
         stderr.writefln("Exception was thrown: %s", s);
-        stderr.writeln(usage); 
+        stderr.writeln(usage);
+        core.stdc.stdlib.exit(1); 
     }
 }

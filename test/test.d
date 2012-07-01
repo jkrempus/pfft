@@ -22,18 +22,22 @@ template splitElementAccess(alias _re, alias _ri)
     ref result_im(size_t i){ return _ri[i]; }
 }
 
-template realSplitElementAccess(alias data, alias _re, alias _ri)
+template realSplitElementAccess(
+    alias data, alias _re, alias _ri, bool compactFormat)
 {
     ref re(size_t i){ return data[i]; }
 
     auto result_re(size_t i)
     { 
-        return i == _re.length ? _im[0] : _re[i]; 
+        return (compactFormat &&  i == _re.length) ? _im[0] : _re[i]; 
     }
     
     T result_im(size_t i)
-    { 
-        return i == 0 ? 0.0 : i >= _im.length ?  0.0 : _im[i]; 
+    {
+        static if(compactFormat) 
+            return i == 0 ? 0.0 : i == _im.length ?  0.0 : _im[i];
+        else
+            return _im[i];
     }
 }
 
@@ -116,7 +120,7 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
         rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
     }
     
-    mixin realSplitElementAccess!(data, _re, _im);
+    mixin realSplitElementAccess!(data, _re, _im, true);
 }
 
 struct PfftApi(bool isReal, bool isInverse) if(!isReal)
@@ -161,8 +165,8 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
     {
         size_t n = 1U << log2n; 
         f = new F(n);
-        _re = F.allocate(n / 2);
-        _im = F.allocate(n / 2);
+        _re = F.allocate(n / 2 + 1);
+        _im = F.allocate(n / 2 + 1);
         data = F.allocate(n);
     }
     
@@ -174,7 +178,7 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
         f.rfft(data, _re, _im);
     }
     
-    mixin realSplitElementAccess!(data, _re, _im);
+    mixin realSplitElementAccess!(data, _re, _im, false);
 }
 
 template ElementAccess(alias a, alias r)
@@ -449,11 +453,12 @@ auto sq(T)(T a){ return a * a; }
 
 void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 {
+    auto n = st!1 << log2n;
     auto tested = F(log2n);
     auto simple = SimpleFft!(real, isInverse)(log2n);
     
     rndGen.seed(1);
-    foreach(i; 0 .. 1 << log2n)
+    foreach(i; 0 .. n)
     {
         auto re = uniform(0.0,1.0);
         simple.re(i) = re;
@@ -474,7 +479,7 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
-    foreach(i; 0 .. (1 << log2n) / 2 + 1)
+    foreach(i; 0 .. n / 2 + 1)
     {
         auto tre = tested.result_re(i);
         auto tim = tested.result_im(i);
@@ -483,8 +488,8 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
         
         static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {
-            sre /= (st!1 << log2n);
-            sim /= (st!1 << log2n);
+            sre /= n;
+            sim /= n;
         }        
 
         sumSqDiff += sq(sre - tre) + sq(sim - tim); 

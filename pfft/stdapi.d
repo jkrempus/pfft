@@ -252,7 +252,7 @@ Computes  the discrete fourier transform of data in r  and returns it. Data in
 r isn't changed.  R must be a forward range with complex or floating point 
 elements. The number of elements in $(D_PARAM r) must be a power of two.
 T must be a floating point type. The length of the returned array is the
-same as the number of elements in $(D_PARAM r).
+same as the number of elements in $(D_PARAM r) .
  */
     Complex!(T)[] fftTemplate(bool inverse, T, R)(R r) 
     {
