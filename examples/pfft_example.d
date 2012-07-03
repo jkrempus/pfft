@@ -5,19 +5,18 @@
 // the second the imaginary part. The fft in this example operates on 
 // single precission floating point numbers.
 //
-// This example uses pfft.pfft, which is the recommended way to use pfft.
+// This example uses pfft.pfft.
 
 import std.stdio, std.conv, std.exception;
 import pfft.pfft;
 
 void main(string[] args)
 {
-    alias Pfft!float F;
-
     auto n = to!int(args[1]);
-    
     enforce((n & (n-1)) == 0, "N must be a power of two.");
     
+    alias Fft!float F;
+
     auto f = new F(n);
 
     auto re = F.allocate(n);
