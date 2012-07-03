@@ -115,8 +115,9 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     {
         static if(isInverse)
             enforce(0, "Direct api does not currently support real inverse transform."); 
-        
-        deinterleaveArray(data.ptr, _re.ptr, _im.ptr, st!1 << (log2n - 1));
+       
+        deinterleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
+       
         rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
     }
     
@@ -498,41 +499,38 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
-void runTest(bool testSpeed, bool isReal, bool isInverse)(string[] args, long mflops)
+void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl, long mflops)
 {
     static if(testSpeed)
         alias bench f;
     else
         alias precision f;
 
-    int log2n = to!int(args[2]);
     long flops = mflops * 1000_000;
    
-    auto a = args[1];
- 
-    if(a == "simple")
+    if(impl == "simple")
         f!(SimpleFft!(T, isInverse), isReal, isInverse)(log2n, flops);
-    else if(a == "direct")
+    else if(impl == "direct")
         f!(DirectApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else if(a == "std")
+    else if(impl == "std")
         f!(StdApi!(false, isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else if(a == "phobos")
+    else if(impl == "phobos")
         f!(StdApi!(true, isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else if(a == "pfft")
+    else if(impl == "pfft")
         f!(PfftApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
     else
     {
         version(BenchFftw)
         {
-            if(a == "fftw")
+            if(impl == "fftw")
                 f!(FFTW!(isReal, isInverse), isReal, isInverse)(log2n, flops);
             else 
                 throw new Exception(
-                    "Implementation \"" ~ a ~ "\" is not supported" );
+                    "Implementation \"" ~ impl ~ "\" is not supported" );
         }
         else
             throw new Exception(
-                "Implementation \"" ~ a ~ "\" is not supported" );
+                "Implementation \"" ~ impl ~ "\" is not supported" );
     }
 }
 
@@ -633,7 +631,7 @@ void main(string[] args)
 
         enforce(args.length == 3, "There must be exactly two non option arguments.");
 
-        callInstance!(runTest, 3)(s, r, i, args, mflops);
+        callInstance!(runTest, 3)(s, r, i, to!int(args[2]), args[1], mflops);
         //runTest!(true, false, false)(args, mflops);
     }
     catch(Exception e)
