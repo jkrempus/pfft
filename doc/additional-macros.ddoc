@@ -1,0 +1,2 @@
+D = <strong><code>$0</code></strong>
+DP = $(D_PARAM $0)
