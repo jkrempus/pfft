@@ -807,14 +807,31 @@ struct FFT(V, Options)
         }
 
         fft(rr, ri, log2n - 1, table);
-        rfft_last_pass(rr, ri, log2n, rtable);
+        rfft_last_pass!false(rr, ri, log2n, rtable);
     }
 
-    static void rfft_last_pass()(T* rr, T* ri, int log2n, RTable rtable) 
+    static void irfft()(
+        T* rr, T* ri, int log2n, Table table, RTable rtable) 
+    {
+        if(log2n == 0)
+            return;
+        else if(log2n == 1)
+        {
+            auto rr0 = rr[0], ri0 = ri[0];
+            rr[0] = (rr0 + ri0) * (cast(T)0.5);
+            ri[0] = (rr0 - ri0) * (cast(T)0.5);
+            return;
+        }
+
+        rfft_last_pass!true(rr, ri, log2n, rtable);
+        fft(ri, rr, log2n - 1, table);
+    }
+
+    static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supportsReal)
     {
         if(st!1 << log2n < 4 * vec_size)
-            return SFFT.rfft_last_pass(rr, ri, log2n, rtable);       
+            return SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable);       
  
         static vec* v(T* a){ return cast(vec*) a; }
 
@@ -840,9 +857,18 @@ struct FFT(V, Options)
             vec br = r0r - r1r;
             vec bi = r0i + r1i;
 
-            vec tmp = br * wi + bi * wr;
-            br = bi * wi - br * wr;
-            bi = tmp;
+            static if(inverse) // we use -w* instead of w in this case
+            {
+                vec tmp = br * wi - bi * wr;
+                br = bi * wi + br * wr;
+                bi = tmp;
+            }
+            else
+            {
+                vec tmp = br * wi + bi * wr;
+                br = bi * wi - br * wr;
+                bi = tmp;
+            }
 
             V.unaligned_store(rr + i0, ar + bi);
             V.unaligned_store(ri + i0, br - ai);
@@ -854,16 +880,24 @@ struct FFT(V, Options)
         {
             auto r0r = rr[0];
             auto r0i = ri[0];
-
-            rr[0] = r0r + r0i;
-            ri[0] = r0r - r0i;
+            
+            static if(inverse)
+            {
+                rr[0] = (r0r + r0i) * (cast(T) 0.5);
+                ri[0] = (r0r - r0i) * (cast(T) 0.5);
+            }
+            else
+            {
+                rr[0] = r0r + r0i;
+                ri[0] = r0r - r0i;
+            }
         }
     }
     
-    static void rfft_last_pass()(T* rr, T* ri, int log2n, RTable rtable) 
+    static void rfft_last_pass(inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(!supportsReal)
     {
-        SFFT.rfft_last_pass(rr, ri, log2n, rtable); 
+        SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
     static void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
@@ -989,6 +1023,11 @@ template instantiate(alias F)
             F.rfft(re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
         }
         
+        void irfft(T* re, T* im, uint log2n, Table t, RTable rt)
+        {
+            F.irfft(re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
+        }
+
         auto rfft_table(uint log2n, void* p = null)
         {
             return cast(RTable) F.rfft_table(log2n, p);

@@ -244,7 +244,7 @@ struct Options
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 14;
     enum log2_optimal_n = 8;
-    enum passes_per_recursive_call = 5;
+    enum passes_per_recursive_call = 4;
     enum log2_recursive_passes_chunk_size = 4;
 }
 

@@ -376,7 +376,7 @@ version(BenchFftw)
     enum FFTW_MEASURE = 0U;
     enum FFTW_PATIENT = 1U << 5;
 
-    struct FFTW(bool isReal, bool isInverse) if(!isReal)
+    struct FFTW(bool isReal, bool isInverse, int flags) if(!isReal)
     {        
         Complex!(T)* a;
         Complex!(T)* r;
@@ -389,7 +389,7 @@ version(BenchFftw)
             a[0 .. st!1 << log2n] = Complex!T(0, 0);
             r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
             auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
-            p = fftw_plan_dft_1d(1 << log2n, a, r, dir, FFTW_PATIENT);
+            p = fftw_plan_dft_1d(1 << log2n, a, r, dir, flags);
         }
         
         void compute(){ fftw_execute(p); }
@@ -397,7 +397,7 @@ version(BenchFftw)
         mixin ElementAccess!(a, r);
     }
 
-    struct FFTW(bool isReal, bool isInverse) if(isReal)
+    struct FFTW(bool isReal, bool isInverse, int flags) if(isReal)
     {        
         T* a;
         Complex!(T)* r;
@@ -414,7 +414,7 @@ version(BenchFftw)
             static if(isInverse)
                 enforce(0,"Benchmarking inverse real transform for fftw is not supported");                
 
-            p = fftw_plan_dft_r2c_1d(to!int(n), a, r, FFTW_PATIENT);
+            p = fftw_plan_dft_r2c_1d(to!int(n), a, r, flags);
         }
         
         void compute(){ fftw_execute(p); }
@@ -523,7 +523,11 @@ void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl
         version(BenchFftw)
         {
             if(impl == "fftw")
-                f!(FFTW!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+                f!(FFTW!(isReal, isInverse, FFTW_PATIENT), isReal, isInverse)(
+                    log2n, flops);
+            else if(impl == "fftw-measure")
+                f!(FFTW!(isReal, isInverse, FFTW_MEASURE), isReal, isInverse)(
+                    log2n, flops);
             else 
                 throw new Exception(
                     "Implementation \"" ~ impl ~ "\" is not supported" );
