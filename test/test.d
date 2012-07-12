@@ -15,6 +15,25 @@ auto gc_aligned_array(A)(size_t n)
     return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
 }
 
+mixin template ElementAccess()
+{
+    alias T delegate(size_t) Dg;
+
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i, _; a)
+        {
+            a[i].re = fRe(i);
+            a[i].im = fIm(i);
+        }
+    }
+
+    auto in_re(size_t i){ return a[i].re; }
+    auto in_im(size_t i){ return a[i].im; }
+    auto out_re(size_t i){ return r[i].re; }
+    auto out_im(size_t i){ return r[i].im; }
+}
+
 mixin template splitElementAccess()
 {
     alias T delegate(size_t) Dg;
@@ -34,21 +53,21 @@ mixin template splitElementAccess()
     auto out_im(size_t i){ return _im[i]; }
 }
 
-mixin template realSplitElementAccess()
+mixin template realElementAccessImpl()
 {
     auto time_re(size_t i){ return data[i]; }
     auto time_im(size_t i){ return to!T(0); }
 
-    private static auto _n(int log2n){ return st!1 << log2n; } 
+    private @property _n(){ return st!1 << log2n; } 
 
     auto freq_re(size_t i)
     {
-        return _re[min(i, _n(log2n) - i)];
+        return re(min(i, _n - i));
     }
     
     auto freq_im(size_t i)
     {
-        return i < _n(log2n) / 2 ? _im[i] :  -_im[_n(log2n) - i];
+        return i < _n / 2 ? im(i) :  -im(_n - i);
     }
 
     static if(isInverse)
@@ -57,10 +76,10 @@ mixin template realSplitElementAccess()
 
         void fill(Dg fRe, Dg fIm) 
         {
-            foreach(i, _; _re)
+            foreach(i; 0 .. _n / 2 + 1)
             {
-                _re[i] = fRe(i);
-                _im[i] = (i == 0 || i == _re.length - 1) ? 0.0 : fIm(i);
+                re(i) = fRe(i);
+                im(i) = (i == 0 || i == _n / 2) ? 0.0 : fIm(i);
             }             
         }
 
@@ -84,6 +103,14 @@ mixin template realSplitElementAccess()
         alias freq_re out_re;
         alias freq_im out_im; 
     }
+}
+
+mixin template realSplitElementAccess()
+{
+    ref re(size_t i){ return _re[i]; }
+    ref im(size_t i){ return _im[i]; }
+
+    mixin realElementAccessImpl!();
 }
 
 version(Real)
@@ -242,33 +269,11 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
     mixin realSplitElementAccess!();
 }
 
-mixin template ElementAccess()
-{
-    alias T delegate(size_t) Dg;
-
-    void fill(Dg fRe, Dg fIm) 
-    {
-        foreach(i, _; a)
-        {
-            a[i].re = fRe(i);
-            a[i].im = fIm(i);
-        }
-    }
-
-    auto in_re(size_t i){ return a[i].re; }
-    auto in_im(size_t i){ return a[i].im; }
-    auto out_re(size_t i){ return r[i].re; }
-    auto out_im(size_t i){ return r[i].im; }
-}
-
-enum one = to!size_t(1);
-
 struct SimpleFft(T, bool isInverse)
 {    
     Complex!(T)[] a;
     Complex!(T)[] w;
     int log2n;
-    enum one = cast(size_t)1;
     
     static void bit_reverse(int log2n, Complex!(T)[] a)
     {
@@ -289,9 +294,9 @@ struct SimpleFft(T, bool isInverse)
     {
         log2n = _log2n;
         
-        a = gc_aligned_array!(Complex!T)(one << log2n);
+        a = gc_aligned_array!(Complex!T)(st!1 << log2n);
         a[] = Complex!T(0, 0);
-        w = gc_aligned_array!(Complex!T)(one << (log2n - 1));
+        w = gc_aligned_array!(Complex!T)(st!1 << (log2n - 1));
 
         size_t n = 1 << log2n;
         T dphi = 4.0 * asin(to!T(1.0)) / n;
@@ -311,11 +316,11 @@ struct SimpleFft(T, bool isInverse)
             foreach(ref e; a)
                 swap(e.re, e.im);
 
-        for (size_t m2 = (one << log2n) / 2; m2; m2 >>= 1)
+        for (size_t m2 = (st!1 << log2n) / 2; m2; m2 >>= 1)
         {
             auto table = w.ptr;
             size_t m = m2 + m2;
-            for(auto p = a.ptr; p < a.ptr + (one << log2n); p += m )
+            for(auto p = a.ptr; p < a.ptr + (st!1 << log2n); p += m )
             {
                 T wr = table[0].re;
                 T wi = table[0].im;
@@ -378,15 +383,15 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
     
     this(int log2n)
     {
-        a = gc_aligned_array!(typeof(a[0]))(one << log2n);
-        r = gc_aligned_array!(Complex!T)(one << log2n);
+        a = gc_aligned_array!(typeof(a[0]))(st!1 << log2n);
+        r = gc_aligned_array!(Complex!T)(st!1 << log2n);
 
         static if(isReal)
             a[] = cast(T) 0;
         else
             a[] = Complex!T(0, 0);
         
-        fft = new Fft(one << log2n);
+        fft = new Fft(st!1 << log2n);
     }
     
     void compute()
@@ -505,12 +510,13 @@ version(BenchFftw)
     {        
         T[] a;
         Complex!(T)[] r;
-        size_t n; 
         void* p;
+        int log2n;
         
         this(int log2n)
         {
-            n = st!1 << log2n;
+            this.log2n = log2n;
+            auto n = st!1 << log2n;
             a = fftw_array!T(n);
             r = fftw_array!(Complex!T)(n / 2 + 1);
             
@@ -522,50 +528,11 @@ version(BenchFftw)
         
         void compute(){ fftw_execute(p); }
         
-        alias T delegate(size_t) Dg;
-
-        auto time_re(size_t i){ return a[i]; }
-        auto time_im(size_t i){ return to!T(0); }
+        ref re(size_t i){ return r[i].re; }
+        ref im(size_t i){ return r[i].im; }
         
-        auto freq_re(size_t i)
-        { 
-            return r[min(i, n - i)].re; 
-        }
-
-        auto freq_im(size_t i)
-        {
-            return i > n / 2 ? -r[n - i].im : r[i].im; 
-        }
-
-        static if(isInverse)
-        {
-            void fill(Dg fRe, Dg fIm) 
-            {
-                foreach(i, _; r)
-                {
-                    r[i].re = fRe(i);
-                    r[i].im = (i == 0 || i == r.length - 1) ? 0 : fIm(i);
-                }
-            }
-
-            alias time_re out_re;
-            alias time_im out_im;
-            alias freq_re in_re;
-            alias freq_im in_im;
-        }
-        else
-        {
-            void fill(Dg fRe, Dg fIm) 
-            {
-                foreach(i, _; a)
-                    a[i] = fRe(i);
-            }
-
-            alias time_re in_re;
-            alias time_im in_im;
-            alias freq_re out_re;
-            alias freq_im out_im;
-        }
+        alias a data;
+        mixin realElementAccessImpl!();
     }
 }
 
