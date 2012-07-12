@@ -14,30 +14,110 @@ auto gc_aligned_array(A)(size_t n)
     return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
 }
 
-template splitElementAccess(alias _re, alias _ri)
+mixin template splitElementAccess()
 {
-    ref re(size_t i){ return _re[i]; }
-    ref im(size_t i){ return _ri[i]; }
-    ref result_re(size_t i){ return _re[i]; }
-    ref result_im(size_t i){ return _ri[i]; }
+    alias T delegate(size_t) Dg;
+
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i, _; _re)
+        {
+            _re[i] = fRe(i);
+            _im[i] = fIm(i);
+        }
+    }
+
+    auto in_re(size_t i){ return _re[i]; }
+    auto in_im(size_t i){ return _im[i]; }
+    auto out_re(size_t i){ return _re[i]; }
+    auto out_im(size_t i){ return _im[i]; }
 }
 
-template realSplitElementAccess(
-    alias data, alias _re, alias _ri, bool compactFormat)
+mixin template realSplitElementAccess(bool compactFormat)
 {
-    ref re(size_t i){ return data[i]; }
+    auto time_re(size_t i){ return data[i]; }
+    auto time_im(size_t i){ return to!T(0); }
 
-    auto result_re(size_t i)
-    { 
-        return (compactFormat &&  i == _re.length) ? _im[0] : _re[i]; 
+    private static auto _n(int log2n){ return st!1 << log2n; } 
+
+    private auto symmetry(size_t i)
+    {
+        return i < _n(log2n) / 2 ? i : _n(log2n) - i;
     }
     
-    T result_im(size_t i)
+    private T sign(size_t i)
     {
+        return i < _n(log2n) / 2 ? 1 : -1;
+    }
+
+    auto freq_re(size_t i)
+    {
+        i = symmetry(i);
+ 
+        static if(compactFormat)
+        {
+            if(i == _re.length)
+                return _im[0];
+        } 
+        return _re[i];
+    }
+    
+    auto freq_im(size_t i)
+    {
+        auto s = sign(i);
+        i = symmetry(i);
+        T zero = 0;
+
         static if(compactFormat) 
-            return i == 0 ? 0.0 : i == _im.length ?  0.0 : _im[i];
+            return s * (i == 0 ? zero : i == _im.length ?  zero : _im[i]);
         else
-            return _im[i];
+            return s * _im[i];
+    }
+
+    static if(isInverse)
+    {
+        alias T delegate(size_t) Dg;
+
+        void fill(Dg fRe, Dg fIm) 
+        {
+            static if(compactFormat)
+            {
+                _re[0] = fRe(0);
+                _im[0] = fRe(_re.length);
+                foreach(i; 1 .. _re.length)
+                {
+                    _re[i] = fRe(i);
+                    _im[i] = fIm(i);
+                }
+            }
+            else
+                foreach(i, _; _re)
+                {
+                    _re[i] = fRe(i);
+                    _im[i] = 
+                        (i == 0 || i == _re.length - 1) ? 0.0 : fIm(i);
+                }             
+        }
+
+        alias time_re out_re;
+        alias time_im out_im;
+        alias freq_re in_re;
+        alias freq_im in_im; 
+    }
+    else
+    {
+        alias T delegate(size_t) Dg;
+
+        void fill(Dg fRe, Dg fIm) 
+        {
+            foreach(i, _; data)
+                data[i] = fRe(i);     
+        }
+        
+        alias time_re in_re;
+        alias time_im in_im;
+        alias freq_re out_re;
+        alias freq_im out_im; 
     }
 }
 
@@ -84,7 +164,7 @@ struct DirectApi(bool isReal, bool isInverse) if(!isReal)
             fft(_re.ptr, _im.ptr, log2n, table); 
     }
     
-    mixin splitElementAccess!(_re, _im);
+    mixin splitElementAccess!();
 }
 
 struct DirectApi(bool isReal, bool isInverse) if(isReal)
@@ -114,14 +194,20 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     void compute()
     {
         static if(isInverse)
-            enforce(0, "Direct api does not currently support real inverse transform."); 
-       
-        deinterleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
-       
-        rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
+        {
+            irfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
+            
+            interleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
+        }
+        else
+        {
+            deinterleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
+
+            rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
+        }
     }
     
-    mixin realSplitElementAccess!(data, _re, _im, true);
+    mixin realSplitElementAccess!(true);
 }
 
 struct PfftApi(bool isReal, bool isInverse) if(!isReal)
@@ -149,7 +235,7 @@ struct PfftApi(bool isReal, bool isInverse) if(!isReal)
             f.fft(_re, _im); 
     }
     
-    mixin splitElementAccess!(_re, _im);
+    mixin splitElementAccess!();
 }
 
 struct PfftApi(bool isReal, bool isInverse) if(isReal)
@@ -157,6 +243,7 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
     import pfft.pfft;
    
     alias Rfft!T F;
+    int log2n;
     F f;
     T[] _re;
     T[] _im;
@@ -164,6 +251,7 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
     
     this(int log2n)
     {
+        this.log2n = log2n;
         size_t n = 1U << log2n; 
         f = new F(n);
         _re = F.allocate(n / 2 + 1);
@@ -179,15 +267,26 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
         f.rfft(data, _re, _im);
     }
     
-    mixin realSplitElementAccess!(data, _re, _im, false);
+    mixin realSplitElementAccess!(false);
 }
 
-template ElementAccess(alias a, alias r)
+mixin template ElementAccess()
 {
-    ref re(size_t i){ return a[i].re; }
-    ref im(size_t i){ return a[i].im; }
-    ref result_re(size_t i){ return r[i].re; }
-    ref result_im(size_t i){ return r[i].im; }
+    alias T delegate(size_t) Dg;
+
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i, _; a)
+        {
+            a[i].re = fRe(i);
+            a[i].im = fIm(i);
+        }
+    }
+
+    auto in_re(size_t i){ return a[i].re; }
+    auto in_im(size_t i){ return a[i].im; }
+    auto out_re(size_t i){ return r[i].re; }
+    auto out_im(size_t i){ return r[i].im; }
 }
 
 enum one = to!size_t(1);
@@ -270,10 +369,21 @@ struct SimpleFft(T, bool isInverse)
                 swap(e.re, e.im);
     }
     
-    ref re(size_t i){ return a[i].re; }
-    ref im(size_t i){ return a[i].im; }
-    ref result_re(size_t i){ return a[i].re; }
-    ref result_im(size_t i){ return a[i].im; }
+    alias T delegate(size_t) Dg;
+
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i, _; a)
+        {
+            a[i].re = fRe(i);
+            a[i].im = fIm(i);
+        }
+    }
+
+    auto in_re(size_t i){ return a[i].re; }
+    auto in_im(size_t i){ return a[i].im; }
+    auto out_re(size_t i){ return a[i].re; }
+    auto out_im(size_t i){ return a[i].im; }
 }
 
 struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
@@ -322,12 +432,21 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
     
     static if(isReal)
     {
-        @property ref re(size_t i){ return a[i]; }
-        @property ref result_re(size_t i){ return r[i].re; }
-        @property ref result_im(size_t i){ return r[i].im; }
+        alias T delegate(size_t) Dg;
+
+        void fill(Dg fRe, Dg fIm) 
+        {
+            foreach(i, _; a)
+                a[i] = fRe(i);
+        }
+
+        auto in_re(size_t i){ return a[i]; }
+        auto in_im(size_t i){ return to!T(0); }
+        auto out_re(size_t i){ return r[i].re; }
+        auto out_im(size_t i){ return r[i].im; }
     }
     else
-        mixin ElementAccess!(a, r);
+        mixin ElementAccess!();
 }
 
 version(BenchFftw)
@@ -394,7 +513,7 @@ version(BenchFftw)
         
         void compute(){ fftw_execute(p); }
         
-        mixin ElementAccess!(a, r);
+        mixin ElementAccess!();
     }
 
     struct FFTW(bool isReal, bool isInverse, int flags) if(isReal)
@@ -419,22 +538,28 @@ version(BenchFftw)
         
         void compute(){ fftw_execute(p); }
         
-        ref re(size_t i){ return a[i]; }
-        ref result_re(size_t i){ return r[i].re; }
-        ref result_im(size_t i){ return r[i].im; }
+        alias T delegate(size_t) Dg;
+
+        void fill(Dg fRe, Dg fIm) 
+        {
+            foreach(i, _; a)
+                a[i] = fRe(i);
+        }
+
+        auto in_re(size_t i){ return a[i]; }
+        auto in_im(size_t i){ return to!T(0); }
+        auto out_re(size_t i){ return r[i].re; }
+        auto out_im(size_t i){ return r[i].im; }
     }
 }
 
 void bench(F, bool isReal, bool isInverse)(int log2n, long flops)
 {    
     auto f = F(log2n);
-    
-    foreach(i; 0 .. one << log2n)
-    {
-        f.re(i) = 0.0;
-        static if(!isReal)
-            f.im(i) = 0.0;
-    }
+   
+    auto zero = delegate(size_t i) => to!(typeof(F.init.in_re(0)))(0);
+ 
+    f.fill(zero, zero);
 
     ulong flopsPerIter = 5UL * log2n * (1UL << log2n) / (isReal ? 2 : 1); 
     ulong niter = flops / flopsPerIter;
@@ -454,24 +579,20 @@ auto sq(T)(T a){ return a * a; }
 
 void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 {
+    alias SimpleFft!(real, isInverse) S;
+    alias typeof(S.init.in_re(0)) ST;
+    alias typeof(F.init.in_re(0)) FT;
+
     auto n = st!1 << log2n;
     auto tested = F(log2n);
-    auto simple = SimpleFft!(real, isInverse)(log2n);
+    auto simple = S(log2n);
     
     rndGen.seed(1);
-    foreach(i; 0 .. n)
-    {
-        auto re = uniform(0.0,1.0);
-        simple.re(i) = re;
-        tested.re(i) = re;
-        
-        static if(!isReal)
-        {
-            auto im = uniform(0.0,1.0);
-            simple.im(i) = im;
-            tested.im(i) = im;
-        }
-    }
+    auto rnd = delegate(size_t i) => to!FT(uniform(0.0, 1.0));
+    tested.fill(rnd, rnd);
+    auto re = (size_t a) => cast(ST) tested.in_re(a);
+    auto im = (size_t a) => cast(ST) tested.in_im(a);
+    simple.fill(re, im);
     
     simple.compute();
     tested.compute();
@@ -480,12 +601,13 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
-    foreach(i; 0 .. n / 2 + 1)
+    foreach(i; 0 .. n)
     {
-        auto tre = tested.result_re(i);
-        auto tim = tested.result_im(i);
-        auto sre = simple.result_re(i);
-        auto sim = simple.result_im(i);
+        auto tre = tested.out_re(i);
+        auto tim = tested.out_im(i);
+
+        auto sre = simple.out_re(i);
+        auto sim = simple.out_im(i);
         
         static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {

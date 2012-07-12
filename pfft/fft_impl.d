@@ -777,10 +777,8 @@ struct FFT(V, Options)
         {
             T phi = - (_asin(1.0) * (i + 1)) / r.length;
  
-            // set absolute value to 0.5 so we don't 
-            // have to multiply with 0.5 later.
-            e[0] = _cos(phi) * cast(T)0.5;
-            e[1] = _sin(phi) * cast(T)0.5;
+            e[0] = _cos(phi);
+            e[1] = _sin(phi);
         }
         
         complex_array_to_vector(r.ptr, r.length);
@@ -817,9 +815,12 @@ struct FFT(V, Options)
             return;
         else if(log2n == 1)
         {
+            // we don't multiply with 0.5 here because we want the inverse to
+            // be scaled by 2.
+
             auto rr0 = rr[0], ri0 = ri[0];
-            rr[0] = (rr0 + ri0) * (cast(T)0.5);
-            ri[0] = (rr0 - ri0) * (cast(T)0.5);
+            rr[0] = (rr0 + ri0);
+            ri[0] = (rr0 - ri0);
             return;
         }
 
@@ -852,19 +853,27 @@ struct FFT(V, Options)
             vec r1r = V.reverse(*v(rr + i1));
             vec r1i = V.reverse(*v(ri + i1));
 
-            vec ar = half * (r0r + r1r);
-            vec ai = half * (r1i - r0i);
+            vec ar = r0r + r1r;
+            vec ai = r1i - r0i;
             vec br = r0r - r1r;
             vec bi = r0i + r1i;
 
-            static if(inverse) // we use -w* instead of w in this case
+            static if(inverse) 
             {
+                // we use -w* instead of w in this case and we do not divide by 2.
+                // The reason for that is that we want the inverse to be scaled
+                // by n as it is in the complex case and not just by n / 2.
+
                 vec tmp = br * wi - bi * wr;
                 br = bi * wi + br * wr;
                 bi = tmp;
             }
             else
             {
+                ar *= half;
+                ai *= half;
+                br *= half;
+                bi *= half;
                 vec tmp = br * wi + bi * wr;
                 br = bi * wi - br * wr;
                 bi = tmp;
@@ -878,19 +887,15 @@ struct FFT(V, Options)
         }
 
         {
+            // When calculating inverse we would need to multiply with 0.5 here 
+            // to get an exact inverse. We don't do that because we actually
+            // want the inverse to be scaled by 2.         
+    
             auto r0r = rr[0];
             auto r0i = ri[0];
             
-            static if(inverse)
-            {
-                rr[0] = (r0r + r0i) * (cast(T) 0.5);
-                ri[0] = (r0r - r0i) * (cast(T) 0.5);
-            }
-            else
-            {
-                rr[0] = r0r + r0i;
-                ri[0] = r0r - r0i;
-            }
+            rr[0] = r0r + r0i;
+            ri[0] = r0r - r0i;
         }
     }
     
