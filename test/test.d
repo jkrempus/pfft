@@ -4,7 +4,8 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
-    std.random, std.numeric, std.math, std.algorithm, std.exception, std.typetuple;
+    std.random, std.numeric, std.math, std.algorithm, std.range,
+    std.exception, std.typetuple;
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -33,45 +34,21 @@ mixin template splitElementAccess()
     auto out_im(size_t i){ return _im[i]; }
 }
 
-mixin template realSplitElementAccess(bool compactFormat)
+mixin template realSplitElementAccess()
 {
     auto time_re(size_t i){ return data[i]; }
     auto time_im(size_t i){ return to!T(0); }
 
     private static auto _n(int log2n){ return st!1 << log2n; } 
 
-    private auto symmetry(size_t i)
-    {
-        return i < _n(log2n) / 2 ? i : _n(log2n) - i;
-    }
-    
-    private T sign(size_t i)
-    {
-        return i < _n(log2n) / 2 ? 1 : -1;
-    }
-
     auto freq_re(size_t i)
     {
-        i = symmetry(i);
- 
-        static if(compactFormat)
-        {
-            if(i == _re.length)
-                return _im[0];
-        } 
-        return _re[i];
+        return _re[min(i, _n(log2n) - i)];
     }
     
     auto freq_im(size_t i)
     {
-        auto s = sign(i);
-        i = symmetry(i);
-        T zero = 0;
-
-        static if(compactFormat) 
-            return s * (i == 0 ? zero : i == _im.length ?  zero : _im[i]);
-        else
-            return s * _im[i];
+        return i < _n(log2n) / 2 ? _im[i] :  -_im[_n(log2n) - i];
     }
 
     static if(isInverse)
@@ -80,23 +57,11 @@ mixin template realSplitElementAccess(bool compactFormat)
 
         void fill(Dg fRe, Dg fIm) 
         {
-            static if(compactFormat)
+            foreach(i, _; _re)
             {
-                _re[0] = fRe(0);
-                _im[0] = fRe(_re.length);
-                foreach(i; 1 .. _re.length)
-                {
-                    _re[i] = fRe(i);
-                    _im[i] = fIm(i);
-                }
-            }
-            else
-                foreach(i, _; _re)
-                {
-                    _re[i] = fRe(i);
-                    _im[i] = 
-                        (i == 0 || i == _re.length - 1) ? 0.0 : fIm(i);
-                }             
+                _re[i] = fRe(i);
+                _im[i] = (i == 0 || i == _re.length - 1) ? 0.0 : fIm(i);
+            }             
         }
 
         alias time_re out_re;
@@ -174,40 +139,47 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
    
     T[] data;
     RTable rtable;
+    Table table;
     int log2n;
-    DirectApi!(false, isInverse) c;
     T[] _re;
     T[] _im;
     
     this(int log2n)
     {
-        c = typeof(c)(log2n - 1);
-        _re = c._re;
-        _im = c._im;
+        auto n = st!1 << log2n;
+        _re = gc_aligned_array!T(n / 2 + 1);
+        _im = gc_aligned_array!T(n / 2 + 1);
 
         data = gc_aligned_array!T(1 << log2n);
 
         this.log2n = log2n;
         rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
+        table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1))); 
     }
     
     void compute()
     {
         static if(isInverse)
         {
-            irfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
+            _im.front = _re.back;
+
+            irfft(_re.ptr, _im.ptr, log2n, table, rtable); 
             
             interleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
         }
         else
         {
             deinterleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
-
-            rfft(_re.ptr, _im.ptr, log2n, c.table, rtable); 
+ 
+            rfft(_re.ptr, _im.ptr, log2n, table, rtable);
+            
+            _re.back = _im.front;
+            _im.front = 0;
+            _im.back = 0;            
         }
     }
     
-    mixin realSplitElementAccess!(true);
+    mixin realSplitElementAccess!();
 }
 
 struct PfftApi(bool isReal, bool isInverse) if(!isReal)
@@ -267,7 +239,7 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
         f.rfft(data, _re, _im);
     }
     
-    mixin realSplitElementAccess!(false);
+    mixin realSplitElementAccess!();
 }
 
 mixin template ElementAccess()
@@ -458,11 +430,13 @@ version(BenchFftw)
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
         extern(C) void* fftwf_plan_dft_r2c_1d(int, float*, Complex!(float)*, uint);
+        extern(C) void* fftwf_plan_dft_c2r_1d(int, Complex!(float)*, float*, uint);
         extern(C) void fftwf_execute(void *);
         
         alias fftwf_malloc fftw_malloc;
         alias fftwf_plan_dft_1d fftw_plan_dft_1d;
         alias fftwf_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
+        alias fftwf_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
         alias fftwf_execute fftw_execute;
     }
     else static if(is(T == double))
@@ -472,6 +446,7 @@ version(BenchFftw)
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
         extern(C) void* fftw_plan_dft_r2c_1d(int, double*, Complex!(double)*, uint);
+        extern(C) void* fftw_plan_dft_c2r_1d(int, Complex!(double)*, double*, uint);
         extern(C) void fftw_execute(void *);
     }
     else
@@ -481,12 +456,21 @@ version(BenchFftw)
         extern(C) void* fftwl_malloc(size_t);
         extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
         extern(C) void* fftwl_plan_dft_r2c_1d(int, real*, Complex!(real)*, uint);
+        extern(C) void* fftwl_plan_dft_c2r_1d(int, Complex!(real)*, real*, uint);
         extern(C) void fftwl_execute(void *);
         
         alias fftwl_malloc fftw_malloc;
         alias fftwl_plan_dft_1d fftw_plan_dft_1d;
         alias fftwl_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
+        alias fftwl_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
         alias fftwl_execute fftw_execute;
+    }
+
+    
+    auto fftw_array(A)(size_t n)
+    {
+        import core.memory;
+        return (cast(A*)fftw_malloc(A.sizeof*n))[0..n];
     }
 
     enum FFTW_FORWARD = -1;
@@ -497,18 +481,19 @@ version(BenchFftw)
 
     struct FFTW(bool isReal, bool isInverse, int flags) if(!isReal)
     {        
-        Complex!(T)* a;
-        Complex!(T)* r;
+        Complex!(T)[] a;
+        Complex!(T)[] r;
         
         void* p;
         
         this(int log2n)
         {
-            a = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
-            a[0 .. st!1 << log2n] = Complex!T(0, 0);
-            r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * 1L << log2n);
+            auto n = st!1 << log2n;
+            a = fftw_array!(Complex!T)(n);
+            a[] = Complex!T(0, 0);
+            r = fftw_array!(Complex!T)(n);
             auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
-            p = fftw_plan_dft_1d(1 << log2n, a, r, dir, flags);
+            p = fftw_plan_dft_1d(1 << log2n, a.ptr, r.ptr, dir, flags);
         }
         
         void compute(){ fftw_execute(p); }
@@ -518,38 +503,69 @@ version(BenchFftw)
 
     struct FFTW(bool isReal, bool isInverse, int flags) if(isReal)
     {        
-        T* a;
-        Complex!(T)* r;
-        
+        T[] a;
+        Complex!(T)[] r;
+        size_t n; 
         void* p;
         
         this(int log2n)
         {
-            auto n = st!1 << log2n;
-            a = cast(T*) fftw_malloc(T.sizeof *n);
-            a[0 .. n] = 0;
-            r = cast(Complex!(T)*) fftw_malloc(Complex!(T).sizeof * (n / 2 + 1));
+            n = st!1 << log2n;
+            a = fftw_array!T(n);
+            r = fftw_array!(Complex!T)(n / 2 + 1);
             
             static if(isInverse)
-                enforce(0,"Benchmarking inverse real transform for fftw is not supported");                
-
-            p = fftw_plan_dft_r2c_1d(to!int(n), a, r, flags);
+                p = fftw_plan_dft_c2r_1d(to!int(n), r.ptr, a.ptr, flags);
+            else
+                p = fftw_plan_dft_r2c_1d(to!int(n), a.ptr, r.ptr, flags);
         }
         
         void compute(){ fftw_execute(p); }
         
         alias T delegate(size_t) Dg;
 
-        void fill(Dg fRe, Dg fIm) 
-        {
-            foreach(i, _; a)
-                a[i] = fRe(i);
+        auto time_re(size_t i){ return a[i]; }
+        auto time_im(size_t i){ return to!T(0); }
+        
+        auto freq_re(size_t i)
+        { 
+            return r[min(i, n - i)].re; 
         }
 
-        auto in_re(size_t i){ return a[i]; }
-        auto in_im(size_t i){ return to!T(0); }
-        auto out_re(size_t i){ return r[i].re; }
-        auto out_im(size_t i){ return r[i].im; }
+        auto freq_im(size_t i)
+        {
+            return i > n / 2 ? -r[n - i].im : r[i].im; 
+        }
+
+        static if(isInverse)
+        {
+            void fill(Dg fRe, Dg fIm) 
+            {
+                foreach(i, _; r)
+                {
+                    r[i].re = fRe(i);
+                    r[i].im = (i == 0 || i == r.length - 1) ? 0 : fIm(i);
+                }
+            }
+
+            alias time_re out_re;
+            alias time_im out_im;
+            alias freq_re in_re;
+            alias freq_im in_im;
+        }
+        else
+        {
+            void fill(Dg fRe, Dg fIm) 
+            {
+                foreach(i, _; a)
+                    a[i] = fRe(i);
+            }
+
+            alias time_re in_re;
+            alias time_im in_im;
+            alias freq_re out_re;
+            alias freq_im out_im;
+        }
     }
 }
 
