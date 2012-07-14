@@ -6,7 +6,7 @@
 module pfft.fft_impl;
 
 import core.sys.posix.stdlib;
-import pfft.bitreverse;
+import pfft.shuffle;
 
 struct Scalar(_T)
 {
@@ -70,7 +70,6 @@ struct _Tuple(A...)
 struct FFT(V, Options)
 {    
     import core.bitop, core.stdc.stdlib;
-    import pfft.bitreverse;
    
     alias BitReverse!(V, Options) BR;
     

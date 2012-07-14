@@ -3,7 +3,7 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-module pfft.bitreverse;
+module pfft.shuffle;
 
 import core.bitop;
 

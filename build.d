@@ -64,7 +64,7 @@ string sources(Types t, string[] additional)
     auto m = 
         array(map!moduleName(t.types)) ~ 
         array(map!q{"impl_" ~ a}(t.types)) ~
-        ["fft_impl", "bitreverse"] ~
+        ["fft_impl", "shuffle"] ~
         additional; 
 
     auto fileName(string a)
