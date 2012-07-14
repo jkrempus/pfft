@@ -124,11 +124,11 @@ private final class TypedFft(TT)
         return isComplexArray!(R, TT)() && isAligned(&(range[0].re));
     }
     
-    private void deinterleaveArray(R)(R range)
+    private void deinterleave_array(R)(R range)
     {
         static if(is(typeof(range[0].re) == impl.T))
             if(fastInterleave(range))
-                return impl.deinterleaveArray(
+                return impl.deinterleave_array(
                     re, im, &(range[0].re), st!1 << log2n);
         
         foreach(i, e; range)
@@ -138,11 +138,11 @@ private final class TypedFft(TT)
         }
     }
    
-    private void interleaveArray(R)(R range)
+    private void interleave_array(R)(R range)
     {
         static if(is(typeof(range[0].re) == impl.T))
             if(fastInterleave(range))
-                return impl.interleaveArray(
+                return impl.interleave_array(
                     re, im, &(range[0].re), st!1 << log2n);
         
         foreach(i, ref e; range)
@@ -154,7 +154,7 @@ private final class TypedFft(TT)
 
     void fft(bool inverse, Ret, R)(R range, Ret buf)
     {
-        deinterleaveArray(range);
+        deinterleave_array(range);
         static if(inverse)
         {
             auto n = st!1 << log2n; 
@@ -165,14 +165,14 @@ private final class TypedFft(TT)
         else
             impl.fft(re, im, log2n, table);
         
-        interleaveArray(buf);
+        interleave_array(buf);
     }
     
     void rfft(Ret, R)(R range, Ret buf)
     {
-        deinterleaveArray(cast(Complex!(ElementType!R)[])range);
+        deinterleave_array(cast(Complex!(ElementType!R)[])range);
         impl.rfft(re, im, log2n + 1, table, rtable);
-        interleaveArray(buf);
+        interleave_array(buf);
        
         auto n = st!1 << log2n; 
         buf[n] = Complex!TT(buf[0].im, 0);

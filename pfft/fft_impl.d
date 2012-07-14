@@ -905,12 +905,12 @@ struct FFT(V, Options)
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
-    static void interleaveArray()(T* even, T* odd, T* interleaved, size_t n)
+    static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.interleave!vec_size)))
         {
             if(n < vec_size)
-                SFFT.interleaveArray(even, odd, interleaved, n);
+                SFFT.interleave_array(even, odd, interleaved, n);
             else
                 foreach(i; 0 .. n / vec_size)
                     V.interleave!vec_size(
@@ -927,12 +927,12 @@ struct FFT(V, Options)
             }
     }
     
-    static void deinterleaveArray()(T* even, T* odd, T* interleaved, size_t n)
+    static void deinterleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.deinterleave!vec_size)))
         {
             if(n < vec_size)
-                SFFT.deinterleaveArray(even, odd, interleaved, n);
+                SFFT.deinterleave_array(even, odd, interleaved, n);
             else
                 foreach(i; 0 .. n / vec_size)
                     V.deinterleave!vec_size(
@@ -955,6 +955,9 @@ struct FFT(V, Options)
         
         foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
             e = e * k;
+
+        foreach(ref e;  data[ n & (vec_size - 1) .. n])
+            e = e * factor;
     }
 
     static size_t alignment(uint log2n)
@@ -1000,14 +1003,14 @@ template instantiate(alias F)
             return F.table_size_bytes(log2n);
         }
 
-        void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n)
+        void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
         {
-            F.deinterleaveArray(even, odd, interleaved, n);
+            F.deinterleave_array(even, odd, interleaved, n);
         }
 
-        void interleaveArray(T* even, T* odd, T* interleaved, size_t n)
+        void interleave_array(T* even, T* odd, T* interleaved, size_t n)
         {
-            F.interleaveArray(even, odd, interleaved, n);
+            F.interleave_array(even, odd, interleaved, n);
         }
     
         void scale(T* data, size_t n, T factor)

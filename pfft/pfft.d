@@ -4,7 +4,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 module pfft.pfft;
-import core.memory, core.bitop, std.array;
+import core.memory, core.bitop, std.array, core.stdc.stdlib;
 
 template Import(TT)
 {
@@ -102,8 +102,8 @@ length of argument array). The arguments have the same role as they do in fft().
     }
 
 /**
-Allocates an array that is aligned properly for use with fft() and ifft()
-methods.
+Allocates an array that is aligned properly for use with fft(), ifft() and
+scale() methods.
  */
     static T[] allocate(size_t n)
     {
@@ -111,6 +111,17 @@ methods.
         assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
         return r[0 .. n];
     }
+
+/**
+Scales an array data by factor k. The array must be properly aligned. To get
+a properly aligned array, use allocate().
+ */
+    static void scale(T[] data, T k)
+    {
+        assert(((impl.alignment(bsr(data.length)) - 1) & cast(size_t) data.ptr) == 0);
+        impl.scale(data.ptr, data.length, k);
+    }
+
 }
 
 /**
@@ -149,14 +160,19 @@ void main(string[] args)
 }
 ---
  */
-final class Rfft(T)
+final class Rfft(T, bool preserveInputs = true)
 {
     mixin Import!T;
 
     int log2n;
     Fft!T _complex;
     impl.RTable rtable;
-
+    
+    static if(preserveInputs)
+    {
+        T* _re;
+        T* _im;
+    }
 
 /**
 The Rfft constructor. The parameter is the size of data sets that rfft() will 
@@ -171,6 +187,12 @@ operate on. Tables used in rfft are calculated in the constructor.
 
         auto mem = GC.malloc( impl.rtable_size_bytes(log2n));
         rtable = impl.rfft_table(log2n, mem);
+
+        static if(preserveInputs)
+        {
+            _re = cast(T*) GC.malloc(T.sizeof << log2n);
+            _im = cast(T*) GC.malloc(T.sizeof << log2n);
+        }
     }
 
 /**
@@ -193,15 +215,43 @@ you can use $(D allocate()).
         assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
         assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
         
-        impl.deinterleaveArray(re.ptr, im.ptr, data.ptr, st!1 << (log2n - 1));
+        impl.deinterleave_array(re.ptr, im.ptr, data.ptr, st!1 << (log2n - 1));
         impl.rfft(re.ptr, im.ptr, log2n, _complex.table, rtable);
        
         re.back = im[0];
         im.back = 0;   
         im[0] = 0;
     }
-/// An alias for Fft!(TT).allocate
+
+/**
+ */
+    void irfft(T[] data, T[] re, T[] im)
+    {
+        assert(re.length == im.length);
+        assert(2 * (re.length - 1) == data.length);
+        assert(data.length == (st!1 << log2n));
+        assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
+        assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
+        assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
+     
+        static if(preserveInputs)
+        {
+            memcpy(cast(void*) _re, cast(void*) re, T.sizeof << log2n);
+            memcpy(cast(void*) _im, cast(void*) im, T.sizeof << log2n);
+        }
+        else
+            auto _re = re.ptr, _im = im.ptr;
+ 
+        _im[0] = _re[re.length - 1]; 
+        impl.irfft(_re, _im, log2n, _complex.table, rtable);
+        impl.interleave_array(_re, _im, data.ptr, st!1 << (log2n - 1));
+    }
+
+/// An alias for Fft!T.allocate
     alias Fft!(T).allocate allocate;
-    
+
+// An alias for Fft!T.scale
+    alias Fft!(T).scale scale;
+     
     @property complex(){ return _complex; }
 }

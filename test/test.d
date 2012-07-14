@@ -28,10 +28,10 @@ mixin template ElementAccess()
         }
     }
 
-    auto in_re(size_t i){ return a[i].re; }
-    auto in_im(size_t i){ return a[i].im; }
-    auto out_re(size_t i){ return r[i].re; }
-    auto out_im(size_t i){ return r[i].im; }
+    auto inRe(size_t i){ return a[i].re; }
+    auto inIm(size_t i){ return a[i].im; }
+    auto outRe(size_t i){ return r[i].re; }
+    auto outIm(size_t i){ return r[i].im; }
 }
 
 mixin template splitElementAccess()
@@ -47,25 +47,25 @@ mixin template splitElementAccess()
         }
     }
 
-    auto in_re(size_t i){ return _re[i]; }
-    auto in_im(size_t i){ return _im[i]; }
-    auto out_re(size_t i){ return _re[i]; }
-    auto out_im(size_t i){ return _im[i]; }
+    auto inRe(size_t i){ return _re[i]; }
+    auto inIm(size_t i){ return _im[i]; }
+    auto outRe(size_t i){ return _re[i]; }
+    auto outIm(size_t i){ return _im[i]; }
 }
 
 mixin template realElementAccessImpl()
 {
-    auto time_re(size_t i){ return data[i]; }
-    auto time_im(size_t i){ return to!T(0); }
+    auto timeRe(size_t i){ return data[i]; }
+    auto timeIm(size_t i){ return to!T(0); }
 
     private @property _n(){ return st!1 << log2n; } 
 
-    auto freq_re(size_t i)
+    auto freqRe(size_t i)
     {
         return re(min(i, _n - i));
     }
     
-    auto freq_im(size_t i)
+    auto freqIm(size_t i)
     {
         return i < _n / 2 ? im(i) :  -im(_n - i);
     }
@@ -83,10 +83,10 @@ mixin template realElementAccessImpl()
             }             
         }
 
-        alias time_re out_re;
-        alias time_im out_im;
-        alias freq_re in_re;
-        alias freq_im in_im; 
+        alias timeRe outRe;
+        alias timeIm outIm;
+        alias freqRe inRe;
+        alias freqIm inIm; 
     }
     else
     {
@@ -98,10 +98,10 @@ mixin template realElementAccessImpl()
                 data[i] = fRe(i);     
         }
         
-        alias time_re in_re;
-        alias time_im in_im;
-        alias freq_re out_re;
-        alias freq_im out_im; 
+        alias timeRe inRe;
+        alias timeIm inIm;
+        alias freqRe outRe;
+        alias freqIm outIm; 
     }
 }
 
@@ -192,11 +192,11 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
 
             irfft(_re.ptr, _im.ptr, log2n, table, rtable); 
             
-            interleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
+            interleave_array(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
         }
         else
         {
-            deinterleaveArray(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
+            deinterleave_array(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
  
             rfft(_re.ptr, _im.ptr, log2n, table, rtable);
             
@@ -241,7 +241,7 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
 {
     import pfft.pfft;
    
-    alias Rfft!T F;
+    alias Rfft!(T) F;
     int log2n;
     F f;
     T[] _re;
@@ -261,9 +261,9 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
     void compute()
     {
         static if(isInverse)
-            enforce(0, "Pfft api does not currently support real inverse transform."); 
-        
-        f.rfft(data, _re, _im);
+            f.irfft(data, _re, _im);
+        else 
+            f.rfft(data, _re, _im);
     }
     
     mixin realSplitElementAccess!();
@@ -357,10 +357,10 @@ struct SimpleFft(T, bool isInverse)
         }
     }
 
-    auto in_re(size_t i){ return a[i].re; }
-    auto in_im(size_t i){ return a[i].im; }
-    auto out_re(size_t i){ return a[i].re; }
-    auto out_im(size_t i){ return a[i].im; }
+    auto inRe(size_t i){ return a[i].re; }
+    auto inIm(size_t i){ return a[i].im; }
+    auto outRe(size_t i){ return a[i].re; }
+    auto outIm(size_t i){ return a[i].im; }
 }
 
 struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
@@ -417,10 +417,10 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
                 a[i] = fRe(i);
         }
 
-        auto in_re(size_t i){ return a[i]; }
-        auto in_im(size_t i){ return to!T(0); }
-        auto out_re(size_t i){ return r[i].re; }
-        auto out_im(size_t i){ return r[i].im; }
+        auto inRe(size_t i){ return a[i]; }
+        auto inIm(size_t i){ return to!T(0); }
+        auto outRe(size_t i){ return r[i].re; }
+        auto outIm(size_t i){ return r[i].im; }
     }
     else
         mixin ElementAccess!();
@@ -540,7 +540,7 @@ void bench(F, bool isReal, bool isInverse)(int log2n, long flops)
 {    
     auto f = F(log2n);
    
-    auto zero = delegate(size_t i) => to!(typeof(F.init.in_re(0)))(0);
+    auto zero = delegate(size_t i) => to!(typeof(F.init.inRe(0)))(0);
  
     f.fill(zero, zero);
 
@@ -563,8 +563,8 @@ auto sq(T)(T a){ return a * a; }
 void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 {
     alias SimpleFft!(real, isInverse) S;
-    alias typeof(S.init.in_re(0)) ST;
-    alias typeof(F.init.in_re(0)) FT;
+    alias typeof(S.init.inRe(0)) ST;
+    alias typeof(F.init.inRe(0)) FT;
 
     auto n = st!1 << log2n;
     auto tested = F(log2n);
@@ -573,8 +573,8 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     rndGen.seed(1);
     auto rnd = delegate(size_t i) => to!FT(uniform(0.0, 1.0));
     tested.fill(rnd, rnd);
-    auto re = (size_t a) => cast(ST) tested.in_re(a);
-    auto im = (size_t a) => cast(ST) tested.in_im(a);
+    auto re = (size_t a) => cast(ST) tested.inRe(a);
+    auto im = (size_t a) => cast(ST) tested.inIm(a);
     simple.fill(re, im);
     
     simple.compute();
@@ -586,11 +586,11 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     
     foreach(i; 0 .. n)
     {
-        auto tre = tested.out_re(i);
-        auto tim = tested.out_im(i);
+        auto tre = tested.outRe(i);
+        auto tim = tested.outIm(i);
 
-        auto sre = simple.out_re(i);
-        auto sim = simple.out_im(i);
+        auto sre = simple.outRe(i);
+        auto sim = simple.outIm(i);
         
         static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {

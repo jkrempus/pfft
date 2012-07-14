@@ -17,7 +17,7 @@ void irfft(T* re, T* im, uint log2n, Table t, RTable rt);
 RTable rfft_table(uint log2n, void* p = null);
 size_t rtable_size_bytes(int log2n);
 
-void deinterleaveArray(T* even, T* odd, T* interleaved, size_t n);
-void interleaveArray(T* even, T* odd, T* interleaved, size_t n);
+void deinterleave_array(T* even, T* odd, T* interleaved, size_t n);
+void interleave_array(T* even, T* odd, T* interleaved, size_t n);
 void scale(T* data, size_t n, T factor);
 size_t alignment(uint log2n);
