@@ -948,6 +948,13 @@ struct FFT(V, Options)
             }
     }
 
+    alias bool* ITable;
+    
+    alias Interleave!(V, 8, false).itable_size_bytes itable_size_bytes;
+    alias Interleave!(V, 8, false).interleave_table interleave_table;
+    alias Interleave!(V, 8, false).interleave interleave;
+    alias Interleave!(V, 8, true).interleave deinterleave;
+
     static void scale(T* data, size_t n, T factor)
     {
         auto k  = V.scalar_to_vector(factor);
@@ -1002,16 +1009,6 @@ template instantiate(alias F)
             return F.table_size_bytes(log2n);
         }
 
-        void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
-        {
-            F.deinterleave_array(even, odd, interleaved, n);
-        }
-
-        void interleave_array(T* even, T* odd, T* interleaved, size_t n)
-        {
-            F.interleave_array(even, odd, interleaved, n);
-        }
-    
         void scale(T* data, size_t n, T factor)
         {
             F.scale(data, n, factor); 
@@ -1043,6 +1040,39 @@ template instantiate(alias F)
         size_t rtable_size_bytes(int log2n)
         {
             return F.rtable_size_bytes(log2n);
+        }
+        
+        void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
+        {
+            F.deinterleave_array(even, odd, interleaved, n);
+        }
+
+        void interleave_array(T* even, T* odd, T* interleaved, size_t n)
+        {
+            F.interleave_array(even, odd, interleaved, n);
+        }
+        
+        struct ITableValue{};
+        alias ITableValue* ITable;
+
+        auto itable_size_bytes(uint log2n)
+        {
+            return F.itable_size_bytes(log2n);
+        }
+
+        auto interleave_table(uint log2n, void* p)
+        {
+            return cast(ITable) F.interleave_table(log2n, p);
+        }
+
+        void interleave(T* p, uint log2n, ITable table)
+        {
+            F.interleave(p, log2n, cast(F.ITable) table);  
+        }
+
+        void deinterleave(T* p, uint log2n, ITable table)
+        {
+            F.deinterleave(p, log2n, cast(F.ITable) table);  
         }
     `;
 }    

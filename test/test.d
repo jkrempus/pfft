@@ -165,21 +165,18 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     import core.memory; 
    
     T[] data;
+    ITable itable;
     RTable rtable;
     Table table;
     int log2n;
-    T[] _re;
-    T[] _im;
     
     this(int log2n)
     {
         auto n = st!1 << log2n;
-        _re = gc_aligned_array!T(n / 2 + 1);
-        _im = gc_aligned_array!T(n / 2 + 1);
-
-        data = gc_aligned_array!T(1 << log2n);
+        data = gc_aligned_array!T(n);
 
         this.log2n = log2n;
+        itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
         rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
         table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1))); 
     }
@@ -188,25 +185,28 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     {
         static if(isInverse)
         {
-            _im.front = _re.back;
-
-            irfft(_re.ptr, _im.ptr, log2n, table, rtable); 
-            
-            interleave_array(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
+            irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
+            interleave(data.ptr, log2n, itable);    
         }
         else
         {
-            deinterleave_array(_re.ptr, _im.ptr, data.ptr, st!1 << (log2n - 1));
- 
-            rfft(_re.ptr, _im.ptr, log2n, table, rtable);
-            
-            _re.back = _im.front;
-            _im.front = 0;
-            _im.back = 0;            
+            deinterleave(data.ptr, log2n, itable);    
+            rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
         }
     }
     
-    mixin realSplitElementAccess!();
+    private T _first_im = 0;
+    private T _last_im = 0; 
+    ref re(size_t i){ return data[i]; }
+    
+    ref im(size_t i)
+    { 
+        return 
+            i == 0 ? _first_im : 
+            i == data.length / 2 ? _last_im : data[$ / 2 + i];
+    }
+
+    mixin realElementAccessImpl!();
 }
 
 struct PfftApi(bool isReal, bool isInverse) if(!isReal)
