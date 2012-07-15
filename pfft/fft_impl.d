@@ -5,7 +5,6 @@
 
 module pfft.fft_impl;
 
-import core.sys.posix.stdlib;
 import pfft.shuffle;
 
 struct Scalar(_T)

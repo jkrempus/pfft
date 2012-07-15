@@ -533,7 +533,7 @@ void bench(F, bool isReal, bool isInverse)(int log2n, long flops)
 {    
     auto f = F(log2n);
    
-    auto zero = delegate(size_t i) => to!(typeof(F.init.inRe(0)))(0);
+    auto zero = delegate(size_t i){ return to!(typeof(F.init.inRe(0)))(0); };
  
     f.fill(zero, zero);
 
@@ -564,10 +564,10 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     auto simple = S(log2n);
     
     rndGen.seed(1);
-    auto rnd = delegate(size_t i) => to!FT(uniform(0.0, 1.0));
+    auto rnd = delegate(size_t i){ return to!FT(uniform(0.0, 1.0)); };
     tested.fill(rnd, rnd);
-    auto re = (size_t a) => cast(ST) tested.inRe(a);
-    auto im = (size_t a) => cast(ST) tested.inIm(a);
+    auto re = (size_t a){ return cast(ST) tested.inRe(a); };
+    auto im = (size_t a){ return cast(ST) tested.inIm(a); };
     simple.fill(re, im);
     
     simple.compute();

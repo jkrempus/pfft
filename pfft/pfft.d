@@ -4,7 +4,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 module pfft.pfft;
-import core.memory, core.bitop, std.array, core.stdc.stdlib;
+import core.memory, core.bitop, std.array;
 
 template Import(TT)
 {

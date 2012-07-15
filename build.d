@@ -5,7 +5,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.process, std.string, std.array, std.algorithm, 
-       std.conv, std.range, std.getopt, std.file, std.path : buildPath;
+       std.conv, std.range, std.getopt, std.file, std.path : buildPath, absolutePath;
 
 enum SIMD{ AVX, SSE, Neon, Scalar }
 enum Compiler{ DMD, GDMD, LDC}
@@ -18,10 +18,11 @@ bool verbose;
 
 auto shellf(A...)(A a)
 {
+    auto cmd = fm(a);
     if(verbose) 
-        writeln(fm(a)); 
+        writeln(cmd); 
     
-    return shell(fm(a)); 
+    return shell(cmd); 
 }
 
 enum libPath = buildPath("lib", "libpfft.a");
@@ -130,7 +131,7 @@ void runBenchmarks(Types t)
             writefln("Running benchmarks for type %s.", type);
 
         foreach(i; taskPool.parallel(iota(4,21)))
-            shell(fm("./test_%s -s -m 1000 pfft %s", type, i));
+            shell(fm("%s_%s -s -m 1000 pfft \"%s\"", absolutePath("test"), type, i));
     }
 }
 
