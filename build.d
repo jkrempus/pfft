@@ -26,6 +26,7 @@ auto shellf(A...)(A a)
 }
 
 enum libPath = buildPath("lib", "libpfft.a");
+enum winLibPath = buildPath("lib", "pfft.lib");
 enum clibPath = buildPath("lib", "libpfft-c.a");
 
 void execute(Cmds...)(Cmds cmds)
@@ -100,8 +101,13 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
         auto binPath = buildPath(outDir, "test_" ~ type);
         auto ver = capitalize(type);
 
+        version(Windows)
+            auto lp = winLibPath;
+        else
+            auto lp = libPath;	
+
         auto common = fm("%s -Iinclude %s %s -of%s %s", 
-            ver, srcPath, libPath, binPath, flags);
+            ver, srcPath, lp, binPath, flags);
 
         final switch(c)
         {
@@ -139,7 +145,11 @@ void buildDmd(Types t, string dcpath, string ccpath, bool clib, bool dbg)
 {
     auto simdStr = to!string(t.simd);
     auto src = sources(t, clib ? ["capi"] : ["stdapi", "pfft"]);
-    auto path = buildPath("lib", "libpfft.a");
+    version(Windows)
+        auto path = winLibPath;
+    else
+        auto path = libPath;
+
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
     shellf("%s %s -lib -of%s -version=%s %s", 

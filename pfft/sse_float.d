@@ -120,14 +120,15 @@ struct Vector
                 }
             else
             {
-                struct quad
+                static struct quad
                 {
                     align(16) float a;
                     float b;
                     float c;
                     float d;
                 };
-                return *cast(vec*)&quad(a,a,a,a);
+		auto q = quad(a,a,a,a);
+                return *cast(vec*)& q;
             }
         }
     }

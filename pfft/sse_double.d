@@ -86,12 +86,13 @@ struct Vector
                 }
             else
             {
-                struct pair
+                static struct pair
                 {
                     align(16) T a;
                     T b;
                 };
-                return *cast(vec*)&pair(a,a);
+		auto p = pair(a,a);
+                return *cast(vec*)& p;
             }
         }
         
