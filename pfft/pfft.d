@@ -79,7 +79,7 @@ constructor.
 Calculates discrete fourier transform. $(D_PARAM re) should contain the real
 part of the data and $(D_PARAM im) the imaginary part of the data. The method
 operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
-Both arrays must be properly aligned - to get a properly aligned array you can
+Both arrays must be properly aligned - to obtain a properly aligned array you can
 use allocate().
  */  
     void fft(T[] re, T[] im)
@@ -113,7 +113,7 @@ scale() methods.
     }
 
 /**
-Scales an array data by factor k. The array must be properly aligned. To get
+Scales an array data by factor k. The array must be properly aligned. To obtain
 a properly aligned array, use allocate().
  */
     static void scale(T[] data, T k)
@@ -160,23 +160,19 @@ void main(string[] args)
 }
 ---
  */
-final class Rfft(T, bool preserveInputs = true)
+final class Rfft(T)
 {
     mixin Import!T;
 
     int log2n;
     Fft!T _complex;
     impl.RTable rtable;
-    
-    static if(preserveInputs)
-    {
-        T* _re;
-        T* _im;
-    }
+    impl.ITable itable;
 
 /**
 The Rfft constructor. The parameter is the size of data sets that rfft() will 
-operate on. Tables used in rfft are calculated in the constructor.
+operate on this number will be refered to as n in the rest of the documentation
+for this class. All tables used in rfft are calculated in the constructor.
  */
     this(size_t n)
     {
@@ -188,69 +184,64 @@ operate on. Tables used in rfft are calculated in the constructor.
         auto mem = GC.malloc( impl.rtable_size_bytes(log2n));
         rtable = impl.rfft_table(log2n, mem);
 
-        static if(preserveInputs)
-        {
-            _re = cast(T*) GC.malloc(T.sizeof << log2n);
-            _im = cast(T*) GC.malloc(T.sizeof << log2n);
-        }
+        mem = GC.malloc( impl.itable_size_bytes(log2n));
+        itable = impl.interleave_table(log2n, mem);
     }
 
 /**
-Calculates discrete fourier transform of the real data in parameter $(D data). 
-The method operates out of place - the result is saved to $(D re) and $(D im) 
-and the data in $(D data) isn't changed. 
-The length of re and im must be $(D data.length / 2 + 1) - only the 
-first part of the discrete fourier transform is stored to $(D re) and $(D im).
-The remaining elements can be trivially calculated from the relation 
- $(I DFT(f)[i] = adj(DFT(f)[n - i])) that holds when f is real. 
-All three arrays must be properly aligned - to get a properly aligned array 
-you can use $(D allocate()).
+Calculates discrete fourier transform of the real valued sequence in data. 
+The method operates in place. When the method completes, data contains the
+result. First $(I n / 2 + 1) elements contain the real part of the result and 
+the rest contains the imaginary part. Imaginary parts at position 0 and 
+$(I n / 2) are known to be equal to 0 and are not stored, so the content of 
+data looks like this: 
+
+ $(D r(0), r(1), ... r(n / 2), i(1), i(2), ... i(n / 2 - 1))  
+
+
+The elements of the result at position greater than n / 2 can be trivially 
+calculated from the relation $(I DFT(f)[i] = adj(DFT(f)[n - i])) that holds 
+because the input sequence is real. 
+
+
+The length of the array must be equal to n and the array must be properly 
+aligned. To obtain a properly aligned array you can use $(D allocate()).
  */  
-    void rfft(T[] data, T[] re, T[] im)
+    void rfft(T[] data)
     {
-        assert(re.length == im.length);
-        assert(2 * (re.length - 1) == data.length);
         assert(data.length == (st!1 << log2n));
-        assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
-        assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
         assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
         
-        impl.deinterleave_array(re.ptr, im.ptr, data.ptr, st!1 << (log2n - 1));
-        impl.rfft(re.ptr, im.ptr, log2n, _complex.table, rtable);
-       
-        re.back = im[0];
-        im.back = 0;   
-        im[0] = 0;
+        impl.deinterleave(data.ptr, log2n, itable);
+        impl.rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
     }
 
 /**
+Calculates the inverse of $(D rfft()), scaled by n (You can use $(D scale)
+to normalize the result). Before the method is called, data should contain a 
+complex sequence in the same format as the result of $(D rfft()). It is 
+assumed that the input sequence is a discrete fourier transform of a real 
+valued sequence, so the elements of the input sequence not stored in data 
+can be calculated from $(I DFT(f)[i] = adj(DFT(f)[n - i])). When the method
+completes, the array contains the real part of the inverse discrete fourier 
+transform. The imaginary part is known to be equal to 0.
+
+The length of the array must be equal to n and the array must be properly 
+aligned. To obtain a properly aligned array you can use $(D allocate()).
  */
-    void irfft(T[] data, T[] re, T[] im)
+    void irfft(T[] data)
     {
-        assert(re.length == im.length);
-        assert(2 * (re.length - 1) == data.length);
         assert(data.length == (st!1 << log2n));
-        assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
-        assert(((impl.alignment(log2n - 1) - 1) & cast(size_t) re.ptr) == 0);
         assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
      
-        static if(preserveInputs)
-        {
-            memcpy(cast(void*) _re, cast(void*) re, T.sizeof << log2n);
-            memcpy(cast(void*) _im, cast(void*) im, T.sizeof << log2n);
-        }
-        else
-            auto _re = re.ptr, _im = im.ptr;
- 
-        _im[0] = _re[re.length - 1]; 
-        impl.irfft(_re, _im, log2n, _complex.table, rtable);
-        impl.interleave_array(_re, _im, data.ptr, st!1 << (log2n - 1));
+        impl.irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
+        impl.interleave(data.ptr, log2n, itable);
     }
 
 /// An alias for Fft!T.allocate
     alias Fft!(T).allocate allocate;
 
-// An alias for Fft!T.scale
+/// An alias for Fft!T.scale
     alias Fft!(T).scale scale;
      
     @property complex(){ return _complex; }

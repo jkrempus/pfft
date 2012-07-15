@@ -898,7 +898,7 @@ struct FFT(V, Options)
         }
     }
     
-    static void rfft_last_pass(inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(!supportsReal)
     {
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 

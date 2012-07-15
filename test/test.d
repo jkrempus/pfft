@@ -107,8 +107,16 @@ mixin template realElementAccessImpl()
 
 mixin template realSplitElementAccess()
 {
-    ref re(size_t i){ return _re[i]; }
-    ref im(size_t i){ return _im[i]; }
+    private T _first_im = 0;
+    private T _last_im = 0; 
+    ref re(size_t i){ return data[i]; }
+    
+    ref im(size_t i)
+    { 
+        return 
+            i == 0 ? _first_im : 
+            i == data.length / 2 ? _last_im : data[$ / 2 + i];
+    }
 
     mixin realElementAccessImpl!();
 }
@@ -195,18 +203,7 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
         }
     }
     
-    private T _first_im = 0;
-    private T _last_im = 0; 
-    ref re(size_t i){ return data[i]; }
-    
-    ref im(size_t i)
-    { 
-        return 
-            i == 0 ? _first_im : 
-            i == data.length / 2 ? _last_im : data[$ / 2 + i];
-    }
-
-    mixin realElementAccessImpl!();
+    mixin realSplitElementAccess!();
 }
 
 struct PfftApi(bool isReal, bool isInverse) if(!isReal)
@@ -244,8 +241,6 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
     alias Rfft!(T) F;
     int log2n;
     F f;
-    T[] _re;
-    T[] _im;
     T[] data;
     
     this(int log2n)
@@ -253,17 +248,15 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
         this.log2n = log2n;
         size_t n = 1U << log2n; 
         f = new F(n);
-        _re = F.allocate(n / 2 + 1);
-        _im = F.allocate(n / 2 + 1);
         data = F.allocate(n);
     }
     
     void compute()
     {
         static if(isInverse)
-            f.irfft(data, _re, _im);
+            f.irfft(data);
         else 
-            f.rfft(data, _re, _im);
+            f.rfft(data);
     }
     
     mixin realSplitElementAccess!();
