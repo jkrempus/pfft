@@ -28,5 +28,5 @@ void main(string[] args)
     f.fft(re, im);
 
     foreach(i, _; re)
-        writefln("%s %s", re[i], im[i]);
+        writefln("%s\t%s", re[i], im[i]);
 }

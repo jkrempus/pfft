@@ -188,7 +188,7 @@ struct BitReverse(alias V, Options)
         enum n = highest_power_2( len * TT.sizeof / vec.sizeof, 4);
         
         foreach(i; 0 .. len * TT.sizeof / n / vec.sizeof)
-            swap_some!4((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
+            swap_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
     static void copy_some(int n, TT)(TT* dst, TT* src)

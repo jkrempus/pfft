@@ -51,7 +51,7 @@ void main(string[] args)
     f.fft(re, im);
 
     foreach(i, _; re)
-        writefln("%s %s", re[i], im[i]);
+        writefln("%s\t%s", re[i], im[i]);
 }
 --- 
  */
@@ -147,16 +147,14 @@ void main(string[] args)
     auto f = new F(n);
 
     auto data = F.allocate(n);
-    auto re = F.allocate(n / 2 + 1);
-    auto im = F.allocate(n / 2 + 1);
 
     foreach(ref e; data)
         readf("%s\n", &e);
 
-    f.rfft(data, re, im);
+    f.rfft(data);
 
-    foreach(i, _; re)
-        writefln("%s %s", re[i], im[i]);
+    foreach(i; 0 .. n / 2 + 1)
+        writefln("%s\t%s", data[i], (i == 0 || i == n / 2) ? 0 : data[i]);
 }
 ---
  */
