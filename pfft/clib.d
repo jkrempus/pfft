@@ -66,8 +66,8 @@ private template code(string type, string suffix, string Suffix)
 
         struct PfftRTable`~Suffix~`
         {
-            impl_`~type~`.Table table;
             impl_`~type~`.RTable rtable;
+            impl_`~type~`.Table table;
             impl_`~type~`.ITable itable;
             size_t log2n;
         }
@@ -77,8 +77,8 @@ private template code(string type, string suffix, string Suffix)
             assert_power2(n);
 
             return 
-                impl_`~type~`.table_size_bytes(bsf(n) - 1) +
                 impl_`~type~`.itable_size_bytes(bsf(n)) +
+                impl_`~type~`.table_size_bytes(bsf(n) - 1) +
                 impl_`~type~`.rtable_size_bytes(bsf(n));
         }
 
@@ -88,30 +88,26 @@ private template code(string type, string suffix, string Suffix)
 
             auto log2n = bsf(n);
 
-            auto table_size = impl_`~type~`.table_size_bytes(bsf(n) - 1);
-            auto rtable_size = impl_`~type~`.rtable_size_bytes(bsf(n));
-            auto itable_size = impl_`~type~`.itable_size_bytes(bsf(n));
+            auto rtable_size = impl_`~type~`.rtable_size_bytes(log2n);
+            auto table_size = impl_`~type~`.table_size_bytes(log2n - 1);
+            auto itable_size = impl_`~type~`.itable_size_bytes(log2n);
 
-            /*if(mem is null)
-                posix_memalign(&mem, impl_`~type~`.alignment((cast(size_t) 1) << log2n), 
-                    table_size + rtable_size + itable_size);*/
+            auto sz = table_size + rtable_size + itable_size;
+            auto al = impl_`~type~`.alignment(sz);
 
-            void* rmem, imem;
-               
-            posix_memalign(&mem, impl_`~type~`.alignment(table_size), table_size);
-            posix_memalign(&rmem, impl_`~type~`.alignment(rtable_size), rtable_size);
-            posix_memalign(&imem, impl_`~type~`.alignment(itable_size), itable_size);
+            if(mem is null)
+                posix_memalign(&mem, al, sz);
 
             return PfftRTable`~Suffix~`(
-                impl_`~type~`.fft_table(bsf(n) - 1, mem), 
-                impl_`~type~`.rfft_table(bsf(n), rmem), 
-                impl_`~type~`.interleave_table(bsf(n), imem), 
+                impl_`~type~`.rfft_table(log2n, mem), 
+                impl_`~type~`.fft_table(log2n - 1, mem + rtable_size), 
+                impl_`~type~`.interleave_table(log2n, mem + rtable_size + table_size), 
                 log2n);
         }
 
         extern(C) void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~` table)
         {
-            free(table.table);
+            free(table.rtable);
         }
 
         extern(C) void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)

@@ -967,7 +967,6 @@ struct FFT(V, Options)
 
     static size_t alignment(size_t n)
     {
-        
         static if(is(typeof(Options.prefered_alignment)) && 
             Options.prefered_alignment > vec.sizeof)
         {
