@@ -20,7 +20,7 @@ size_t rtable_size_bytes(int log2n);
 void deinterleave_array(T* even, T* odd, T* interleaved, size_t n);
 void interleave_array(T* even, T* odd, T* interleaved, size_t n);
 void scale(T* data, size_t n, T factor);
-size_t alignment(uint log2n);
+size_t alignment(size_t n);
 
 struct ITableValue{};
 alias ITableValue* ITable;

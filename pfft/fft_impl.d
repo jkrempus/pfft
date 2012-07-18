@@ -965,7 +965,7 @@ struct FFT(V, Options)
             e = e * factor;
     }
 
-    static size_t alignment(uint log2n)
+    static size_t alignment(size_t n)
     {
         
         static if(is(typeof(Options.prefered_alignment)) && 
@@ -976,9 +976,10 @@ struct FFT(V, Options)
         else
             enum a = vec.sizeof; 
         
-        auto bytes = T.sizeof <<  log2n;
-        return bytes < a ? bytes : a;
+        auto bytes = T.sizeof << bsr(n);
         
+        bytes = bytes < a ? bytes : a;
+        return bytes > (void*).sizeof ? bytes : (void*).sizeof;
     }
 }
 
@@ -1013,9 +1014,9 @@ template instantiate(alias F)
             F.scale(data, n, factor); 
         }
         
-        size_t alignment(uint log2n)
+        size_t alignment(size_t n)
         {
-            return F.alignment(log2n);
+            return F.alignment(n);
         }
 
         struct RTableValue{};

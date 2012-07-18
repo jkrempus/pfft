@@ -95,6 +95,7 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
     bool optimized = true, bool dbg = false, string flags = "")
 {
     auto srcPath = buildPath("..", "test", "test.d");
+    auto clibSrc = buildPath("..", "pfft", "clib.d");
 
     foreach(type; t.types)
     {
@@ -106,8 +107,8 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
         else
             auto lp = libPath;	
 
-        auto common = fm("%s -Iinclude %s %s -of%s %s", 
-            ver, srcPath, lp, binPath, flags);
+        auto common = fm("%s -Iinclude %s %s %s -of%s %s", 
+            ver, srcPath, clibSrc, lp, binPath, flags);
 
         final switch(c)
         {
@@ -115,13 +116,13 @@ void buildTests(Types t, string dcpath, Compiler c, string outDir,
             case Compiler.GDMD:
                 auto opt = optimized ? dmdOpt : "";
                 opt ~= dbg ? dmdDbg : ""; 
-                shellf("%s %s -version=%s", 
+                shellf("%s %s -version=BenchClib -version=%s", 
                     dcpath, opt, common);
                 break;
 
             case Compiler.LDC:
                 auto opt = optimized ? "-O5 -release" : "";
-                shellf("%s %s -d-version=%s", 
+                shellf("%s %s -d-version=BenchClib -d-version=%s", 
                     dcpath, opt, common);
         }
     }
@@ -290,7 +291,7 @@ Options:
   --tests               Build tests. Executables will be saved to ./test. 
                         Can not be used with --clib or when cross compiling.
                         You must build the D library for selected types before 
-                        running building tests.
+                        building tests.
   --no-pgo              Disable profile guided optimization. This flag can
                         only be used with GDMD. Using this flag will result
                         in slightly worse performance, but the build will be 

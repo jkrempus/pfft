@@ -5,7 +5,7 @@
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
     std.random, std.numeric, std.math, std.algorithm, std.range,
-    std.exception, std.typetuple;
+    std.exception, std.typetuple, std.string : toUpper;
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -40,7 +40,7 @@ mixin template splitElementAccess()
 
     void fill(Dg fRe, Dg fIm) 
     {
-        foreach(i, _; _re)
+        foreach(i; 0 .. st!1 << log2n)
         {
             _re[i] = fRe(i);
             _im[i] = fIm(i);
@@ -94,7 +94,7 @@ mixin template realElementAccessImpl()
 
         void fill(Dg fRe, Dg fIm) 
         {
-            foreach(i, _; data)
+            foreach(i; 0 .. _n)
                 data[i] = fRe(i);     
         }
         
@@ -112,10 +112,12 @@ mixin template realSplitElementAccess()
     ref re(size_t i){ return data[i]; }
     
     ref im(size_t i)
-    { 
+    {
+        auto n = (st!1 << log2n);
+ 
         return 
             i == 0 ? _first_im : 
-            i == data.length / 2 ? _last_im : data[$ / 2 + i];
+            i == n / 2 ? _last_im : data[n / 2 + i];
     }
 
     mixin realElementAccessImpl!();
@@ -206,6 +208,78 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     mixin realSplitElementAccess!();
 }
 
+struct CApi(bool isReal, bool isInverse)  if(!isReal)
+{
+    enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
+
+    import pfft.clib;
+
+    T* _re;
+    T* _im;
+    mixin("PfftTable" ~ toUpper(suffix) ~ " table;");
+    int log2n;
+    
+    this(int _log2n)
+    {
+        log2n = _log2n;
+        _re = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        _im = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        table = mixin("pfft_table_"~suffix)(1 << log2n, null); 
+    }
+
+    ~this()
+    {
+        mixin("pfft_table_free_"~suffix)(table);
+        mixin("pfft_free_"~suffix)(_re);
+        mixin("pfft_free_"~suffix)(_im);
+    }
+    
+    void compute()
+    {
+        static if(isInverse)
+            mixin("pfft_ifft_"~suffix)(_re, _im, table);
+        else 
+            mixin("pfft_fft_"~suffix)(_re, _im, table);
+    }
+    
+    mixin splitElementAccess!();
+}
+
+struct CApi(bool isReal, bool isInverse) if(isReal)
+{
+    enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
+    
+    import pfft.clib;
+   
+    int log2n;
+    mixin("PfftRTable" ~ toUpper(suffix) ~ " table;");
+    T* data;
+    
+    this(int log2n)
+    {
+        this.log2n = log2n;
+        data = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        table = mixin("pfft_rtable_"~suffix)(1 << log2n, null); 
+    }
+    
+    ~this()
+    {
+        mixin("pfft_rtable_free_"~suffix)(table);
+        mixin("pfft_free_"~suffix)(data);
+    }
+    
+    void compute()
+    {
+        static if(isInverse)
+            mixin("pfft_irfft_"~suffix)(data, table);
+        else 
+            mixin("pfft_rfft_"~suffix)(data, table);
+    }
+    
+    mixin realSplitElementAccess!();
+}
+
+
 struct PfftApi(bool isReal, bool isInverse) if(!isReal)
 {
     import pfft.pfft;
@@ -214,9 +288,11 @@ struct PfftApi(bool isReal, bool isInverse) if(!isReal)
     F f;
     T[] _re;
     T[] _im;
+    int log2n;
     
     this(int log2n)
     {
+        this.log2n = log2n;
         size_t n = 1U << log2n; 
         f = new F(n);
         _re = F.allocate(n);
@@ -570,6 +646,8 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     auto im = (size_t a){ return cast(ST) tested.inIm(a); };
     simple.fill(re, im);
     
+    writeln();
+
     simple.compute();
     tested.compute();
     
@@ -584,7 +662,7 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 
         auto sre = simple.outRe(i);
         auto sim = simple.outIm(i);
-        
+     
         static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {
             sre /= n;
@@ -607,33 +685,32 @@ void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl
     long flops = mflops * 1000_000;
    
     if(impl == "simple")
-        f!(SimpleFft!(T, isInverse), isReal, isInverse)(log2n, flops);
-    else if(impl == "direct")
-        f!(DirectApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else if(impl == "std")
-        f!(StdApi!(false, isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else if(impl == "phobos")
-        f!(StdApi!(true, isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else if(impl == "pfft")
-        f!(PfftApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
-    else
+        return f!(SimpleFft!(T, isInverse), isReal, isInverse)(log2n, flops);
+    if(impl == "direct")
+        return f!(DirectApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+    if(impl == "std")
+        return f!(StdApi!(false, isReal, isInverse), isReal, isInverse)(log2n, flops);
+    if(impl == "phobos")
+        return f!(StdApi!(true, isReal, isInverse), isReal, isInverse)(log2n, flops);
+    if(impl == "pfft")
+        return f!(PfftApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+    
+    version(BenchFftw)
     {
-        version(BenchFftw)
-        {
-            if(impl == "fftw")
-                f!(FFTW!(isReal, isInverse, FFTW_PATIENT), isReal, isInverse)(
+        if(impl == "fftw")
+            return f!(FFTW!(isReal, isInverse, FFTW_PATIENT), isReal, isInverse)(
                     log2n, flops);
-            else if(impl == "fftw-measure")
-                f!(FFTW!(isReal, isInverse, FFTW_MEASURE), isReal, isInverse)(
+        if(impl == "fftw-measure")
+            return f!(FFTW!(isReal, isInverse, FFTW_MEASURE), isReal, isInverse)(
                     log2n, flops);
-            else 
-                throw new Exception(
-                    "Implementation \"" ~ impl ~ "\" is not supported" );
-        }
-        else
-            throw new Exception(
-                "Implementation \"" ~ impl ~ "\" is not supported" );
     }
+
+    version(BenchClib)
+        if(impl == "c")
+            return f!(CApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+    
+    throw new Exception(
+            "Implementation \"" ~ impl ~ "\" is not supported" );
 }
 
 template Group(A...){ alias A Members; }

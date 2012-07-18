@@ -28,4 +28,4 @@ size_t itable_size_bytes(uint log2n);
 ITable interleave_table(uint log2n, void* p);
 void interleave(T* p, uint log2n, ITable table);
 void deinterleave(T* p, uint log2n, ITable table);
-size_t alignment(uint log2n);
+size_t alignment(size_t n);

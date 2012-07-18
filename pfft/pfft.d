@@ -86,8 +86,8 @@ use allocate().
     {
         assert(re.length == im.length); 
         assert(re.length == (st!1 << log2n));
-        assert(((impl.alignment(log2n) - 1) & cast(size_t) re.ptr) == 0);
-        assert(((impl.alignment(log2n) - 1) & cast(size_t) im.ptr) == 0);
+        assert(((impl.alignment(re.length) - 1) & cast(size_t) re.ptr) == 0);
+        assert(((impl.alignment(im.length) - 1) & cast(size_t) im.ptr) == 0);
         
         impl.fft(re.ptr, im.ptr, log2n, table);
     }
@@ -108,7 +108,7 @@ scale() methods.
     static T[] allocate(size_t n)
     {
         auto r = cast(T*) GC.malloc(n * T.sizeof);
-        assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
+        assert(((impl.alignment(n) - 1) & cast(size_t) r) == 0);
         return r[0 .. n];
     }
 
@@ -118,7 +118,7 @@ a properly aligned array, use allocate().
  */
     static void scale(T[] data, T k)
     {
-        assert(((impl.alignment(bsr(data.length)) - 1) & cast(size_t) data.ptr) == 0);
+        assert(((impl.alignment(data.length) - 1) & cast(size_t) data.ptr) == 0);
         impl.scale(data.ptr, data.length, k);
     }
 
@@ -208,7 +208,7 @@ aligned. To obtain a properly aligned array you can use $(D allocate()).
     void rfft(T[] data)
     {
         assert(data.length == (st!1 << log2n));
-        assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
+        assert(((impl.alignment(data.length) - 1) & cast(size_t) data.ptr) == 0);
         
         impl.deinterleave(data.ptr, log2n, itable);
         impl.rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
@@ -230,7 +230,7 @@ aligned. To obtain a properly aligned array you can use $(D allocate()).
     void irfft(T[] data)
     {
         assert(data.length == (st!1 << log2n));
-        assert(((impl.alignment(log2n) - 1) & cast(size_t) data.ptr) == 0);
+        assert(((impl.alignment(data.length) - 1) & cast(size_t) data.ptr) == 0);
      
         impl.irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
         impl.interleave(data.ptr, log2n, itable);
