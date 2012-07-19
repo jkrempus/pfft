@@ -3,6 +3,8 @@ import std.stdio, std.process, std.string, std.range, std.algorithm, std.conv,
     std.file, std.format;
 import plot2kill.all;
 
+alias format fm;
+
 struct Test
 {
     double[string] cache;
@@ -65,7 +67,8 @@ enum colors = [
 
 void main(string[] args)
 {
-    auto cmd = (string ver, string type) => format("./test_%s_%s", type, ver);
+    auto cmd = (string ver, string type, string compiler) =>
+        fm("./test_%s_%s%s%s", type, ver, compiler == "" ? "" : "_", compiler);
 
     auto prefix = args[1];
 
@@ -76,30 +79,35 @@ void main(string[] args)
 
     void makePlot(
         string fileName, string flags, string type, 
-        string[] impls, string[] versions)
+        string[] impls, string[] versions, string[] compilers = [""])
     {
         auto fig = Figure();
          
         foreach(i, impl; impls)
-            foreach(j, ver; versions) 
-            {
-                auto gflops = log2nRange.map!(
-                    log2n => test.run(cmd(ver, type), flags, impl, log2n))();
-                 
-                auto p = LineGraph(log2nRange, gflops)
-                    .legendText(implNames[impl] ~ " " ~ ver)
-                    .lineColor(colors[j + i * versions.length]);
-                
-                fig.addPlot(p);  
-            }
+        foreach(j, ver; versions)
+        foreach(k, compiler; compilers)
+        {
+            auto gflops = log2nRange.map!(
+                log2n => test.run(cmd(ver, type, compiler), flags, impl, log2n))();
+
+            auto colorIndex = k + (j + i * versions.length) * compilers.length;
+            auto p = LineGraph(log2nRange, gflops)
+                .legendText(fm("%s %s %s", implNames[impl], ver, compiler))
+                .lineColor(colors[colorIndex]);
+
+            fig.addPlot(p);  
+        }
 
         fig
             .title("")
+            .horizontalGrid(true)
+            .verticalGrid(true)
+            .gridIntensity(cast(ubyte) 80)
             .xLabel("log2(n)")
             .yLabel("speed(GFLOPS)")
             .xTickLabels(log2nRange, xTickLabels.array())
             .legendLocation(LegendLocation.right)
-            .saveToFile(prefix ~ fileName);
+            .saveToFile(prefix ~ fileName, 640, 360);
     }
 
     auto versions = ["avx", "sse"];
@@ -112,4 +120,6 @@ void main(string[] args)
     makePlot("pfft-std-phobos-float-scalar.png", "-s", "float", ["pfft", "std", "phobos"], ["scalar"]);
     makePlot("pfft-std-phobos-float-sse.png", "-s", "float", ["pfft", "std", "phobos"], ["sse"]);
     makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["avx"]);
+    
+    makePlot("pfft-float-sse-gdmd-ldc-dmd.png", "-s", "float", ["pfft"], ["sse"], ["gdmd", "ldc", "dmd"]);
 }

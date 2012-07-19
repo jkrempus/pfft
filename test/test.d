@@ -772,6 +772,7 @@ Implementations:
   pfft              The recommended interface to pfft (module pfft.pfft).
   std               An interface to pfft that mimics the API of 
                     std.numeric.Fft.(module pfft.stdapi).
+  c                 An interface to pfft usable from c.
   phobos            Phobos implementation of fft (std.numeric.Fft).
   fftw              FFTW implementation. This one is only available
                     if the test program was compiled with -version=BenchFftw.

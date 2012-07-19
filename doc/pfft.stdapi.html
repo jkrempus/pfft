@@ -33,8 +33,8 @@ internally. The
 <span class="currsymbol">Fft</span> in phobos does all the initialization when the
 constructor is called. Because pfft uses different tables for each
 combination of type and size, it can't do all the initialization up front.
-Instead, it calculates a table for a combination of type <strong><code>T</code></strong> and size <i>n</i>
-the first time the <strong><code>fft</code></strong> method is called with a template parameter <strong><code>T</code></strong>
+Instead, it calculates a table for a combination of type <code>T</code> and size <i>n</i>
+the first time the <code>fft</code> method is called with a template parameter <code>T</code>
 and a parameter of size <i>n</i> and then stores this table for later use.
 <br><br>
 <b>Example:</b><br>
@@ -73,10 +73,10 @@ and a parameter of size <i>n</i> and then stores this table for later use.
 <span class="currsymbol">fft</span>(T, R)(R <span class="funcparam">r</span>);
 </span></dt>
 <dd>Computes  the discrete fourier transform of data in r  and returns it. Data in
-r isn't changed. <strong><code>R</code></strong> must be a forward range or a range with a length property.
+r isn't changed. <code>R</code> must be a forward range or a range with a length property.
 It must have complex or floating point elements. Here a complex type is a type
-with assignable floating point properties <strong><code>re</code></strong> and <strong><code>im</code></strong>. The number of elements
-in r must be a power of two. <strong><code>T</code></strong> must be a floating point type. The length
+with assignable floating point properties <code>re</code> and <code>im</code>. The number of elements
+in r must be a power of two. <code>T</code> must be a floating point type. The length
 of the returned array is the same as the number of elements in r.<br><br>
 
 </dd>
@@ -85,10 +85,10 @@ of the returned array is the same as the number of elements in r.<br><br>
 <span class="currsymbol">fft</span>(R, Ret)(R <span class="funcparam">r</span>, Ret <span class="funcparam">ret</span>);
 </span></dt>
 <dd>Computes the discrete fourier transform of data in r and stores the result in
-the user provided buffer ret. Data in r isn't changed. <strong><code>R</code></strong> must be a forward
+the user provided buffer ret. Data in r isn't changed. <code>R</code> must be a forward
 range or a range with a length property. It must have complex or floating point
 elements. Here a complex type is a type with assignable floating point properties
-<strong><code>re</code></strong> and <strong><code>im</code></strong>. Ret must be an input range with complex elements. r and ret must
+<code>re</code> and <code>im</code>. Ret must be an input range with complex elements. r and ret must
 have the same number of elements and that number must be a power of two.<br><br>
 
 </dd>
@@ -97,9 +97,9 @@ have the same number of elements and that number must be a power of two.<br><br>
 <span class="currsymbol">inverseFft</span>(T, R)(R <span class="funcparam">r</span>);
 </span></dt>
 <dd>Computes  the inverse discrete fourier transform of data in r  and returns it.
-Data in r isn't changed.  <strong><code>R</code></strong> must be a forward range or a range with a
+Data in r isn't changed.  <code>R</code> must be a forward range or a range with a
 length property. It must have complex or floating point elements. Here a complex
-type is a type with assignable floating point properties <strong><code>re</code></strong> and <strong><code>im</code></strong>. The number
+type is a type with assignable floating point properties <code>re</code> and <code>im</code>. The number
 of elements in r must be a power of two. T must be a floating point
 type. The length of the returned array is the same as the number of elements in
 r.<br><br>
@@ -112,7 +112,7 @@ r.<br><br>
 <dd>Computes the inverse discrete fourier transform of data in r and stores the
 result in the user provided buffer ret. Data in r isn't changed. R must be a
 forward range with complex or floating point elements.Here a complex type is
-a type with assignable properties <strong><code>re</code></strong> and <strong><code>im</code></strong>. Ret must be an input range with
+a type with assignable properties <code>re</code> and <code>im</code>. Ret must be an input range with
 complex elements. r and ret must have the same number of elements and that
 number must be a power of two.<br><br>
 
@@ -122,7 +122,7 @@ number must be a power of two.<br><br>
 <span class="currsymbol">allocate</span>(T)(size_t <span class="funcparam">n</span>);
 </span></dt>
 <dd>Allocates an array of size n aligned appropriately for use as parameters to
-<strong><code>fft</code></strong> methods. Both fft methods will still work correctly even if the
+<code>fft</code> methods. Both fft methods will still work correctly even if the
 parameters are not propperly aligned (or even if they aren't arrays at all),
 they will just be a bit slower.<br><br>
 
@@ -137,7 +137,7 @@ they will just be a bit slower.<br><br>
 <!--    <div id="docfooter">
             Page was generated with
             <a href="https://github.com/eldar/candydoc"><img src="candydoc/img/logo.png" style="vertical-align:middle; position:relative; top:-1px"></a>
-            on Thu Jul 19 05:40:35 2012
+            on Thu Jul 19 07:35:44 2012
 
         </td>-->
 <span id="packages" class="emptytag">
