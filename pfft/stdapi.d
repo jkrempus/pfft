@@ -216,9 +216,9 @@ transform. This class mimics std.numeric.Fft, but works a bit differently
 internally. The Fft in phobos does all the initialization when the
 constructor is called. Because pfft uses different tables for each
 combination of type and size, it can't do all the initialization up front.
-Instead, it calculates a table for a combination of type T and size n the 
-first time the fft() method is called with a template parameter T a parameter
-of size n and then stores this table for later use.   
+Instead, it calculates a table for a combination of type $(D T) and size $(I n)
+the first time the $(D fft) method is called with a template parameter $(D T)
+and a parameter of size $(I n) and then stores this table for later use.   
 
 Example:
 ---
@@ -266,7 +266,18 @@ final class Fft
             return t;
         }
     }
-    
+   
+    auto numberOfElements(R)(R r)
+    {
+        static if(hasLength!R)
+            return r.length;
+        else static if(isForwardRange!R)
+            return walkLength(r.save());
+        else
+            static assert(false, 
+                "Can't get the length of the range without consumming it.");
+    }
+
 /** 
 Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
  */
@@ -274,17 +285,18 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
     
     private Complex!(T)[] fftTemplate(bool inverse, T, R)(R r) 
     {
-        auto n = walkLength(r);
+        auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
         return impl!T(n).fft!inverse(r);
     }
 
 /**
 Computes  the discrete fourier transform of data in r  and returns it. Data in
-r isn't changed.  R must be a forward range with complex or floating point 
-elements. The number of elements in $(D_PARAM r) must be a power of two.
-T must be a floating point type. The length of the returned array is the
-same as the number of elements in $(D_PARAM r) .
+r isn't changed. $(D R) must be a forward range or a range with a length property.
+It must have complex or floating point elements. Here a complex type is a type
+with assignable floating point properties $(D re) and $(D im). The number of elements
+in r must be a power of two. $(D T) must be a floating point type. The length
+of the returned array is the same as the number of elements in r.
  */
     Complex!(T)[] fft(T, R)(R r) if(!isNumeric!(ElementType!R)) 
     {
@@ -293,30 +305,27 @@ same as the number of elements in $(D_PARAM r) .
 
     Complex!(T)[] fft(T, R)(R r) if(isNumeric!(ElementType!R)) 
     {
-        auto n = walkLength(r);
+        auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
         return impl!T(n / 2).rfft(r);
     }
    
     private void fftTemplate(bool inverse, R, Ret)(R r, Ret ret)
     {
-        static if(is(typeof(ret.save)))
-            ret = ret.save();
-        
         r = r.save();
 
-        auto n = walkLength(r);
+        auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
         impl!(typeof(ret[0].re))(n).fft!inverse(r, ret);
     }
 
 /**
 Computes the discrete fourier transform of data in r and stores the result in
-the user provided buffer ret. Data in r isn't changed. R must be a forward range
-with complex or floating point elements.Here a complex type is a type with  
-assignable properties .re and .im. Ret must be an input range with complex 
-elements. $(D_PARAM r) and $(D_PARAM ret) must have the same number of elements
-and that number must be a power of two.
+the user provided buffer ret. Data in r isn't changed. $(D R) must be a forward 
+range or a range with a length property. It must have complex or floating point 
+elements. Here a complex type is a type with assignable floating point properties
+$(D re) and $(D im). Ret must be an input range with complex elements. r and ret must
+have the same number of elements and that number must be a power of two.
  */ 
     void fft(R, Ret)(R r, Ret ret) if(!isNumeric!(ElementType!R))
     {
@@ -326,7 +335,7 @@ and that number must be a power of two.
     auto fft(R, Ret)(R r, Ret ret) if(isNumeric!(ElementType!R))
     {
         r = r.save();
-        auto n = walkLength(r);
+        auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
         impl!(typeof(ret[0].re))(r.length / 2).rfft(r, ret);
     }
@@ -334,10 +343,12 @@ and that number must be a power of two.
 
 /**
 Computes  the inverse discrete fourier transform of data in r  and returns it. 
-Data in r isn't changed.  R must be a forward range with complex or floating 
-point  elements. The number of elements in $(D_PARAM r) must be a power of two.
-T must be a floating point type. The length of the returned array is the
-same as the number of elements in $(D_PARAM r).
+Data in r isn't changed.  $(D R) must be a forward range or a range with a
+length property. It must have complex or floating point elements. Here a complex
+type is a type with assignable floating point properties $(D re) and $(D im). The number
+of elements in r must be a power of two. T must be a floating point
+type. The length of the returned array is the same as the number of elements in
+r.
  */
     Complex!(T)[] inverseFft(T, R)(R r)
     {
@@ -348,9 +359,9 @@ same as the number of elements in $(D_PARAM r).
 Computes the inverse discrete fourier transform of data in r and stores the 
 result in the user provided buffer ret. Data in r isn't changed. R must be a 
 forward range with complex or floating point elements.Here a complex type is 
-a type with assignable properties .re and .im. Ret must be an input range with
-complex elements. $(D_PARAM r) and $(D_PARAM ret) must have the same number of
-elements and that number must be a power of two.
+a type with assignable properties $(D re) and $(D im). Ret must be an input range with
+complex elements. r and ret must have the same number of elements and that
+number must be a power of two.
  */ 
     void inverseFft(R, Ret)(R r, Ret ret)
     {
@@ -359,7 +370,7 @@ elements and that number must be a power of two.
 
 /**
 Allocates an array of size n aligned appropriately for use as parameters to
-fft() methods. Both fft methods will still work correctly even if the 
+$(D fft) methods. Both fft methods will still work correctly even if the 
 parameters are not propperly aligned (or even if they aren't arrays at all), 
 they will just be a bit slower.
  */

@@ -22,7 +22,7 @@ template st(alias a){ enum st = cast(size_t) a; }
 
 /**
 A class for calculating discrete fourier transform. The methods of this class
-use split format for complex data. This means that complex data set is 
+use split format for complex data. This means that a complex data set is 
 represented as two arrays - one for the real part and one for the imaginary
 part. An instance of this class can only be used for transforms of one 
 particular size. The template parameter is the floating point type that the 
@@ -63,8 +63,9 @@ final class Fft(T)
     impl.Table table;
     
 /**
-The Fft constructor. The parameter is the size of data sets that the fft() and
-ifft() will operate on. Tables used in fft and ifft are calculated in the 
+The Fft constructor. The parameter is the size of data sets that $(D fft) and
+$(D ifft) will operate on. I will refer to this number as n in the rest of the 
+documentation for this class.Tables used in fft and ifft are calculated in the 
 constructor.
  */
     this(size_t n)
@@ -80,7 +81,7 @@ Calculates discrete fourier transform. $(D_PARAM re) should contain the real
 part of the data and $(D_PARAM im) the imaginary part of the data. The method
 operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
 Both arrays must be properly aligned - to obtain a properly aligned array you can
-use allocate().
+use $(D allocate).
  */  
     void fft(T[] re, T[] im)
     {
@@ -93,8 +94,8 @@ use allocate().
     }
 
 /**
-Calculates inverse discrete fourier transform scaled by n (where n is the 
-length of argument array). The arguments have the same role as they do in fft().
+Calculates inverse discrete fourier transform scaled by n. The arguments have
+the same role as they do in $(D fft).
  */  
     void ifft(T[] re, T[] im)
     {
@@ -102,8 +103,8 @@ length of argument array). The arguments have the same role as they do in fft().
     }
 
 /**
-Allocates an array that is aligned properly for use with fft(), ifft() and
-scale() methods.
+Allocates an array that is aligned properly for use with $(D fft), $(D ifft) and
+$(D scale) methods.
  */
     static T[] allocate(size_t n)
     {
@@ -114,7 +115,7 @@ scale() methods.
 
 /**
 Scales an array data by factor k. The array must be properly aligned. To obtain
-a properly aligned array, use allocate().
+a properly aligned array, use $(D allocate).
  */
     static void scale(T[] data, T k)
     {
@@ -168,8 +169,8 @@ final class Rfft(T)
     impl.ITable itable;
 
 /**
-The Rfft constructor. The parameter is the size of data sets that rfft() will 
-operate on this number will be refered to as n in the rest of the documentation
+The Rfft constructor. The parameter is the size of data sets that $(D rfft) will 
+operate on. I will refer to this number as n in the rest of the documentation
 for this class. All tables used in rfft are calculated in the constructor.
  */
     this(size_t n)
@@ -198,12 +199,12 @@ data looks like this:
 
 
 The elements of the result at position greater than n / 2 can be trivially 
-calculated from the relation $(I DFT(f)[i] = adj(DFT(f)[n - i])) that holds 
+calculated from the relation $(I DFT(f)[i] = DFT(f)[n - i]*) that holds 
 because the input sequence is real. 
 
 
 The length of the array must be equal to n and the array must be properly 
-aligned. To obtain a properly aligned array you can use $(D allocate()).
+aligned. To obtain a properly aligned array you can use $(D allocate).
  */  
     void rfft(T[] data)
     {
@@ -215,17 +216,17 @@ aligned. To obtain a properly aligned array you can use $(D allocate()).
     }
 
 /**
-Calculates the inverse of $(D rfft()), scaled by n (You can use $(D scale)
+Calculates the inverse of $(D rfft), scaled by n (You can use $(D scale)
 to normalize the result). Before the method is called, data should contain a 
-complex sequence in the same format as the result of $(D rfft()). It is 
+complex sequence in the same format as the result of $(D rfft). It is 
 assumed that the input sequence is a discrete fourier transform of a real 
 valued sequence, so the elements of the input sequence not stored in data 
-can be calculated from $(I DFT(f)[i] = adj(DFT(f)[n - i])). When the method
+can be calculated from $(I DFT(f)[i] = DFT(f)[n - i]*). When the method
 completes, the array contains the real part of the inverse discrete fourier 
 transform. The imaginary part is known to be equal to 0.
 
 The length of the array must be equal to n and the array must be properly 
-aligned. To obtain a properly aligned array you can use $(D allocate()).
+aligned. To obtain a properly aligned array you can use $(D allocate).
  */
     void irfft(T[] data)
     {
