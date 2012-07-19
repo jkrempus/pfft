@@ -1,0 +1,4 @@
+MODULES = 
+	$(MODULE pfft.stdapi)
+	$(MODULE pfft.pfft)
+	$(MODULE pfft.clib)

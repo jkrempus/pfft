@@ -157,4 +157,4 @@ version(Double)
     mixin(code!("double", "d", "D"));
 
 version(Real)
-    mixin(code!("real", "l", "D"));
+    mixin(code!("real", "l", "L"));

@@ -74,7 +74,9 @@ void main(string[] args)
 
     auto test = Test(prefix);
 
-    void makePlot(string fileName, string flags, string type, string[] impls, string[] versions)
+    void makePlot(
+        string fileName, string flags, string type, 
+        string[] impls, string[] versions)
     {
         auto fig = Figure();
          
@@ -92,9 +94,9 @@ void main(string[] args)
             }
 
         fig
-            .title("Title")
+            .title("")
             .xLabel("log2(n)")
-            .yLabel("speed[GFLOPS]")
+            .yLabel("speed(GFLOPS)")
             .xTickLabels(log2nRange, xTickLabels.array())
             .legendLocation(LegendLocation.right)
             .saveToFile(prefix ~ fileName);
@@ -108,4 +110,6 @@ void main(string[] args)
     makePlot("pfft-fftw-real-double.png", "-s -r", "double", ["pfft", "fftw"], versions);
     
     makePlot("pfft-std-phobos-float-scalar.png", "-s", "float", ["pfft", "std", "phobos"], ["scalar"]);
+    makePlot("pfft-std-phobos-float-sse.png", "-s", "float", ["pfft", "std", "phobos"], ["sse"]);
+    makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["avx"]);
 }

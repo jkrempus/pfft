@@ -159,6 +159,7 @@ private final class TypedFft(TT)
         {
             auto n = st!1 << log2n; 
             impl.fft(im, re, log2n, table);
+
             impl.scale(re, n, (cast(TT) 1) / n);
             impl.scale(im, n, (cast(TT) 1) / n);
         }

@@ -468,7 +468,10 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
         static if(isInverse)
         {
             static if(usePhobos && isReal)
-                enforce(0, "TODO");
+            {
+                auto toComplex(T a){ return complex(a, cast(T) 0); }
+                fft.inverseFft(map!toComplex(a), r);
+            }
             else 
                 fft.inverseFft(a, r); 
         }
@@ -662,6 +665,8 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 
         auto sre = simple.outRe(i);
         auto sim = simple.outIm(i);
+
+        //writefln("%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim);
      
         static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {

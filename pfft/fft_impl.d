@@ -961,7 +961,7 @@ struct FFT(V, Options)
         foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
             e = e * k;
 
-        foreach(ref e;  data[ n & (vec_size - 1) .. n])
+        foreach(ref e;  data[ n & ~(vec_size - 1) .. n])
             e = e * factor;
     }
 
