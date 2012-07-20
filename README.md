@@ -44,7 +44,7 @@ For API reference, see the doc directory or  [the documentation pages](http://je
 There are three different ways of using pfft:
 
 * Using the pfft.clib module. The functions in this module can be used from C.  The performance of this module should be identical to that of pfft.pfft.
-* Using the pfft.stdapi module. This module mimics the API of the std.numeric.fft.
+* Using the pfft.stdapi module. This module mimics the API of std.numeric.fft.
 * Using the pfft.pfft module. This module uses split format for complex numbers which makes it significantly faster than pfft.stdapi (See the [benchmarks page](http://jerro.github.com/pfft/benchmarks/)). 
 
 For examples of all three ways of using pfft, see the examples directory.
