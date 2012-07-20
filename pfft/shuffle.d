@@ -61,7 +61,7 @@ void iter_bit_reversed_pairs(alias dg, A...)(int log2n, A args)
 
 void bit_reverse_simple(T)(T* p, int log2n)
 {
-    scope loopBody = (int i0, int i1, T* p)
+    static void loopBody(int i0, int i1, T* p)
     {
         if(i1 > i0)
             _swap(p[i0],p[i1]);
