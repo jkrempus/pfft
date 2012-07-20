@@ -51,8 +51,8 @@ When compiling C programs using pfft you will need to use the -lpfft-c flag.
 
 ### Usage
 
-For API reference, see the doc directory or go 
-[here](http://jerro.github.com/pfft/doc/pfft.pfft.html)
+For API reference, see the doc directory or  
+[the documentation pages](http://jerro.github.com/pfft/doc/pfft.pfft.html)
 
 There are three different ways of using pfft:
 
