@@ -6,6 +6,8 @@ The pretty fast fourier transform (pfft) is a fast, in place power of two split 
 
 ### Installation 
 
+The instruction below assume you have an rdmd command available. If you don't, just compile the build.d script with "dmd build" and use "build" insted of "rdmd build" below.
+
 #### Installing the D library
 
 To build pfft, use the build.d rdmd script. You can use it like this:
@@ -35,7 +37,11 @@ You can copy the library somewhere where the C compiler can find it, for example
 
 When compiling C programs using pfft you will need to use the -lpfft-c flag.
 
+#### Windows notes
 
+It is recommended that you download the prebuilt (with GDC) version of pfft from [here](https://github.com/jerro/pfft/downloads). This package also contains the C library. It can not be used with DMD, though.
+
+DMD on Windows does not support SIMD intrinsics yet and there is a bug in SIMD support in the recent builds of MinGW GDC that prevents pfft from building. So I have built a version with an older build of MinGW GDC and uploaded it to Github downloads page. Until the bug in MinGW GDC is fixed or SIMD support is added to DMD on Windows, you should use the prebuilt version if you care about performance.
 
 ### Usage
 
