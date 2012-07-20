@@ -432,6 +432,8 @@ struct SimpleFft(T, bool isInverse)
     auto outIm(size_t i){ return a[i].im; }
 }
 
+auto toComplex(T a){ return complex(a, cast(T) 0); }
+
 struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
 {
     static if(usePhobos)
@@ -469,7 +471,6 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
         {
             static if(usePhobos && isReal)
             {
-                auto toComplex(T a){ return complex(a, cast(T) 0); }
                 fft.inverseFft(map!toComplex(a), r);
             }
             else 

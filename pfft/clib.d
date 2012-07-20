@@ -5,13 +5,42 @@
 
 module pfft.clib;
 
-import core.sys.posix.stdlib, core.stdc.stdlib, core.stdc.stdio, core.bitop;
+import core.stdc.stdlib, core.bitop;
+
+version(Windows)
+{
+	
+    extern(Windows) void * _aligned_malloc( size_t size, size_t alignment);
+    extern(Windows) void _aligned_free(void*);
+
+    auto allocate_aligned(size_t alignment, size_t size)
+    {
+        return _aligned_malloc(size, alignment);
+    }
+
+    alias _aligned_free free_aligned;
+}
+else
+{
+    import core.sys.posix.stdlib; 
+    
+    auto allocate_aligned(size_t alignment, size_t size)
+    {
+    	void* ptr;
+    	posix_memalign(&ptr, alignment, size);
+       	return ptr; 
+    }
+
+    alias free free_aligned;
+}
 
 private void assert_power2(size_t n)
 {
     if(n & (n - 1))
     {
-        fprintf(stderr, "Size passed to pfft functions must be a power of two.\n");
+    	version(Posix)
+            fprintf(stderr, 
+	    	"Size passed to pfft functions must be a power of two.\n");
         exit(1); 
     }
 }
@@ -43,7 +72,7 @@ private template code(string type, string suffix, string Suffix)
             auto log2n = bsf(n);
 
             if(mem is null)
-                posix_memalign(&mem, impl_`~type~`.alignment((cast(size_t) 1) << log2n), 
+                mem = allocate_aligned(impl_`~type~`.alignment((cast(size_t) 1) << log2n), 
                     impl_`~type~`.table_size_bytes(log2n));
 
             return PfftTable`~Suffix~`(impl_`~type~`.fft_table(bsf(n), mem), log2n);
@@ -51,7 +80,7 @@ private template code(string type, string suffix, string Suffix)
 
         extern(C) void pfft_table_free_`~suffix~`(PfftTable`~Suffix~` table)
         {
-            free(table.p);
+            free_aligned(table.p);
         }
 
         extern(C) void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
@@ -96,7 +125,7 @@ private template code(string type, string suffix, string Suffix)
             auto al = impl_`~type~`.alignment(sz);
 
             if(mem is null)
-                posix_memalign(&mem, al, sz);
+                mem = allocate_aligned(al, sz);
 
             return PfftRTable`~Suffix~`(
                 impl_`~type~`.rfft_table(log2n, mem), 
@@ -107,7 +136,7 @@ private template code(string type, string suffix, string Suffix)
 
         extern(C) void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~` table)
         {
-            free(table.rtable);
+            free_aligned(table.rtable);
         }
 
         extern(C) void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
@@ -137,15 +166,14 @@ private template code(string type, string suffix, string Suffix)
         {
             assert_power2(n);
 
-            void* p;
-            posix_memalign(&p, impl_`~type~`.alignment(n), `~type~`.sizeof * n);
+            auto p = allocate_aligned(impl_`~type~`.alignment(n), `~type~`.sizeof * n);
 
             return cast(`~type~`*) p;
         }
 
         extern(C) void pfft_free_`~suffix~`(`~type~`* p)
         {
-            free(p);
+            free_aligned(p);
         }
     `;
 }
