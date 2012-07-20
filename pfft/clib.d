@@ -39,8 +39,11 @@ private void assert_power2(size_t n)
     if(n & (n - 1))
     {
     	version(Posix)
+        {
+            import core.stdc.stdio; 
             fprintf(stderr, 
-	    	"Size passed to pfft functions must be a power of two.\n");
+                "Size passed to pfft functions must be a power of two.\n");
+        }
         exit(1); 
     }
 }
