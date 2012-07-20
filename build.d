@@ -139,7 +139,12 @@ void runBenchmarks(Types t)
         if(verbose)
             writefln("Running benchmarks for type %s.", type);
 
-        foreach(i; taskPool.parallel(iota(4,21)))
+        version(Windows)
+            auto r = iota(4, 21);
+        else
+            auto r = taskPool.parallel(iota(4,21))
+
+        foreach(i; r)
             shell(fm("%s_%s -s -m 1000 pfft \"%s\"", absolutePath("test"), type, i));
     }
 }
