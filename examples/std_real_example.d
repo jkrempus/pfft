@@ -1,3 +1,8 @@
+//          Copyright Jernej Krempuš 2012
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//          http://www.boost.org/LICENSE_1_0.txt)
+
 // This example reads a real valued seqeunce from stdin and writes its 
 // fourier transform to stdout. The program expects one argument, which 
 // is the number of data points and must be a power of two. There should 
