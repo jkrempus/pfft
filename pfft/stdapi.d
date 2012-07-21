@@ -248,21 +248,24 @@ final class Fft
 {
     import std.variant;
 
-    private struct Key{ TypeInfo ti; size_t n; }
-    
-    private void*[Key] implDict;
+    private enum nSizes = 8 * size_t.sizeof;
+    private void*[3 * nSizes] cache;
 
     private auto impl(T)(size_t n)
     {
-        auto key = Key(typeid(T), n);
-        
-        auto p = key in implDict;
-        if(p)
-            return cast(TypedFft!T)*p;
+        static if(is(T == float))
+            auto i = bsf(n);
+        else static if(is(T == double))
+            auto i = nSizes + bsf(n);
+        else
+            auto i = 2 * nSizes + bsf(n);
+
+        if(cache[i] )
+            return cast(TypedFft!T) cache[i];
         else
         {
             auto t = new TypedFft!T(n);
-            implDict[key] = cast(void*)t;
+            cache[i] = cast(void*)t;
             return t;
         }
     }

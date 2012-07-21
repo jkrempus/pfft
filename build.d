@@ -211,8 +211,8 @@ void buildGdc(Types t, string dcpath, string ccpath, bool pgo, bool clib, bool d
 {
     if(pgo)
     {
-        buildGdcImpl(t, dcpath, ccpath, false, dbg, "-fprofile-generate");
-        buildTests(t, dcpath, Compiler.GDMD, ".", false, dbg, "-fprofile-generate");
+        buildGdcImpl(t, dcpath, ccpath, false, dbg, "-fprofile-generate " ~ flags);
+        buildTests(t, dcpath, Compiler.GDMD, ".", false, dbg, "-fprofile-generate " ~ flags);
         runBenchmarks(t);
         buildGdcImpl(t, dcpath, ccpath, clib, dbg, fm("-fprofile-use %s", flags));
     }

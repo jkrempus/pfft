@@ -22,13 +22,20 @@ version(Windows)
 }
 else
 {
+    extern(C) void *memalign(size_t alignment, size_t size);
+
     import core.sys.posix.stdlib; 
     
     auto allocate_aligned(size_t alignment, size_t size)
     {
-    	void* ptr;
-    	posix_memalign(&ptr, alignment, size);
-       	return ptr; 
+        version(Android)
+            return memalign(alignment, size);
+        else
+        {
+            void* ptr;
+            posix_memalign(&ptr, alignment, size);
+            return ptr;
+        }
     }
 
     alias free free_aligned;

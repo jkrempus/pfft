@@ -127,4 +127,6 @@ void main(string[] args)
     makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["avx"]);
     
     makePlot("pfft-float-sse-gdmd-ldc-dmd.png", "-s", "float", ["pfft"], ["sse"], ["gdmd", "ldc", "dmd"]);
+    
+    //makePlot("pfft-float-sse-gdmd32-gdmd64", "-s", "float", ["pfft"], ["sse"], ["gdmd32", "gdmd64"]);
 }
