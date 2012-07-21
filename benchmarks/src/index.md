@@ -20,7 +20,7 @@ compiled with GCC 4.8.0 20120715. All the benchmarks were done
 using the test/test.d file and were run on an Intel Core i5 2500K CPU. The 
 operating system was Debian Wheezy.
 
-The benchmarks on this page are for the [82792532](https://github.com/jerro/pfft/tree/82792532185127ad3f2d131fbb6fe37e2cdda5d7) revision of pfft. For 0.1 release benchmarks see <jerro.github.com/pfft/benchmarks-0.1>.
+The benchmarks on this page are for the [82792532](https://github.com/jerro/pfft/tree/82792532185127ad3f2d131fbb6fe37e2cdda5d7) revision of pfft. For 0.1 release benchmarks go [here](../benchmarks-0.1).
 
 ### Comparison with FFTW
 
