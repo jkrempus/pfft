@@ -1,0 +1,80 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+    <head><link href="style.css" rel="stylesheet"></link></head>
+    <body><div id="content"><h2>Pfft Benchmarks</h2>
+
+<p>This page contains the results of the pfft benchmarks. On the <em>x</em> axis of the
+charts there is base two logarighm of the length of the input sequence and on the
+ <em>y</em> axis there is the speed in GFLOPS. The speed in GFLOPS is defined as the
+ number of operations that a basic Cooley-Tukey algorithm would take to perform
+a transform divided by the number of nanoseconds the function call takes. So the
+speed in GFLOPS is calculated like this:</p>
+
+<pre><code>5 * n * log2(n) / nanoseconds
+</code></pre>
+
+<p>for the complex transforms and like this:</p>
+
+<pre><code>2.5 * n * log2(n) / nanoseconds
+</code></pre>
+
+<p>for the real ones.</p>
+
+<p>The pfft code was compiled (unless noted otherwise) using the GDC compiler
+compiled with GCC 4.8.0 20120715. All the benchmarks were done 
+using the test/test.d file and were run on an Intel Core i5 2500K CPU. The 
+operating system was Debian Wheezy.</p>
+
+<h3>Comparison with FFTW</h3>
+
+<p>This sections contains a speed comparison of pfft and FFTW. The version of 
+FFTW used was 3.3.2 and it was compiled using GCC 4.8.0 20120603. The
+FFFTW_PATIENT flag was passed to all the fftw planner functions. This flags
+results in fast transform times but very slow initialization.</p>
+
+<h4>Complex single precision transform</h4>
+
+<p><img src="pfft-fftw-float.png" alt="" title="" /></p>
+
+<h4>Complex double precision transform</h4>
+
+<p><img src="pfft-fftw-double.png" alt="" title="" /></p>
+
+<h4>Real single precision transform</h4>
+
+<p><img src="pfft-fftw-real-float.png" alt="" title="" /></p>
+
+<h4>Real double precision transform</h4>
+
+<p><img src="pfft-fftw-real-double.png" alt="" title="" /></p>
+
+<h3>Comparison of Phobos and two interfaces to pfft</h3>
+
+<p>This section compares the speed of the FFT in Phobos (<code>std.numeric.Fft</code>), the
+speed of the pfft API in <code>pfft.pfft</code> and the speed of the Phobos compatible
+API for pfft in <code>pfft.stdapi</code>. All results are for a complex single precision
+transform. The FFT in Phobos does not use SIMD, so the std.numeric.Fft in all
+three graphs uses scalar floating point math.</p>
+
+<h4>AVX floating point math</h4>
+
+<p><img src="pfft-std-phobos-float-avx.png" alt="" title="" /></p>
+
+<h4>SSE floating point math</h4>
+
+<p><img src="pfft-std-phobos-float-sse.png" alt="" title="" /></p>
+
+<h4>Scalar floating point math</h4>
+
+<p><img src="pfft-std-phobos-float-scalar.png" alt="" title="" /></p>
+
+<h3>Comparison of different D compilers</h3>
+
+<p>The chart below compares the speed of pfft when compiled with DMD, 
+LDC and GDC. The version of DMD was 2.59. The LDC used was from the llvm-3.1 
+branch and based on the 2.59 DMD frontend.</p>
+
+<h4>Complex single precision transform</h4>
+
+<p><img src="pfft-float-sse-gdmd-ldc-dmd.png" alt="" title="" /></p></div></body>
+</html>

@@ -1,0 +1,20 @@
+body{
+    text-align: center;
+}
+
+#content
+{
+    position: relative;
+    width: 650px;
+    margin: 0 auto 0 auto;
+    text-align: justify;
+}
+
+p, h1, h2, h3, h4{
+    font-family: sans-serif;
+}
+
+h1, h2, h3, h4{
+    font-weight: bold;
+}
+
