@@ -44,6 +44,7 @@ struct Vector
     alias double T;
     
     enum vec_size = 4;
+    enum log2_bitreverse_chunk_size = 2;
     
     static auto v(T* p){ return cast(vec*) p; }
 
@@ -98,14 +99,14 @@ struct Vector
             static assert(0);
     }
 
-    static void bit_reverse_swap_16(double * p0, double * p1, double * p2, double * p3, size_t i1, size_t i2)
+    static void bit_reverse_swap(double * p0, double * p1, size_t m)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
-        a0 = *v(p0 + i1);
-        a1 = *v(p1 + i1);
-        a2 = *v(p2 + i1);
-        a3 = *v(p3 + i1);
+        a0 = *v(p0 + 0 * m);
+        a1 = *v(p0 + 1 * m);
+        a2 = *v(p0 + 2 * m);
+        a3 = *v(p0 + 3 * m);
 
         b0 = unpcklpd(a0, a2);
         b2 = unpckhpd(a0, a2);
@@ -117,15 +118,15 @@ struct Vector
         a2 = interleave128_lo_d(b2, b3);
         a3 = interleave128_hi_d(b2, b3);
 
-        b0 = *v(p0 + i2);
-        b1 = *v(p1 + i2);
-        b2 = *v(p2 + i2);
-        b3 = *v(p3 + i2);
+        b0 = *v(p1 + 0 * m);
+        b1 = *v(p1 + 1 * m);
+        b2 = *v(p1 + 2 * m);
+        b3 = *v(p1 + 3 * m);
 
-        *v(p0 + i2) = a0;
-        *v(p1 + i2) = a1;
-        *v(p2 + i2) = a2;
-        *v(p3 + i2) = a3;
+        *v(p1 + 0 * m) = a0;
+        *v(p1 + 1 * m) = a1;
+        *v(p1 + 2 * m) = a2;
+        *v(p1 + 3 * m) = a3;
 
         a0 = unpcklpd(b0, b2);
         a2 = unpckhpd(b0, b2);
@@ -137,30 +138,30 @@ struct Vector
         b2 = interleave128_lo_d(a2, a3);
         b3 = interleave128_hi_d(a2, a3);
 
-        *v(p0 + i1) = b0;
-        *v(p1 + i1) = b1;
-        *v(p2 + i1) = b2;
-        *v(p3 + i1) = b3;
+        *v(p0 + 0 * m) = b0;
+        *v(p0 + 1 * m) = b1;
+        *v(p0 + 2 * m) = b2;
+        *v(p0 + 3 * m) = b3;
     }
 
-    static void bit_reverse_16(double * p0, double * p1, double * p2, double * p3, size_t i)
+    static void bit_reverse(double * p, size_t m)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
-        a0 = *v(p0 + i);
-        a1 = *v(p1 + i);
-        a2 = *v(p2 + i);
-        a3 = *v(p3 + i);
+        a0 = *v(p + 0 * m);
+        a1 = *v(p + 1 * m);
+        a2 = *v(p + 2 * m);
+        a3 = *v(p + 3 * m);
 
         b0 = unpcklpd(a0, a2);
         b2 = unpckhpd(a0, a2);
         b1 = unpcklpd(a1, a3);
         b3 = unpckhpd(a1, a3);
 
-        *v(p0 + i) = interleave128_lo_d(b0, b1);
-        *v(p1 + i) = interleave128_hi_d(b0, b1);
-        *v(p2 + i) = interleave128_lo_d(b2, b3);
-        *v(p3 + i) = interleave128_hi_d(b2, b3);
+        *v(p + 0 * m) = interleave128_lo_d(b0, b1);
+        *v(p + 1 * m) = interleave128_hi_d(b0, b1);
+        *v(p + 2 * m) = interleave128_lo_d(b2, b3);
+        *v(p + 3 * m) = interleave128_hi_d(b2, b3);
     }
 
     static vec scalar_to_vector(T a)

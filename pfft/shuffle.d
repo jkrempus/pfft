@@ -136,54 +136,40 @@ struct BitReverse(alias V, Options)
     alias V.vec vec;
     
     static size_t br_table_size()(int log2n)
-    { 
-        return log2n < 4 ? 0 : (1 << (log2n - 4)) + 4;
+    {
+        enum log2l = V.log2_bitreverse_chunk_size;
+ 
+        return log2n < log2l * 2 ? 0 : (1 << (log2n - 2 * log2l)) + 2 * log2l;
     }
     
     static void init_br_table()(uint* table, int log2n)
     {
+        enum log2l = V.log2_bitreverse_chunk_size;
+
         static void loopBody0(int i0, int i1, uint** p)
         {
             if(i1 == i0)
-                (**p = i0 << 3), (*p)++;
+                (**p = i0 << log2l), (*p)++;
         };
-        iter_bit_reversed_pairs!loopBody0(log2n - 6, &table);
+        iter_bit_reversed_pairs!loopBody0(log2n - 2 * log2l, &table);
 
         static void loopBody1(int i0, int i1, uint** p)
         {
             if(i1 < i0)
             {
-                **p = i0 << 3;
+                **p = i0 << log2l;
                 (*p)++;
-                **p = i1 << 3;
+                **p = i1 << log2l;
                 (*p)++;
             }
         };
-        iter_bit_reversed_pairs!loopBody1(log2n - 6, &table);
+        iter_bit_reversed_pairs!loopBody1(log2n - 2 * log2l, &table);
     }
     
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
-        if(!is(typeof(V.bit_reverse)))
     {
-        uint log2l = 2U;
-        uint tmp = log2n - log2l - log2l;
-        uint n1 = 1u << ((tmp + 1) >> 1);
-        uint n2 = 1u << tmp;
-        uint m = 1u << (log2n - log2l);
-      
-        uint* t1 = table + n1, t2 = table + n2;
-        T* p1 = p + m, p2 = p1 + m, p3 = p2 + m;
-      
-        for(; table < t1; table++)
-            V.bit_reverse_16( p, p1, p2, p3, table[0]);
-        for(; table < t2; table += 2)
-            V.bit_reverse_swap_16( p, p1, p2, p3, table[0], table[1]);
-    }
-    
-    static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
-        if(is(typeof(V.bit_reverse)))
-    {
-        uint log2l = V.log2_bitreverse_chunk_size;
+        enum log2l = V.log2_bitreverse_chunk_size;
+        
         uint tmp = log2n - log2l - log2l;
         uint n1 = 1u << ((tmp + 1) >> 1);
         uint n2 = 1u << tmp;

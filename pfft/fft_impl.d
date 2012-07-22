@@ -20,35 +20,35 @@ struct Scalar(_T)
         return a;
     }
     
-    static void bit_reverse_swap_16(
-        T * p0, T * p1, T * p2, T * p3, size_t i1, size_t i2)
+    static void bit_reverse_swap(
+        T * p0, T * p1, size_t m)
     {
-        _swap(p0[0+i1],p0[0+i2]);
-        _swap(p0[1+i1],p2[0+i2]);
-        _swap(p0[2+i1],p1[0+i2]);
-        _swap(p0[3+i1],p3[0+i2]);
-        _swap(p1[0+i1],p0[2+i2]);
-        _swap(p1[1+i1],p2[2+i2]);
-        _swap(p1[2+i1],p1[2+i2]);
-        _swap(p1[3+i1],p3[2+i2]);
-        _swap(p2[0+i1],p0[1+i2]);
-        _swap(p2[1+i1],p2[1+i2]);
-        _swap(p2[2+i1],p1[1+i2]);
-        _swap(p2[3+i1],p3[1+i2]);
-        _swap(p3[0+i1],p0[3+i2]);
-        _swap(p3[1+i1],p2[3+i2]);
-        _swap(p3[2+i1],p1[3+i2]);
-        _swap(p3[3+i1],p3[3+i2]);
+        _swap(p0[0 + 0 * m], p1[0 + 0 * m]);
+        _swap(p0[1 + 0 * m], p1[0 + 2 * m]);
+        _swap(p0[2 + 0 * m], p1[0 + 1 * m]);
+        _swap(p0[3 + 0 * m], p1[0 + 3 * m]);
+        _swap(p0[0 + 1 * m], p1[2 + 0 * m]);
+        _swap(p0[1 + 1 * m], p1[2 + 2 * m]);
+        _swap(p0[2 + 1 * m], p1[2 + 1 * m]);
+        _swap(p0[3 + 1 * m], p1[2 + 3 * m]);
+        _swap(p0[0 + 2 * m], p1[1 + 0 * m]);
+        _swap(p0[1 + 2 * m], p1[1 + 2 * m]);
+        _swap(p0[2 + 2 * m], p1[1 + 1 * m]);
+        _swap(p0[3 + 2 * m], p1[1 + 3 * m]);
+        _swap(p0[0 + 3 * m], p1[3 + 0 * m]);
+        _swap(p0[1 + 3 * m], p1[3 + 2 * m]);
+        _swap(p0[2 + 3 * m], p1[3 + 1 * m]);
+        _swap(p0[3 + 3 * m], p1[3 + 3 * m]);
     }
 
-    static void bit_reverse_16(T * p0, T * p1, T * p2, T * p3, size_t i)
+    static void bit_reverse(T * p,  size_t m)
     {
-        _swap(p0[1+i],p2[0+i]);
-        _swap(p0[2+i],p1[0+i]);
-        _swap(p0[3+i],p3[0+i]);
-        _swap(p1[1+i],p2[2+i]);
-        _swap(p1[3+i],p3[2+i]);
-        _swap(p2[3+i],p3[1+i]);
+        _swap(p[1 + 0 * m], p[0 + 2 * m]);
+        _swap(p[2 + 0 * m], p[0 + 1 * m]);
+        _swap(p[3 + 0 * m], p[0 + 3 * m]);
+        _swap(p[1 + 1 * m], p[2 + 2 * m]);
+        _swap(p[3 + 1 * m], p[2 + 3 * m]);
+        _swap(p[3 + 2 * m], p[1 + 3 * m]);
     }
 
     static T unaligned_load(T* p){ return *p; }
