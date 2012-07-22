@@ -25,6 +25,9 @@ void main()
     {
         auto path =  absolutePath(fm("test_%s", type));
         auto cmd = fm("%s %s %s %s", path, flags, impl, log2n);
+        scope(failure)
+            writefln("Error when executing %s.", cmd);
+
         auto err = to!double(strip(shell(cmd)));
         auto tolerated = toleratedError[type];
 

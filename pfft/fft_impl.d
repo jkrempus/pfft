@@ -132,40 +132,48 @@ struct FFT(V, Options)
         }
         return r - 1;
     }
+
+    static void sines_cosines_refine(bool computeEven)(
+        Pair* src, Pair* dest, size_t n_from, T dphi)
+    {
+        T cdphi = _cos(dphi);
+        T sdphi = _sin(dphi);
+       
+        enum compute = computeEven ? 0 : 1;
+        enum copy = compute ^ 1;
+ 
+        for(auto src_end = src + n_from; src < src_end; src++, dest += 2)
+        {
+            auto c = src[0][0];
+            auto s = src[0][1];
+            dest[copy][0] = c;
+            dest[copy][1] = s;
+            dest[compute][0] = c * cdphi - s * sdphi;   
+            dest[compute][1] = c * sdphi + s * cdphi;
+        }
+    }
     
-    static void fft_table_sines_cosines_fast()(int log2n,  Pair * r)
+    static void fft_table_sines_cosines()(int log2n,  Pair* r) 
+        if(is(typeof(Options.fast_init)))
     {
         auto p0 = r;
         auto p1 = p0 + 1;
-        auto p1end = p0 + (1<<log2n) - 1;
-        
-        T dphi = - _asin(cast(T)1.0);
+        auto n0 = st!1;
         
         (*p0)[0] = 1;
         (*p0)[1] = 0;
-        while(p1 < p1end)
+        
+        for(auto p1end = p0 + (n0 << log2n); p1 < p1end - 1;)
         {
-            T cdphi = _cos(dphi);
-            T sdphi = _sin(dphi);
-            dphi *= cast(T)0.5;
-                        
-            auto p0end = p1;
-            while(p0 < p0end)
-            {
-                auto c = (*p0)[0];
-                auto s = (*p0)[1];
-                p0++;
-                (*p1)[0] = c;
-                (*p1)[1] = s;
-                p1++;
-                (*p1)[0] = c * cdphi - s * sdphi;   
-                (*p1)[1] = c * sdphi + s * cdphi;
-                p1++;
-            }
+            sines_cosines_refine!false(p0, p1, n0, - _asin(1) / n0);
+            p0 += n0;
+            p1 += 2 * n0;
+            n0 *= 2;
         }
     }
     
     static void fft_table_sines_cosines()(int log2n,  Pair * r)
+        if(!is(typeof(Options.fast_init)))
     {
         auto p = r;
         for (int s = 1; s <= log2n; ++s)
@@ -183,10 +191,7 @@ struct FFT(V, Options)
     
     static void fft_table_impl()(int log2n, Pair * r)
     {
-        static if(is(typeof(Options.fast_init)))
-            fft_table_sines_cosines_fast(log2n, r);
-        else 
-            fft_table_sines_cosines(log2n, r);
+        fft_table_sines_cosines(log2n, r);
                 
         int n_reversed_loops = 
             (log2n >= Options.large_limit || log2n < 2 * log2(vec_size)) ?
@@ -771,13 +776,19 @@ struct FFT(V, Options)
 
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
 
-        foreach(size_t i, ref e; r)
+        r[$ - 1][0] = 0;
+        r[$ - 1][1] = -1;
+        for(size_t len = 1; len < r.length; len *= 2)
+            sines_cosines_refine!true(
+                &r[$ - len], &r[$ - 2 * len], len, _asin(1) / 2 / len);
+
+        /*foreach(size_t i, ref e; r)
         {
             T phi = - (_asin(1.0) * (i + 1)) / r.length;
  
             e[0] = _cos(phi);
             e[1] = _sin(phi);
-        }
+        }*/
         
         complex_array_to_vector(r.ptr, r.length);
 
