@@ -84,7 +84,9 @@ struct Vector
     alias float T;
     
     enum vec_size = 8;
-   
+  
+    enum log2_bitreverse_chunk_size = 3;
+ 
     static auto v(T* p){ return cast(float4*) p; }
     static auto v8(T* p){ return cast(float8*) p; }
     
@@ -219,6 +221,84 @@ struct Vector
         *v(p2 + i) = extract128_0(b1);
         *v(p3 + i) = extract128_1(b1);
 
+    }
+
+    private static void br16_two(ref vec a0, ref vec a1, ref vec a2, ref vec a3)
+    {
+        vec b0 = shufps!(1, 0, 1, 0)(a0, a2);
+        vec b1 = shufps!(1, 0, 1, 0)(a1, a3);
+        vec b2 = shufps!(3, 2, 3, 2)(a0, a2);
+        vec b3 = shufps!(3, 2, 3, 2)(a1, a3);
+
+        a0 = shufps!(2, 0, 2, 0)(b0, b1);
+        a1 = shufps!(2, 0, 2, 0)(b2, b3);
+        a2 = shufps!(3, 1, 3, 1)(b0, b1);
+        a3 = shufps!(3, 1, 3, 1)(b2, b3);
+    }
+
+    
+    template RepeatType(T, int n, R...)
+    {
+        static if(n == 0)
+            alias R RepeatType;
+        else
+            alias RepeatType!(T, n - 1, T, R) RepeatType;
+    }
+        
+    static void bit_reverse_swap(T* p0, T* p1, size_t m)
+    {
+        RepeatType!(vec, 8) a, b;    
+
+        foreach(i, _; a)
+            a[i] = *v8(p0 + i * m);
+
+        // reverse the outer four bits 
+        br16_two(a[0], a[2], a[4], a[6]);
+        br16_two(a[1], a[3], a[5], a[7]);
+
+        // reverse the inner two bits
+        _deinterleave2(a[0], a[1], a[0], a[1]); 
+        _deinterleave2(a[2], a[3], a[2], a[3]); 
+        _deinterleave2(a[4], a[5], a[4], a[5]); 
+        _deinterleave2(a[6], a[7], a[6], a[7]); 
+
+        foreach(i, _; a)
+            b[i] = *v8(p1 + i * m);
+
+        foreach(i, _; a)
+            *v8(p1 + i * m) = a[i];
+
+        br16_two(b[0], b[2], b[4], b[6]);
+        br16_two(b[1], b[3], b[5], b[7]);
+
+        _deinterleave2(b[0], b[1], b[0], b[1]); 
+        _deinterleave2(b[2], b[3], b[2], b[3]); 
+        _deinterleave2(b[4], b[5], b[4], b[5]); 
+        _deinterleave2(b[6], b[7], b[6], b[7]); 
+
+        foreach(i, _; a)
+            *v8(p0 + i * m) = b[i];
+    }
+
+    static void bit_reverse(T* p0, size_t m)
+    {
+        RepeatType!(vec, 8) a;    
+
+        foreach(i, _; a)
+            a[i] = *v8(p0 + i * m);
+
+        // reverse the outer four bits 
+        br16_two(a[0], a[2], a[4], a[6]);
+        br16_two(a[1], a[3], a[5], a[7]);
+
+        // reverse the inner two bits
+        _deinterleave2(a[0], a[1], a[0], a[1]); 
+        _deinterleave2(a[2], a[3], a[2], a[3]); 
+        _deinterleave2(a[4], a[5], a[4], a[5]); 
+        _deinterleave2(a[6], a[7], a[6], a[7]); 
+
+        foreach(i, _; a)
+            *v8(p0 + i * m) = a[i];
     }
 
     static vec scalar_to_vector(T a)

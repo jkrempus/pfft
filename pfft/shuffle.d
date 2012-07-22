@@ -145,24 +145,25 @@ struct BitReverse(alias V, Options)
         static void loopBody0(int i0, int i1, uint** p)
         {
             if(i1 == i0)
-                (**p = i0 << 2), (*p)++;
+                (**p = i0 << 3), (*p)++;
         };
-        iter_bit_reversed_pairs!loopBody0(log2n - 4, &table);
+        iter_bit_reversed_pairs!loopBody0(log2n - 6, &table);
 
         static void loopBody1(int i0, int i1, uint** p)
         {
             if(i1 < i0)
             {
-                **p = i0 << 2;
+                **p = i0 << 3;
                 (*p)++;
-                **p = i1 << 2;
+                **p = i1 << 3;
                 (*p)++;
             }
         };
-        iter_bit_reversed_pairs!loopBody1(log2n - 4, &table);
+        iter_bit_reversed_pairs!loopBody1(log2n - 6, &table);
     }
     
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+        if(!is(typeof(V.bit_reverse)))
     {
         uint log2l = 2U;
         uint tmp = log2n - log2l - log2l;
@@ -177,6 +178,23 @@ struct BitReverse(alias V, Options)
             V.bit_reverse_16( p, p1, p2, p3, table[0]);
         for(; table < t2; table += 2)
             V.bit_reverse_swap_16( p, p1, p2, p3, table[0], table[1]);
+    }
+    
+    static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+        if(is(typeof(V.bit_reverse)))
+    {
+        uint log2l = V.log2_bitreverse_chunk_size;
+        uint tmp = log2n - log2l - log2l;
+        uint n1 = 1u << ((tmp + 1) >> 1);
+        uint n2 = 1u << tmp;
+        uint m = 1u << (log2n - log2l);
+      
+        uint* t1 = table + n1, t2 = table + n2;
+      
+        for(; table < t1; table++)
+            V.bit_reverse( p + table[0], m);
+        for(; table < t2; table += 2)
+            V.bit_reverse_swap( p + table[0], p + table[1], m);
     }
 
     private static auto highest_power_2(int a, int maxpower)

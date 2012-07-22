@@ -13,6 +13,7 @@ struct Scalar(_T)
     alias _T T;
     
     enum vec_size = 1;
+    enum log2_bitreverse_chunk_size = 2;
     
     static vec scalar_to_vector(T a)
     {
@@ -280,7 +281,7 @@ struct FFT(V, Options)
         
         fft_table_impl(log2n, cast(Pair *)(table_ptr(tables, log2n) + 2));
         
-        if(log2n < 4)
+        if(log2n < V.log2_bitreverse_chunk_size * 2)
         {
         }
         else if(log2n < Options.large_limit)
@@ -672,15 +673,17 @@ struct FFT(V, Options)
     static void bit_reverse_small_two(int minLog2n)(
         T* re, T* im, int log2n, uint* brTable)
     {
-        static if(minLog2n < 4)
+        enum l = V.log2_bitreverse_chunk_size;
+        
+        static if(minLog2n < 2 * l)
         {
-            if(log2n < 4)
+            if(log2n < 2 * l)
             {
-                // only works for log2n < 4
-                bit_reverse_step!1(re, 1 << log2n);                     
-                bit_reverse_step!1(im, 1 << log2n);
-                //bit_reverse_tiny!4(re, log2n);
-                //bit_reverse_tiny!4(im, log2n);
+                // only works for log2n < 2 * l
+                //bit_reverse_step!1(re, 1 << log2n);                     
+                //bit_reverse_step!1(im, 1 << log2n);
+                bit_reverse_tiny!(2 * l)(re, log2n);
+                bit_reverse_tiny!(2 * l)(im, log2n);
             }
             else
             {
@@ -690,7 +693,7 @@ struct FFT(V, Options)
         }
         else                                                            
         {
-            //we already know that log2n >= 4 here.
+            //we already know that log2n >= 2 * l here.
             BR.bit_reverse_small(re, log2n, brTable); 
             BR.bit_reverse_small(im, log2n, brTable);
         }   
