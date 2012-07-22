@@ -159,8 +159,10 @@ struct Vector
             static assert(0);
     }
 
-    static void bit_reverse_swap_16(float * p0, float * p1, float * p2, float * p3, size_t i1, size_t i2)
+    static void bit_reverse_swap_16()(float * p0, float * p1, float * p2, float * p3, size_t i1, size_t i2)
     {
+        //return pfft.sse_float.Vector.bit_reverse_swap_16(p0, p1, p2, p3, i1, i2);
+
         float8 a0, a1, a2, a3; 
         
         a0 = insert128_0(a0, *v(p0 + i1)); 
@@ -192,8 +194,10 @@ struct Vector
         *v(p3 + i2) = extract128_0(a3);
     }
 
-    static void bit_reverse_16(float * p0, float * p1, float * p2, float * p3, size_t i)
+    static void bit_reverse_16()(float * p0, float * p1, float * p2, float * p3, size_t i)
     {
+        //return pfft.sse_float.Vector.bit_reverse_16(p0, p1, p2, p3, i);
+        
         vec a0, a1;
 
         a0 = insert128_0(a0, *v(p0 + i));

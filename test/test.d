@@ -155,6 +155,8 @@ struct DirectApi(bool isReal, bool isInverse) if(!isReal)
         log2n = _log2n;
         _re = gc_aligned_array!T(1 << log2n);
         _im = gc_aligned_array!T(1 << log2n);
+        _re[] = 0;
+        _im[] = 0;
         table = fft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
     }
     
@@ -184,7 +186,8 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     {
         auto n = st!1 << log2n;
         data = gc_aligned_array!T(n);
-
+        data[] = 0;
+    
         this.log2n = log2n;
         itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
         rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
@@ -224,6 +227,8 @@ struct CApi(bool isReal, bool isInverse)  if(!isReal)
         log2n = _log2n;
         _re = mixin("pfft_allocate_"~suffix)(1 << log2n);
         _im = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        _re[0 .. 1 << log2n] = 0;
+        _im[0 .. 1 << log2n] = 0;
         table = mixin("pfft_table_"~suffix)(1 << log2n, null); 
     }
 
@@ -259,6 +264,7 @@ struct CApi(bool isReal, bool isInverse) if(isReal)
     {
         this.log2n = log2n;
         data = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        data[0 .. 1 << log2n] = 0;
         table = mixin("pfft_rtable_"~suffix)(1 << log2n, null); 
     }
     
@@ -297,6 +303,8 @@ struct PfftApi(bool isReal, bool isInverse) if(!isReal)
         f = new F(n);
         _re = F.allocate(n);
         _im = F.allocate(n);
+        _re[] = 0;
+        _im[] = 0;
     }
     
     void compute()
@@ -325,6 +333,7 @@ struct PfftApi(bool isReal, bool isInverse) if(isReal)
         size_t n = 1U << log2n; 
         f = new F(n);
         data = F.allocate(n);
+        data[] = 0;
     }
     
     void compute()
@@ -591,6 +600,7 @@ version(BenchFftw)
             this.log2n = log2n;
             auto n = st!1 << log2n;
             a = fftw_array!T(n);
+            a[] = 0;
             r = fftw_array!(Complex!T)(n / 2 + 1);
             
             static if(isInverse)
@@ -609,7 +619,7 @@ version(BenchFftw)
     }
 }
 
-void bench(F, bool isReal, bool isInverse)(int log2n, long flops)
+void speed(F, bool isReal, bool isInverse)(int log2n, long flops)
 {    
     auto f = F(log2n);
    
@@ -631,7 +641,23 @@ void bench(F, bool isReal, bool isInverse)(int log2n, long flops)
     writefln("%f", to!double(niter * flopsPerIter) / sw.peek().nsecs());
 }
 
-auto sq(T)(T a){ return a * a; }
+void initialization(F, bool isReal, bool isInverse)(int log2n, long flops)
+{    
+    auto niter = 100_000 / (1 << log2n);
+    niter = niter ? niter : 1;
+
+    StopWatch sw;
+    sw.start();
+    
+    foreach(i; 0 .. niter)
+    {
+        auto f = F(log2n);
+        f.compute();
+    }
+    
+    sw.stop();
+    writefln("%.3e", sw.peek().nsecs() * 1e-9 / niter);
+}
 
 void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 {
@@ -675,8 +701,8 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
             sim /= n;
         }        
 
-        sumSqDiff += sq(sre - tre) + sq(sim - tim); 
-        sumSqAvg += sq(0.5 * (sre + tre)) + sq(0.5 * (sim + tim)); 
+        sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
+        sumSqAvg += (0.5 * (sre + tre)) ^^ 2 + (0.5 * (sim + tim)) ^^ 2; 
     }
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
@@ -684,7 +710,7 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
 void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl, long mflops)
 {
     static if(testSpeed)
-        alias bench f;
+        alias speed f;
     else
         alias precision f;
 

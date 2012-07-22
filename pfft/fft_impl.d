@@ -678,7 +678,9 @@ struct FFT(V, Options)
             {
                 // only works for log2n < 4
                 bit_reverse_step!1(re, 1 << log2n);                     
-                bit_reverse_step!1(im, 1 << log2n); 
+                bit_reverse_step!1(im, 1 << log2n);
+                //bit_reverse_tiny!4(re, log2n);
+                //bit_reverse_tiny!4(im, log2n);
             }
             else
             {
@@ -698,7 +700,7 @@ struct FFT(V, Options)
 
     static void fft_tiny()(T * re, T * im, int log2n, Table tables)
     {
-        assert(log2n > log2(vec_size));
+        // assert(log2n > log2(vec_size));
         
         size_t N = (1<<log2n);
         fft_passes(v(re), v(im), N / vec_size, table_ptr(tables, log2n) + 2);
@@ -712,7 +714,7 @@ struct FFT(V, Options)
 
     static void fft_small()(T * re, T * im, int log2n, Table tables)
     {
-        assert(log2n >= 2*log2(vec_size));
+        // assert(log2n >= 2*log2(vec_size));
         
         size_t N = (1<<log2n);
         fft_passes(v(re), v(im), N / vec_size, table_ptr(tables, log2n) + 2);

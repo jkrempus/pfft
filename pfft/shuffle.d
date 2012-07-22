@@ -70,6 +70,45 @@ void bit_reverse_simple(T)(T* p, int log2n)
     iter_bit_reversed_pairs!loopBody(log2n, p);
 }
 
+template reverse_bits(int i, int bits_left, int r = 0)
+{
+    static if(bits_left == 0)
+        enum reverse_bits = r;
+    else
+        enum reverse_bits = reverse_bits!(
+            i >> 1, bits_left - 1, (r << 1) | (i & 1));
+}
+
+auto bit_reverse_static_size(int log2n, T)(T* p)
+{
+    enum n = 1 << log2n;    
+
+    RepeatType!(T, n) a;
+    
+    foreach(i, _; a)
+        static if(i != reverse_bits!(i, log2n)) 
+            a[i] = p[i];
+    
+    foreach(i, _; a)
+        static if(i != reverse_bits!(i, log2n)) 
+            p[i] = a[reverse_bits!(i, log2n)];
+}
+
+auto bit_reverse_tiny(int max_log2n, T)(T* p, int log2n)
+{
+    switch(log2n)
+    {
+        foreach(i; ints_up_to!max_log2n)
+        {
+            case i:
+                bit_reverse_static_size!i(p);
+                break;
+        }
+        
+        default:
+    }
+}
+
 void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
 {
     for(size_t i = chunk_size, j = (nchunks >> 1) * chunk_size; 
@@ -81,26 +120,9 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
-void bit_reverse_simple_small(int max_log2n, T)(T* p, int log2n)
-{
-    assert(log2n <= max_log2n);
-    
-    size_t n = 1 << log2n;
-    
-    foreach(i; ints_up_to!(max_log2n/2))
-    {
-        if(i == max_log2n/2)
-            return;
-                
-        foreach(j; 0..(1 << i))
-            bit_reverse_step!(1<<i)(p + (n >> i)*j, n >> (2*i));
-    }
-}
-
 auto aligned_ptr(T, U)(U * ptr, size_t alignment)
 {
-    return cast(T*)
-        (((cast(size_t)ptr) + alignment) & ~(alignment - 1UL));
+    return cast(T*)(((cast(size_t)ptr) + alignment) & ~(alignment - 1UL));
 }
 
 auto aligned_size(T)(size_t size, size_t alignment)
@@ -115,7 +137,7 @@ struct BitReverse(alias V, Options)
     
     static size_t br_table_size()(int log2n)
     { 
-        return (st!1 << log2n) < 16 ? 0 : (1<<(log2n-4)) + 4;
+        return log2n < 4 ? 0 : (1 << (log2n - 4)) + 4;
     }
     
     static void init_br_table()(uint* table, int log2n)
@@ -123,7 +145,7 @@ struct BitReverse(alias V, Options)
         static void loopBody0(int i0, int i1, uint** p)
         {
             if(i1 == i0)
-                (**p = i0<<2), (*p)++;
+                (**p = i0 << 2), (*p)++;
         };
         iter_bit_reversed_pairs!loopBody0(log2n - 4, &table);
 
@@ -131,9 +153,9 @@ struct BitReverse(alias V, Options)
         {
             if(i1 < i0)
             {
-                **p = i0<<2;
+                **p = i0 << 2;
                 (*p)++;
-                **p = i1<<2;
+                **p = i1 << 2;
                 (*p)++;
             }
         };
@@ -142,12 +164,11 @@ struct BitReverse(alias V, Options)
     
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
-        const uint Log2l = 2U;
-        size_t 
-            tmp = log2n -Log2l - Log2l,
-            n1 = (1u<<((tmp + 1)>>1)),
-            n2 = (1u<<tmp),
-            m = n2 << Log2l;
+        uint log2l = 2U;
+        uint tmp = log2n - log2l - log2l;
+        uint n1 = 1u << ((tmp + 1) >> 1);
+        uint n2 = 1u << tmp;
+        uint m = 1u << (log2n - log2l);
       
         uint* t1 = table + n1, t2 = table + n2;
         T* p1 = p + m, p2 = p1 + m, p3 = p2 + m;
