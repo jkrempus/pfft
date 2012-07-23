@@ -79,19 +79,26 @@ template reverse_bits(int i, int bits_left, int r = 0)
             i >> 1, bits_left - 1, (r << 1) | (i & 1));
 }
 
-auto bit_reverse_static_size(int log2n, T)(T* p)
+auto bit_reverse_static_size(int log2n, T, S...)(T* p, S stride) 
+    if(S.length <= 1) 
 {
-    enum n = 1 << log2n;    
+    enum n = 1 << log2n;
+    enum l = 1 << (log2n / 2);   
+    
+    static if(stride.length == 1)
+        auto index(size_t i)(S s){ return i / l * s[0] + i % l; } 
+    else
+        auto index(size_t i)(S s){ return i; }
 
     RepeatType!(T, n) a;
     
     foreach(i, _; a)
         static if(i != reverse_bits!(i, log2n)) 
-            a[i] = p[i];
+            a[i] = p[index!i(stride)];
     
     foreach(i, _; a)
         static if(i != reverse_bits!(i, log2n)) 
-            p[i] = a[reverse_bits!(i, log2n)];
+            p[index!i(stride)] = a[reverse_bits!(i, log2n)];
 }
 
 auto bit_reverse_tiny(int max_log2n, T)(T* p, int log2n)

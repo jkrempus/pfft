@@ -152,12 +152,12 @@ void runBenchmarks(Types t)
 void buildDmd(Types t, string dcpath, string ccpath, bool clib, bool dbg)
 {
     auto simdStr = to!string(t.simd);
-    auto src = sources(t, clib ? ["capi"] : ["stdapi", "pfft"]);
+    auto src = sources(t, clib ? ["clib"] : ["stdapi", "pfft"]);
 
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
     shellf("%s %s -lib -of%s -version=%s %s", 
-        dcpath, optOrDbg,  libPath, simdStr, src);
+        dcpath, optOrDbg,  clib ? clibPath : libPath, simdStr, src);
 }
 
 void buildLdc(Types t, string dcpath, string ccpath, bool clib)

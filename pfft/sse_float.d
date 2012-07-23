@@ -24,6 +24,7 @@ struct Vector
     alias float T;
     
     enum vec_size = 4;
+    enum log2_bitreverse_chunk_size = 2;
     
     version(GNU)
     {
@@ -159,138 +160,126 @@ struct Vector
             r3 = shufps!(3,1,3,1)(b2, b3);
         }
         
-        static void bit_reverse_swap_16()(float * p0, float * p1, float * p2, float * p3, size_t i1, size_t i2)
+        static void bit_reverse_swap()(float * p0, float * p1, size_t m)
         {
-            float4 b0 = *v(p0 + i2); 
-            float4 b1 = *v(p1 + i2); 
-            float4 b2 = *v(p2 + i2); 
-            float4 b3 = *v(p3 + i2);
+            float4 b0 = *v(p1 + 0 * m); 
+            float4 b1 = *v(p1 + 1 * m); 
+            float4 b2 = *v(p1 + 2 * m); 
+            float4 b3 = *v(p1 + 3 * m);
             
-            br16(*v(p0 + i1), *v(p1 + i1), *v(p2 + i1), *v(p3 + i1), 
-                 *v(p0 + i2), *v(p1 + i2), *v(p2 + i2), *v(p3 + i2));
+            br16(*v(p0 + 0 * m), *v(p0 + 1 * m), *v(p0 + 2 * m), *v(p0 + 3 * m), 
+                 *v(p1 + 0 * m), *v(p1 + 1 * m), *v(p1 + 2 * m), *v(p1 + 3 * m));
             
             br16(b0, b1, b2, b3, 
-                 *v(p0 + i1), *v(p1 + i1), *v(p2 + i1), *v(p3 + i1));
+                 *v(p0 + 0 * m), *v(p0 + 1 * m), *v(p0 + 2 * m), *v(p0 + 3 * m));
         }
 
-        static void bit_reverse_16()(float * p0, float * p1, float * p2, float * p3, size_t i)
+        static void bit_reverse()(float * p, size_t m)
         {
-            br16(*v(p0 + i), *v(p1 + i), *v(p2 + i), *v(p3 + i), 
-                 *v(p0 + i), *v(p1 + i), *v(p2 + i), *v(p3 + i));
+            br16(*v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m), 
+                 *v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m));
         }
     }
     else
     {        
-        static void bit_reverse_swap_16()(T * p0, T * p1, T * p2, T * p3, size_t i0, size_t i1)
+        static void bit_reverse()(T * p0, size_t m)
         {
             version(linux_x86_64)
-                asm                                                
-                {
-                    naked;
-                    
-                    movaps XMM0, [R9 + T.sizeof*RSI];
-                    movaps XMM1, [R8 + T.sizeof*RSI];
-                    movaps XMM2, [RCX + T.sizeof*RSI];
-                    movaps XMM3, [RDX + T.sizeof*RSI];
-                    
-                    movaps XMM4, XMM0;
-                    shufps XMM4, XMM2, 0b01_00_01_00;
-                    movaps XMM5, XMM1;
-                    shufps XMM5, XMM3, 0b01_00_01_00;
-                    movaps XMM6, XMM0;
-                    shufps XMM6, XMM2, 0b11_10_11_10;
-                    movaps XMM7, XMM1;
-                    shufps XMM7, XMM3, 0b11_10_11_10;
-                    
-                    movaps XMM0, XMM4;
-                    shufps XMM0, XMM5, 0b10_00_10_00;
-                    movaps XMM1, XMM6;
-                    shufps XMM1, XMM7, 0b10_00_10_00;
-                    movaps XMM2, XMM4;
-                    shufps XMM2, XMM5, 0b11_01_11_01;
-                    movaps XMM3, XMM6;
-                    shufps XMM3, XMM7, 0b11_01_11_01;
-                    
-                    movaps XMM4, [R9 + T.sizeof*RDI];
-                    movaps XMM5, [R8 + T.sizeof*RDI];
-                    movaps XMM6, [RCX + T.sizeof*RDI];
-                    movaps XMM7, [RDX + T.sizeof*RDI];
-                    
-                    movaps [R9 + T.sizeof*RDI], XMM0;
-                    movaps [R8 + T.sizeof*RDI], XMM1;
-                    movaps [RCX + T.sizeof*RDI], XMM2;
-                    movaps [RDX + T.sizeof*RDI], XMM3;
-                    
-                    movaps XMM0, XMM4;
-                    shufps XMM0, XMM6, 0b01_00_01_00;
-                    movaps XMM1, XMM5;
-                    shufps XMM1, XMM7, 0b01_00_01_00;
-                    movaps XMM2, XMM4;
-                    shufps XMM2, XMM6, 0b11_10_11_10;
-                    movaps XMM3, XMM5;
-                    shufps XMM3, XMM7, 0b11_10_11_10;
-                    
-                    movaps XMM4, XMM0;
-                    shufps XMM4, XMM1, 0b10_00_10_00;
-                    movaps XMM5, XMM2;
-                    shufps XMM5, XMM3, 0b10_00_10_00;
-                    movaps XMM6, XMM0;
-                    shufps XMM6, XMM1, 0b11_01_11_01;
-                    movaps XMM7, XMM2;
-                    shufps XMM7, XMM3, 0b11_01_11_01;
-                    
-                    movaps [R9 + T.sizeof*RSI], XMM4;
-                    movaps [R8 + T.sizeof*RSI], XMM5;
-                    movaps [RCX + T.sizeof*RSI], XMM6;
-                    movaps [RDX + T.sizeof*RSI], XMM7;
-                                        
-                    ret;
-                }
-            else
-                Scalar!T.bit_reverse_swap_16(p0, p1, p2, p3, i0, i1);
-        }
-
-        static void bit_reverse_16()(T * p0, T * p1, T * p2, T * p3, size_t i)
-        {
-            version(linux_x86_64)
-            {
                 asm
                 {
                     naked;
-                    
-                    movaps XMM0, [R8 + T.sizeof*RDI];
-                    movaps XMM1, [RCX + T.sizeof*RDI];
-                    movaps XMM2, [RDX + T.sizeof*RDI];
-                    movaps XMM3, [RSI + T.sizeof*RDI];
-                    
-                    movaps XMM4, XMM0;
-                    shufps XMM4, XMM2, 0b01_00_01_00;
-                    movaps XMM5, XMM1;
-                    shufps XMM5, XMM3, 0b01_00_01_00;
-                    movaps XMM6, XMM0;
-                    shufps XMM6, XMM2, 0b11_10_11_10;
-                    movaps XMM7, XMM1;
-                    shufps XMM7, XMM3, 0b11_10_11_10;
-                    
-                    movaps XMM0, XMM4;
-                    shufps XMM0, XMM5, 0b10_00_10_00;
-                    movaps XMM1, XMM6;
-                    shufps XMM1, XMM7, 0b10_00_10_00;
-                    movaps XMM2, XMM4;
-                    shufps XMM2, XMM5, 0b11_01_11_01;
-                    movaps XMM3, XMM6;
-                    shufps XMM3, XMM7, 0b11_01_11_01;
-                    
-                    movaps [R8 + T.sizeof*RDI], XMM0;
-                    movaps [RCX + T.sizeof*RDI], XMM1;
-                    movaps [RDX + T.sizeof*RDI], XMM2;
-                    movaps [RSI + T.sizeof*RDI], XMM3;
-                    
+                    lea     RAX,[RDI+RDI*1];
+                    lea     RCX,[RSI+RDI*4];
+                    lea     RDI,[RDI+RDI*2];
+                    movaps  XMM1,[RSI];
+                    lea     RDX,[RSI+RAX*4];
+                    lea     R8,[RSI+RDI*4];
+                    movaps  XMM0,[RCX];
+                    movaps  XMM3,XMM1;
+                    movaps  XMM5,[RDX];
+                    movaps  XMM2,XMM0;
+                    movaps  XMM4,[R8];
+                    shufps  XMM1,XMM5,0xEE;
+                    movlhps XMM3,XMM5;
+                    shufps  XMM0,XMM4,0xEE;
+                    movlhps XMM2,XMM4;
+                    movaps  XMM6,XMM3;
+                    movaps  XMM7,XMM1;
+                    shufps  XMM3,XMM2,0xDD;
+                    shufps  XMM6,XMM2,0x88;
+                    shufps  XMM7,XMM0,0x88;
+                    shufps  XMM1,XMM0,0xDD;
+                    movaps  [RSI],XMM6;
+                    movaps  [RCX],XMM7;
+                    movaps  [RDX],XMM3;
+                    movaps  [R8],XMM1;
                     ret;
                 }
-            }
             else
-                Scalar!T.bit_reverse_16(p0, p1, p2, p3, i);
+                Scalar!T.bit_reverse(p0, m);
+        }
+
+        static void bit_reverse_swap()(T * p0, T * p1, size_t m)
+        {
+            version(linux_x86_64)
+                asm
+                {
+                    naked;
+                    lea     RAX,[RDI+RDI*1];
+                    lea     RCX,[RDI*4+0x0];
+                    lea     RDI,[RDI+RDI*2];
+                    movaps  XMM1,[RSI];
+                    shl     RAX,0x2;
+                    lea     R10,[RSI+RCX*1];
+                    shl     RDI,0x2;
+                    lea     R9,[RSI+RAX*1];
+                    movaps  XMM3,[RDX];
+                    add     RAX,RDX;
+                    lea     R8,[RSI+RDI*1];
+                    add     RCX,RDX;
+                    movaps  XMM5,[R9];
+                    add     RDI,RDX;
+                    movaps  XMM7,XMM3;
+                    movaps  XMM9,[RAX];
+                    movaps  XMM12,XMM1;
+                    shufps  XMM1,XMM5,0xEE;
+                    movaps  XMM0,[R10];
+                    shufps  XMM3,XMM9,0xEE;
+                    movlhps XMM7,XMM9;
+                    movaps  XMM2,[RCX];
+                    movlhps XMM12,XMM5;
+                    movaps  XMM13,XMM0;
+                    movaps  XMM4,[R8];
+                    movaps  XMM6,XMM2;
+                    movaps  XMM10,XMM7;
+                    movaps  XMM8,[RDI];
+                    shufps  XMM0,XMM4,0xEE;
+                    movaps  XMM11,XMM3;
+                    shufps  XMM2,XMM8,0xEE;
+                    movlhps XMM6,XMM8;
+                    movlhps XMM13,XMM4;
+                    movaps  XMM14,XMM12;
+                    movaps  XMM15,XMM1;
+                    shufps  XMM10,XMM6,0x88;
+                    shufps  XMM11,XMM2,0x88;
+                    shufps  XMM7,XMM6,0xDD;
+                    shufps  XMM3,XMM2,0xDD;
+                    shufps  XMM14,XMM13,0x88;
+                    shufps  XMM15,XMM0,0x88;
+                    shufps  XMM12,XMM13,0xDD;
+                    shufps  XMM1,XMM0,0xDD;
+                    movaps  [RSI],XMM10;
+                    movaps  [R10],XMM11;
+                    movaps  [R9],XMM7;
+                    movaps  [R8],XMM3;
+                    movaps  [RDX],XMM14;
+                    movaps  [RCX],XMM15;
+                    movaps  [RAX],XMM12;
+                    movaps  [RDI],XMM1;
+                    ret;
+                }
+            else
+                Scalar!T.bit_reverse_swap(p0, p1, m);
         }                         
     }
 }
