@@ -29,3 +29,4 @@ mv test_float test_float_sse_dmd
 mv test_float test_float_sse_ldc
 
 cp test_float_avx test_float_avx_gdmd
+cp test_float_sse test_float_sse_gdmd
