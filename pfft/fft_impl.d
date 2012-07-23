@@ -901,6 +901,9 @@ struct FFT(V, Options)
 
         vec half = V.scalar_to_vector(cast(T) 0.5);
 
+        T middle_r = rr[n / 4];        
+        T middle_i = ri[n / 4];        
+
         for(
             size_t i0 = 1, i1 = n / 2 - vec_size, iw = 0; 
             i0 <= i1; 
@@ -946,6 +949,11 @@ struct FFT(V, Options)
             *v(rr + i1) = V.reverse(ar - bi);
             *v(ri + i1) = V.reverse(ai + br);
         }
+        
+        // fixes the aliasing bug:
+        rr[n / 4] = inverse ? middle_r + middle_r : middle_r; 
+        ri[n / 4] = -(inverse ? middle_i + middle_i : middle_i);
+        
 
         {
             // When calculating inverse we would need to multiply with 0.5 here 

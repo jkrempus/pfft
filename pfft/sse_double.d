@@ -24,6 +24,7 @@ struct Vector
     alias double T;
     
     enum vec_size = 2;
+    enum log2_bitreverse_chunk_size = 2;
     
     version(GNU)
     {
@@ -121,78 +122,78 @@ struct Vector
         interleave!2(a0, a1, r0, r1);
     }
     
-    static void bit_reverse_swap_16(T * p0, T * p1, T * p2, T * p3, size_t i1, size_t i2)
+    static void bit_reverse_swap(T * p0, T * p1, size_t m)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
-        a0 = v(p0 + i1)[0];
-        a1 = v(p2 + i1)[0];
-        b0 = v(p0+i2)[0];
-        b1 = v(p2+i2)[0];
+        a0 = v(p0 + m * 0)[0];
+        a1 = v(p0 + m * 2)[0];
+        b0 = v(p1 + m * 0)[0];
+        b1 = v(p1 + m * 2)[0];
         interleave!2(a0, a1, a0, a1);
         interleave!2(b0, b1, b0, b1);
-        v(p0+i2)[0] = a0;
-        v(p2+i2)[0] = a1;
-        v(p0 + i1)[0] = b0;
-        v(p2 + i1)[0] = b1;
+        v(p1 + m * 0)[0] = a0;
+        v(p1 + m * 2)[0] = a1;
+        v(p0 + m * 0)[0] = b0;
+        v(p0 + m * 2)[0] = b1;
         
-        a2 = v(p1 + i1)[1];
-        a3 = v(p3 + i1)[1];
-        b2 = v(p1+i2)[1];
-        b3 = v(p3+i2)[1];
+        a2 = v(p0 + m * 1)[1];
+        a3 = v(p0 + m * 3)[1];
+        b2 = v(p1 + m * 1)[1];
+        b3 = v(p1 + m * 3)[1];
         interleave!2(a2, a3, a2, a3);
         interleave!2(b2, b3, b2, b3);
-        v(p1+i2)[1] = a2;
-        v(p3+i2)[1] = a3;
-        v(p1 + i1)[1] = b2;
-        v(p3 + i1)[1] = b3;
+        v(p1 + m * 1)[1] = a2;
+        v(p1 + m * 3)[1] = a3;
+        v(p0 + m * 1)[1] = b2;
+        v(p0 + m * 3)[1] = b3;
         
-        a0 = v(p0 + i1)[1];
-        a1 = v(p2 + i1)[1];
-        a2 = v(p1 + i1)[0];
-        a3 = v(p3 + i1)[0];
+        a0 = v(p0 + m * 0)[1];
+        a1 = v(p0 + m * 2)[1];
+        a2 = v(p0 + m * 1)[0];
+        a3 = v(p0 + m * 3)[0];
         interleave!2(a0, a1, a0, a1);
         interleave!2(a2, a3, a2, a3);
-        b0 = v(p0+i2)[1];
-        b1 = v(p2+i2)[1];
-        b2 = v(p1+i2)[0];
-        b3 = v(p3+i2)[0];
-        v(p0+i2)[1] = a2;
-        v(p2+i2)[1] = a3;
-        v(p1+i2)[0] = a0;
-        v(p3+i2)[0] = a1;
+        b0 = v(p1 + m * 0)[1];
+        b1 = v(p1 + m * 2)[1];
+        b2 = v(p1 + m * 1)[0];
+        b3 = v(p1 + m * 3)[0];
+        v(p1 + m * 0)[1] = a2;
+        v(p1 + m * 2)[1] = a3;
+        v(p1 + m * 1)[0] = a0;
+        v(p1 + m * 3)[0] = a1;
         interleave!2(b0, b1, b0, b1);
         interleave!2(b2, b3, b2, b3);
-        v(p0 + i1)[1] = b2;
-        v(p2 + i1)[1] = b3;
-        v(p1 + i1)[0] = b0;
-        v(p3 + i1)[0] = b1;
+        v(p0 + m * 0)[1] = b2;
+        v(p0 + m * 2)[1] = b3;
+        v(p0 + m * 1)[0] = b0;
+        v(p0 + m * 3)[0] = b1;
     }
 
-    static void bit_reverse_16(T * p0, T * p1, T * p2, T * p3, size_t i)
+    static void bit_reverse(T * p, size_t m)
     {
         vec a0, a1, a2, a3;
-        a0 = v(p0 + i)[0];
-        a1 = v(p2 + i)[0];
-        a2 = v(p1 + i)[1];
-        a3 = v(p3 + i)[1];
+        a0 = v(p + m * 0)[0];
+        a1 = v(p + m * 2)[0];
+        a2 = v(p + m * 1)[1];
+        a3 = v(p + m * 3)[1];
         interleave!2(a0, a1, a0, a1);
         interleave!2(a2, a3, a2, a3);
-        v(p0 + i)[0] = a0;
-        v(p2 + i)[0] = a1;
-        v(p1 + i)[1] = a2;
-        v(p3 + i)[1] = a3;
+        v(p + m * 0)[0] = a0;
+        v(p + m * 2)[0] = a1;
+        v(p + m * 1)[1] = a2;
+        v(p + m * 3)[1] = a3;
         
-        a0 = v(p0 + i)[1];
-        a1 = v(p2 + i)[1];
-        a2 = v(p1 + i)[0];
-        a3 = v(p3 + i)[0];
+        a0 = v(p + m * 0)[1];
+        a1 = v(p + m * 2)[1];
+        a2 = v(p + m * 1)[0];
+        a3 = v(p + m * 3)[0];
         interleave!2(a0, a1, a0, a1);
         interleave!2(a2, a3, a2, a3);
-        v(p0 + i)[1] = a2;
-        v(p2 + i)[1] = a3;
-        v(p1 + i)[0] = a0;
-        v(p3 + i)[0] = a1;
+        v(p + m * 0)[1] = a2;
+        v(p + m * 2)[1] = a3;
+        v(p + m * 1)[0] = a0;
+        v(p + m * 3)[0] = a1;
     }
 }
 

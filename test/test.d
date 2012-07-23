@@ -191,7 +191,8 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
         this.log2n = log2n;
         itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
         rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
-        table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1))); 
+        table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1)));
+        writeln((cast(T*) rtable)[0 .. n / 2]);
     }
     
     void compute()
@@ -693,14 +694,14 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
         auto sre = simple.outRe(i);
         auto sim = simple.outIm(i);
 
-        //writefln("%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim);
-     
         static if(isInverse &&  is(typeof(F.normalizedInverse)))
         {
             sre /= n;
             sim /= n;
         }        
 
+        //writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
+        
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += (0.5 * (sre + tre)) ^^ 2 + (0.5 * (sim + tim)) ^^ 2; 
     }
