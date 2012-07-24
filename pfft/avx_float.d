@@ -22,43 +22,43 @@ else version(GNU)
         enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
     }
 
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     float8 insert128_0(float8 a, float4 b)
     {
         return __builtin_ia32_vinsertf128_ps256(a, b, 0);
     }
-
-    pragma(attribute, always_inline);
+    
+    pragma(attribute, always_inline)
     float8 insert128_1(float8 a, float4 b)
     {
         return __builtin_ia32_vinsertf128_ps256(a, b, 1);
     }
 
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     float4 extract128_0(float8 a)
     {
         return __builtin_ia32_vextractf128_ps256(a, 0);
     }
 
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     float4 extract128_1(float8 a)
     {
         return __builtin_ia32_vextractf128_ps256(a, 1);
     }
 
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     float8 interleave128_lo(float8 a, float8 b)
     {
         return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,2,0,0));
     }
 
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     float8 interleave128_hi(float8 a, float8 b)
     {
         return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,3,0,1));
     }
 
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     float8  reverse128(float8 v)
     {
         return __builtin_ia32_vperm2f128_ps256(v, v, shuf_mask!(0, 0, 0, 1));
@@ -70,7 +70,7 @@ else version(GNU)
     alias __builtin_ia32_loadups256 loadups;
     alias __builtin_ia32_storeups256 storeups;
     
-    pragma(attribute, always_inline);
+    pragma(attribute, always_inline)
     auto shufps(param...)(float8 a, float8 b)
     {
         return __builtin_ia32_shufps256(a, b, shuf_mask!param);
@@ -90,15 +90,38 @@ struct Vector
     static auto v(T* p){ return cast(float4*) p; }
     static auto v8(T* p){ return cast(float8*) p; }
     
+    pragma(attribute, always_inline) 
+    static void _deinterleave2(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        r0 = interleave128_lo(a0, a1);
+        r1 = interleave128_hi(a0, a1);
+    }
+   
+    // the three functions below do not do exactly what the names imply, but that's
+    // ok (fft works correctly when using them)
+ 
+    pragma(attribute, always_inline) 
     static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
     {
         static if(n == 8)
             deinterleave!8(v8(arr)[0], v8(arr)[1], rr, ri);
         else static if (n == 4)
         {
+            // maybe this can be better optimized
+            vec a = *v8(arr);
+            vec b =  reverse128(a);
+            vec c = shufps!(1, 0, 1, 0)(a, b);
+            vec d = shufps!(3, 2, 3, 2)(a, b);
+            a = interleave128_lo(c, d);
+
+            rr = shufps!(2, 2, 0, 0)(a, a);
+            ri = shufps!(3, 3, 1, 1)(a, a);
+
+            /*
             vec a = *v8(arr);
             rr = shufps!(2, 2, 0, 0)(a, a);
             ri = shufps!(3, 3, 1, 1)(a, a);
+            */
         }
         else static if(n == 2)
         {
@@ -111,26 +134,25 @@ struct Vector
             static assert(0);
     }
    
-    pragma(attribute, always_inline) 
-    static void _deinterleave2(vec a0, vec a1, ref vec r0, ref vec r1)
-    {
-        r0 = interleave128_lo(a0, a1);
-        r1 = interleave128_hi(a0, a1);
-    }
-    
+    pragma(attribute, always_inline)
     static void interleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         static if(interleaved == 8)
         {
-            vec a0_tmp = unpcklps(a0, a1);
+            r0 = unpcklps(a0, a1);
+            r1 = unpckhps(a0, a1);
+
+            /*vec a0_tmp = unpcklps(a0, a1);
             a1 =         unpckhps(a0, a1);
-            _deinterleave2(a0_tmp, a1, r0, r1);
+            _deinterleave2(a0_tmp, a1, r0, r1);*/
         }
         else static if(interleaved == 4)
         {
-            vec a0_tmp = shufps!(1,0,1,0)(a0, a1);
+            r0 = shufps!(1,0,1,0)(a0, a1);
+            r1 = shufps!(3,2,3,2)(a0, a1);
+            /*vec a0_tmp = shufps!(1,0,1,0)(a0, a1);
             a1 =         shufps!(3,2,3,2)(a0, a1);
-            _deinterleave2(a0_tmp, a1, r0, r1);
+            _deinterleave2(a0_tmp, a1, r0, r1);*/
         }
         else static if(interleaved == 2)
             _deinterleave2(a0, a1, r0, r1);
@@ -138,17 +160,18 @@ struct Vector
             static assert(0);
     }
     
+    pragma(attribute, always_inline)
     static void deinterleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         static if(interleaved == 8)
         {
-            _deinterleave2(a0, a1, a0, a1); 
+            //_deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(2,0,2,0)(a0, a1);
             r1 = shufps!(3,1,3,1)(a0, a1);
         }
         else static if(interleaved == 4)
         {
-            _deinterleave2(a0, a1, a0, a1); 
+            //_deinterleave2(A0, A1, a0, a1); 
             r0 = shufps!(1,0,1,0)(a0, a1);
             r1 = shufps!(3,2,3,2)(a0, a1);
         }
@@ -161,6 +184,7 @@ struct Vector
             static assert(0);
     }
 
+    pragma(attribute, always_inline)
     private static void br16_two(ref vec a0, ref vec a1, ref vec a2, ref vec a3)
     {
         vec b0 = shufps!(1, 0, 1, 0)(a0, a2);
@@ -174,6 +198,21 @@ struct Vector
         a3 = shufps!(3, 1, 3, 1)(b2, b3);
     }
 
+    pragma(attribute, always_inline)
+    private static void br64(
+        ref vec a0, ref vec a1, ref vec a2, ref vec a3,
+        ref vec a4, ref vec a5, ref vec a6, ref vec a7)
+    {
+        // reverse the outer four bits 
+        br16_two(a0, a2, a4, a6);
+        br16_two(a1, a3, a5, a7);
+        
+        // reverse the inner two bits
+        _deinterleave2(a0, a1, a0, a1); 
+        _deinterleave2(a2, a3, a2, a3); 
+        _deinterleave2(a4, a5, a4, a5); 
+        _deinterleave2(a6, a7, a6, a7); 
+    }
     
     template RepeatType(T, int n, R...)
     {
@@ -183,6 +222,7 @@ struct Vector
             alias RepeatType!(T, n - 1, T, R) RepeatType;
     }
         
+    pragma(attribute, always_inline)
     static void bit_reverse_swap(T* p0, T* p1, size_t m)
     {
         RepeatType!(vec, 8) a, b;    
@@ -190,15 +230,7 @@ struct Vector
         foreach(i, _; a)
             a[i] = *v8(p0 + i * m);
 
-        // reverse the outer four bits 
-        br16_two(a[0], a[2], a[4], a[6]);
-        br16_two(a[1], a[3], a[5], a[7]);
-
-        // reverse the inner two bits
-        _deinterleave2(a[0], a[1], a[0], a[1]); 
-        _deinterleave2(a[2], a[3], a[2], a[3]); 
-        _deinterleave2(a[4], a[5], a[4], a[5]); 
-        _deinterleave2(a[6], a[7], a[6], a[7]); 
+        br64(a);
 
         foreach(i, _; a)
             b[i] = *v8(p1 + i * m);
@@ -206,18 +238,13 @@ struct Vector
         foreach(i, _; a)
             *v8(p1 + i * m) = a[i];
 
-        br16_two(b[0], b[2], b[4], b[6]);
-        br16_two(b[1], b[3], b[5], b[7]);
-
-        _deinterleave2(b[0], b[1], b[0], b[1]); 
-        _deinterleave2(b[2], b[3], b[2], b[3]); 
-        _deinterleave2(b[4], b[5], b[4], b[5]); 
-        _deinterleave2(b[6], b[7], b[6], b[7]); 
+        br64(b);
 
         foreach(i, _; a)
             *v8(p0 + i * m) = b[i];
     }
 
+    pragma(attribute, always_inline)
     static void bit_reverse(T* p0, size_t m)
     {
         RepeatType!(vec, 8) a;    
@@ -225,35 +252,31 @@ struct Vector
         foreach(i, _; a)
             a[i] = *v8(p0 + i * m);
 
-        // reverse the outer four bits 
-        br16_two(a[0], a[2], a[4], a[6]);
-        br16_two(a[1], a[3], a[5], a[7]);
-
-        // reverse the inner two bits
-        _deinterleave2(a[0], a[1], a[0], a[1]); 
-        _deinterleave2(a[2], a[3], a[2], a[3]); 
-        _deinterleave2(a[4], a[5], a[4], a[5]); 
-        _deinterleave2(a[6], a[7], a[6], a[7]); 
+        br64(a);
 
         foreach(i, _; a)
             *v8(p0 + i * m) = a[i];
     }
 
+    pragma(attribute, always_inline)
     static vec scalar_to_vector(T a)
     {
         return a;
     }
 
+    pragma(attribute, always_inline)
     static vec unaligned_load(T* p)
     {
         return loadups(p);
     }
 
+    pragma(attribute, always_inline)
     static void unaligned_store(T* p, vec v)
     {
         storeups(p, v);
     }
 
+    pragma(attribute, always_inline)
     static vec reverse(vec v)
     {
         v = shufps!(0, 1, 2, 3)(v, v);

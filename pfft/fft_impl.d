@@ -772,9 +772,10 @@ struct FFT(V, Options)
         bit_reverse_small_two!(2 * log2(vec_size))(
             re, im, log2n, br_table_ptr(tables, log2n));
 
-        fft_passes_bit_reversed(
-            v(re), v(im) , N / vec_size, 
-            cast(vec*) table_ptr(tables, log2n), N/vec_size/vec_size);
+        static if(vec_size > 1) 
+            fft_passes_bit_reversed(
+                v(re), v(im) , N / vec_size, 
+                cast(vec*) table_ptr(tables, log2n), N/vec_size/vec_size);
     }
     
     static void fft_large()(T * re, T * im, int log2n, Table tables)

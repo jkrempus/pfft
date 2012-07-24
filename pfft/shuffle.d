@@ -172,7 +172,7 @@ struct BitReverse(alias V, Options)
         };
         iter_bit_reversed_pairs!loopBody1(log2n - 2 * log2l, &table);
     }
-    
+       
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
