@@ -644,7 +644,7 @@ void speed(F, bool isReal, bool isInverse)(int log2n, long flops)
 
 void initialization(F, bool isReal, bool isInverse)(int log2n, long flops)
 {    
-    auto niter = 100_000 / (1 << log2n);
+    auto niter = 100_000_000 / (1 << log2n);
     niter = niter ? niter : 1;
 
     StopWatch sw;
@@ -804,6 +804,8 @@ Implementations:
   phobos            Phobos implementation of fft (std.numeric.Fft).
   fftw              FFTW implementation. This one is only available
                     if the test program was compiled with -version=BenchFftw.
+  fftw-measure      Same as the above, but using FFTW_MEASURE flag instead
+                    of FFTW_PATIENT.
 
 Options:
   -s                Test speed instead of precision.

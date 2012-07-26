@@ -139,12 +139,12 @@ struct Vector
     {
         static if(interleaved == 8)
         {
-            r0 = unpcklps(a0, a1);
-            r1 = unpckhps(a0, a1);
+            /*r0 = unpcklps(a0, a1);
+            r1 = unpckhps(a0, a1);*/ // this is not enough for array interleaving / deinterleaving
 
-            /*vec a0_tmp = unpcklps(a0, a1);
+            vec a0_tmp = unpcklps(a0, a1);
             a1 =         unpckhps(a0, a1);
-            _deinterleave2(a0_tmp, a1, r0, r1);*/
+            _deinterleave2(a0_tmp, a1, r0, r1);
         }
         else static if(interleaved == 4)
         {
@@ -165,7 +165,7 @@ struct Vector
     {
         static if(interleaved == 8)
         {
-            //_deinterleave2(a0, a1, a0, a1); 
+            _deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(2,0,2,0)(a0, a1);
             r1 = shufps!(3,1,3,1)(a0, a1);
         }
