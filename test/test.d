@@ -703,7 +703,7 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
         //writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
-        sumSqAvg += (0.5 * (sre + tre)) ^^ 2 + (0.5 * (sim + tim)) ^^ 2; 
+        sumSqAvg += sre ^^ 2 + sim ^^ 2; 
     }
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
@@ -775,8 +775,8 @@ If the -s option is not used, the program will choose some random data and
 perform fft on it twice - once using the chosen implementation and once using 
 a simple Cooley Tukey implementation that operates on extended precision 
 floating point numbers. It will then compute the sum of squares of the 
-difference of the two results and the sum of squares of the average of the 
-two results and print the square root of the quotient of the two sums.
+difference of the two results and the sum of squares of the result of the 
+simple transform and print the square root of the quotient of the two sums.
 
 If the -s option is used the program will compute fft a number of times, time 
 it and report the speed in billions of floating point operations per second. 
