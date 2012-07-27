@@ -289,13 +289,13 @@ private struct Scalar(TT)
     alias TT vec;
     enum vec_size = 1;
     
-    static void interleave(int n)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         r0 = a0;
         r1 = a1; 
     }
     
-    static void deinterleave(int n)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         r0 = a0;
         r1 = a1; 
@@ -305,8 +305,8 @@ private struct Scalar(TT)
 template hasInterleaving(V)
 {
     enum hasInterleaving =  
-        is(typeof(V.interleave!(V.vec_size))) && 
-        is(typeof(V.deinterleave!(V.vec_size)));
+        is(typeof(V.interleave)) && 
+        is(typeof(V.deinterleave));
 }
 
 struct InterleaveImpl(V, int chunk_size, bool isInverse) 
@@ -409,12 +409,12 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
 
                     static if(isInverse)
                         foreach(j; ints_up_to!n)
-                            V.deinterleave!(V.vec_size)(
+                            V.deinterleave(
                                 p[2 * j], p[2 * j + 1], tmp[j], 
                                 tmp[n + j]);
                     else
                         foreach(j; ints_up_to!n)
-                            V.interleave!(V.vec_size)(
+                            V.interleave(
                                 p[j], p[n + j], 
                                 tmp[2 * j], tmp[2 * j + 1]);
 
@@ -436,11 +436,11 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
 
             static if(isInverse)
                 foreach(j; ints_up_to!chunk_size)
-                    V.deinterleave!(V.vec_size)(
+                    V.deinterleave(
                         p[2 * j], p[2 * j + 1], tmp[j], tmp[chunk_size + j]);
             else
                 foreach(j; ints_up_to!chunk_size)
-                    V.interleave!(V.vec_size)(
+                    V.interleave(
                         p[j], p[chunk_size + j], tmp[2 * j], tmp[2 * j + 1]);
 
             foreach(j; ints_up_to!(2 * chunk_size))

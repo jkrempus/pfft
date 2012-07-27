@@ -51,7 +51,7 @@ struct Vector
     static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
     {
         static if (n == 4)
-            deinterleave!4(v(arr)[0], v(arr)[1], rr, ri);
+            deinterleave(v(arr)[0], v(arr)[1], rr, ri);
         else static if(n == 2)
         {
             vec a = *v(arr);
@@ -62,18 +62,14 @@ struct Vector
             static assert(0);
     }
       
-    static void deinterleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void transpose(int elements_per_vector)(vec a0, vec a1, ref vec r0, ref vec r1)
     {
-        static if(interleaved == 4)
+        static if(elements_per_vector == 4)
         {
-            vec b0, b1;
-            
-            deinterleave!2(a0, a1, b0, b1);
-
-            r0 = unpcklpd(b0, b1);
-            r1 = unpckhpd(b0, b1);
+            r0 = unpcklpd(a0, a1);
+            r1 = unpckhpd(a0, a1);
         }
-        else static if(interleaved == 2)
+        else static if(elements_per_vector == 2)
         {
             r0 = interleave128_lo_d(a0, a1);
             r1 = interleave128_hi_d(a0, a1);
@@ -82,22 +78,24 @@ struct Vector
             static assert(0);
     }
 
-    static void interleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
-        static if(interleaved == 4)
-        {
-            vec b0, b1;
-            
-            b0 = unpcklpd(a0, a1);
-            b1 = unpckhpd(a0, a1);
+        vec b0, b1;
 
-            deinterleave!2(b0, b1, r0, r1);
-        }
-        else static if(interleaved == 2)
-            deinterleave!2(a0, a1, r0, r1);
-        else
-            static assert(0);
+        b0 = unpcklpd(a0, a1);
+        b1 = unpckhpd(a0, a1);
+        transpose!2(b0, b1, r0, r1);
     }
+    
+    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        vec b0, b1;
+
+        transpose!2(a0, a1, b0, b1);
+        r0 = unpcklpd(b0, b1);
+        r1 = unpckhpd(b0, b1);
+    }
+
 
     static void bit_reverse_swap(double * p0, double * p1, size_t m)
     {

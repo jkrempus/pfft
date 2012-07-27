@@ -104,24 +104,14 @@ struct Vector
     static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
     {
         static if(n == 8)
-            deinterleave!8(v8(arr)[0], v8(arr)[1], rr, ri);
+        {
+            deinterleave(v8(arr)[0], v8(arr)[1], rr, ri); 
+        }
         else static if (n == 4)
         {
-            // maybe this can be better optimized
-            vec a = *v8(arr);
-            vec b =  reverse128(a);
-            vec c = shufps!(1, 0, 1, 0)(a, b);
-            vec d = shufps!(3, 2, 3, 2)(a, b);
-            a = interleave128_lo(c, d);
-
-            rr = shufps!(2, 2, 0, 0)(a, a);
-            ri = shufps!(3, 3, 1, 1)(a, a);
-
-            /*
             vec a = *v8(arr);
             rr = shufps!(2, 2, 0, 0)(a, a);
             ri = shufps!(3, 3, 1, 1)(a, a);
-            */
         }
         else static if(n == 2)
         {
@@ -135,47 +125,38 @@ struct Vector
     }
    
     pragma(attribute, always_inline)
-    static void interleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
-        static if(interleaved == 8)
-        {
-            /*r0 = unpcklps(a0, a1);
-            r1 = unpckhps(a0, a1);*/ // this is not enough for array interleaving / deinterleaving
-
-            vec a0_tmp = unpcklps(a0, a1);
-            a1 =         unpckhps(a0, a1);
-            _deinterleave2(a0_tmp, a1, r0, r1);
-        }
-        else static if(interleaved == 4)
-        {
-            r0 = shufps!(1,0,1,0)(a0, a1);
-            r1 = shufps!(3,2,3,2)(a0, a1);
-            /*vec a0_tmp = shufps!(1,0,1,0)(a0, a1);
-            a1 =         shufps!(3,2,3,2)(a0, a1);
-            _deinterleave2(a0_tmp, a1, r0, r1);*/
-        }
-        else static if(interleaved == 2)
-            _deinterleave2(a0, a1, r0, r1);
-        else
-            static assert(0);
+        vec a0_tmp = unpcklps(a0, a1);
+        a1 =         unpckhps(a0, a1);
+        _deinterleave2(a0_tmp, a1, r0, r1);
     }
     
     pragma(attribute, always_inline)
-    static void deinterleave(int interleaved)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
-        static if(interleaved == 8)
+        _deinterleave2(a0, a1, a0, a1); 
+        r0 = shufps!(2,0,2,0)(a0, a1);
+        r1 = shufps!(3,1,3,1)(a0, a1);
+    }
+
+    pragma(attribute, always_inline)
+    static void transpose(int elements_per_vector)(
+        vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        static if(elements_per_vector == 8)
         {
-            _deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(2,0,2,0)(a0, a1);
             r1 = shufps!(3,1,3,1)(a0, a1);
+            r0 = shufps!(3,1,2,0)(r0, r0);
+            r1 = shufps!(3,1,2,0)(r1, r1);
         }
-        else static if(interleaved == 4)
+        else static if(elements_per_vector == 4)
         {
-            //_deinterleave2(A0, A1, a0, a1); 
             r0 = shufps!(1,0,1,0)(a0, a1);
             r1 = shufps!(3,2,3,2)(a0, a1);
         }
-        else static if(interleaved == 2)
+        else static if(elements_per_vector == 2)
         {
             r0 = interleave128_lo(a0, a1);
             r1 = interleave128_hi(a0, a1);

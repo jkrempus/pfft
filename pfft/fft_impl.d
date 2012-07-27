@@ -297,7 +297,7 @@ struct FFT(V, Options)
             p += m2;
         }
         
-        if(log2n < 2 * log2(vec_size) || log2n >= Options.large_limit)
+        if(log2n < 2 * log2(vec_size))
             return;        
  
         p = r;
@@ -607,21 +607,31 @@ struct FFT(V, Options)
 
     static void fft_pass_interleaved(int interleaved)(
         vec * pr, vec * pi, vec * pend, T * table) 
-    if(is(typeof(V.interleave!2)))
+    if(is(typeof(V.transpose!2)))
     {
         for(; pr < pend; pr += 2, pi += 2, table += 2*interleaved)
         {
             vec tmpr, ti, ur, ui, wr, wi;
             V.complex_array_to_real_imag_vec!interleaved(table, wr, wi);
                 
-            V.deinterleave!interleaved(pr[0], pr[1], ur, tmpr);
-            V.deinterleave!interleaved(pi[0], pi[1], ui, ti);
+            V.transpose!interleaved(pr[0], pr[1], ur, tmpr);
+            V.transpose!interleaved(pi[0], pi[1], ui, ti);
 
             vec tr = tmpr * wr - ti * wi;
             ti = tmpr * wi + ti * wr;
 
-            V.interleave!interleaved(ur + tr, ur - tr, pr[0], pr[1]);
-            V.interleave!interleaved(ui + ti, ui - ti, pi[0], pi[1]);
+            static if(interleaved == vec_size)
+            {
+                V.interleave(ur + tr, ur - tr, pr[0], pr[1]);
+                V.interleave(ui + ti, ui - ti, pi[0], pi[1]);
+            }
+            else
+            {
+                pr[0] = ur + tr;
+                pr[1] = ur - tr;
+                pi[0] = ui + ti;
+                pi[1] = ui - ti;
+            }
         }
     }
     
@@ -629,7 +639,7 @@ struct FFT(V, Options)
         vec * pr, vec * pi, vec * pend, 
         T * table, size_t tableI, size_t tableRowLen)
     {
-        static if(is(typeof(V.interleave!2)))
+        static if(is(typeof(V.transpose!2)))
         {
             foreach(i; ints_up_to!(log2(vec_size)))
             {
@@ -1042,13 +1052,13 @@ struct FFT(V, Options)
 
     static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
-        static if(is(typeof(V.interleave!vec_size)))
+        static if(is(typeof(V.interleave)))
         {
             if(n < vec_size)
                 SFFT.interleave_array(even, odd, interleaved, n);
             else
                 foreach(i; 0 .. n / vec_size)
-                    V.interleave!vec_size(
+                    V.interleave(
                         (cast(vec*)even)[i], 
                         (cast(vec*)odd)[i], 
                         (cast(vec*)interleaved)[i * 2], 
@@ -1064,13 +1074,13 @@ struct FFT(V, Options)
     
     static void deinterleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
-        static if(is(typeof(V.deinterleave!vec_size)))
+        static if(is(typeof(V.deinterleave)))
         {
             if(n < vec_size)
                 SFFT.deinterleave_array(even, odd, interleaved, n);
             else
                 foreach(i; 0 .. n / vec_size)
-                    V.deinterleave!vec_size(
+                    V.deinterleave(
                         (cast(vec*)interleaved)[i * 2], 
                         (cast(vec*)interleaved)[i * 2 + 1], 
                         (cast(vec*)even)[i], 
