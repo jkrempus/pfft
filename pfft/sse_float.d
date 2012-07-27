@@ -53,36 +53,36 @@ struct Vector
             }
         }
 
-        static void interleave(int interleaved)( 
+        static void transpose(int elements_per_vector)(
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
-            static if(interleaved==4)
-            {
-                r0 = __builtin_ia32_unpcklps(a0,a1);
-                r1 = __builtin_ia32_unpckhps(a0,a1);
-            }
-            else static if(interleaved==2)
-            {
-                r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(1,0,1,0));
-                r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,2,3,2));
-            }
-        }
-
-        static void deinterleave(int interleaved)(
-            vec a0,  vec a1, ref vec r0, ref vec r1)
-        {
-            if(interleaved==4)
+            if(elements_per_vector==4)
             {
                 r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(2,0,2,0));
                 r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,1,3,1));
+                r0 = __builtin_ia32_shufps(r0,r0,shuf_mask!(3,1,2,0));
+                r1 = __builtin_ia32_shufps(r1,r1,shuf_mask!(3,1,2,0));
             }
-            else if(interleaved==2)
+            else if(elements_per_vector==2)
             {
                 r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(1,0,1,0));
                 r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,2,3,2));
             }
         }
         
+        static void interleave( 
+            vec a0,  vec a1, ref vec r0, ref vec r1)
+        {
+            r0 = __builtin_ia32_unpcklps(a0,a1);
+            r1 = __builtin_ia32_unpckhps(a0,a1);
+        }
+        
+        static void deinterleave(
+            vec a0,  vec a1, ref vec r0, ref vec r1)
+        {
+            r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(2,0,2,0));
+            r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,1,3,1));
+        }
         
         static vec unaligned_load(T* p)
         {

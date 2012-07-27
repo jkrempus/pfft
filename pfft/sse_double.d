@@ -35,7 +35,7 @@ struct Vector
             return a;
         }
         
-        static void interleave(int interleaved)( 
+        static void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = __builtin_ia32_unpcklpd(a0, a1);
@@ -67,7 +67,7 @@ struct Vector
             return a;
         }
         
-        static void interleave(int interleaved)( 
+        static void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = unpcklpd(a0, a1);
@@ -97,7 +97,7 @@ struct Vector
             }
         }
         
-        static void interleave(int interleaved)( 
+        static void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = __simd(XMM.UNPCKLPD, a0, a1);
@@ -113,13 +113,18 @@ struct Vector
     static void complex_array_to_real_imag_vec(int len)(
         T * arr, ref vec rr, ref vec ri)
     {
-            interleave!2(v(arr)[0], v(arr)[1], rr, ri);
+            interleave(v(arr)[0], v(arr)[1], rr, ri);
     }
 
-    static void deinterleave(int interleaved)(
-        vec a0,  vec a1, ref vec r0, ref vec r1)
+    alias interleave deinterleave;
+
+    static void  transpose(int elements_per_vector)(
+            vec a0,  vec a1, ref vec r0, ref vec r1)
     {
-        interleave!2(a0, a1, r0, r1);
+        static if(elements_per_vector == 2)
+            interleave(a0, a1, r0, r1);
+        else
+            static assert(0);
     }
     
     static void bit_reverse_swap(T * p0, T * p1, size_t m)
@@ -130,8 +135,8 @@ struct Vector
         a1 = v(p0 + m * 2)[0];
         b0 = v(p1 + m * 0)[0];
         b1 = v(p1 + m * 2)[0];
-        interleave!2(a0, a1, a0, a1);
-        interleave!2(b0, b1, b0, b1);
+        interleave(a0, a1, a0, a1);
+        interleave(b0, b1, b0, b1);
         v(p1 + m * 0)[0] = a0;
         v(p1 + m * 2)[0] = a1;
         v(p0 + m * 0)[0] = b0;
@@ -141,8 +146,8 @@ struct Vector
         a3 = v(p0 + m * 3)[1];
         b2 = v(p1 + m * 1)[1];
         b3 = v(p1 + m * 3)[1];
-        interleave!2(a2, a3, a2, a3);
-        interleave!2(b2, b3, b2, b3);
+        interleave(a2, a3, a2, a3);
+        interleave(b2, b3, b2, b3);
         v(p1 + m * 1)[1] = a2;
         v(p1 + m * 3)[1] = a3;
         v(p0 + m * 1)[1] = b2;
@@ -152,8 +157,8 @@ struct Vector
         a1 = v(p0 + m * 2)[1];
         a2 = v(p0 + m * 1)[0];
         a3 = v(p0 + m * 3)[0];
-        interleave!2(a0, a1, a0, a1);
-        interleave!2(a2, a3, a2, a3);
+        interleave(a0, a1, a0, a1);
+        interleave(a2, a3, a2, a3);
         b0 = v(p1 + m * 0)[1];
         b1 = v(p1 + m * 2)[1];
         b2 = v(p1 + m * 1)[0];
@@ -162,8 +167,8 @@ struct Vector
         v(p1 + m * 2)[1] = a3;
         v(p1 + m * 1)[0] = a0;
         v(p1 + m * 3)[0] = a1;
-        interleave!2(b0, b1, b0, b1);
-        interleave!2(b2, b3, b2, b3);
+        interleave(b0, b1, b0, b1);
+        interleave(b2, b3, b2, b3);
         v(p0 + m * 0)[1] = b2;
         v(p0 + m * 2)[1] = b3;
         v(p0 + m * 1)[0] = b0;
@@ -177,8 +182,8 @@ struct Vector
         a1 = v(p + m * 2)[0];
         a2 = v(p + m * 1)[1];
         a3 = v(p + m * 3)[1];
-        interleave!2(a0, a1, a0, a1);
-        interleave!2(a2, a3, a2, a3);
+        interleave(a0, a1, a0, a1);
+        interleave(a2, a3, a2, a3);
         v(p + m * 0)[0] = a0;
         v(p + m * 2)[0] = a1;
         v(p + m * 1)[1] = a2;
@@ -188,8 +193,8 @@ struct Vector
         a1 = v(p + m * 2)[1];
         a2 = v(p + m * 1)[0];
         a3 = v(p + m * 3)[0];
-        interleave!2(a0, a1, a0, a1);
-        interleave!2(a2, a3, a2, a3);
+        interleave(a0, a1, a0, a1);
+        interleave(a2, a3, a2, a3);
         v(p + m * 0)[1] = a2;
         v(p + m * 2)[1] = a3;
         v(p + m * 1)[0] = a0;
