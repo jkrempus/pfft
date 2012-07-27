@@ -60,7 +60,7 @@ struct Vector
     {
         static if(N==4)
         {
-            deinterleave!4((cast(vec*)arr)[0], (cast(vec*)arr)[1], rr, ri);
+            deinterleave((cast(vec*)arr)[0], (cast(vec*)arr)[1], rr, ri);
         }
         else if(N==2)
         {
@@ -77,31 +77,17 @@ struct Vector
         }
     }
     
-    static void interleave(int N)(vec a0, vec a1, ref vec r0, ref vec r1)
+    static void transpose(int elements_per_vector)(
+        vec a0, vec a1, ref vec r0, ref vec r1)
     {
-        if(N == 4)
+        if(elements_per_vector == 4)
         {
             float4[2] tmp;
-            __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
+            __builtin_neon_vtrnv4sf(&tmp[0], a0.v, a1.v);
             r0.v = tmp[0];
             r1.v = tmp[1];
         }
-        else if(N == 2)
-        {
-            deinterleave!2(a0, a1, r0, r1);
-        }
-    }
-    
-    static void deinterleave(int N)(vec a0, vec a1, ref vec r0, ref vec r1)
-    {
-        if(N==4)
-        {
-            float4[2] tmp;
-            __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
-            r0.v = tmp[0];
-            r1.v = tmp[1];
-        }
-        else if(N==2)
+        else if(elements_per_vector == 2)
         {
             asm
             {
@@ -113,6 +99,21 @@ struct Vector
         }
     }
     
+    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        float4[2] tmp;
+        __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
+        r0.v = tmp[0];
+        r1.v = tmp[1];
+    }
+    
+    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    {
+        float4[2] tmp;
+        __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
+        r0.v = tmp[0];
+        r1.v = tmp[1];
+    }
     
     private static float4 * v(float * a)
     {
