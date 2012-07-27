@@ -688,6 +688,14 @@ struct FFT(V, Options)
             tableI *= 2;
         }
         
+        for(; m2 > 2 * m2_limit; m2 >>= 2)
+        {
+            fft_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
+                table + tableI, table + 2 * tableI);
+            
+            tableI *= 4;
+        }
+        
         for(; m2 > m2_limit; m2 >>= 1)
         {
             fft_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
@@ -736,18 +744,18 @@ struct FFT(V, Options)
 
             return;
         }
-    
-        enum l = 1UL << Options.passes_per_recursive_call;
+   
+        enum log2l =  Options.passes_per_recursive_call, l = 1 << log2l;
         enum chunk_size = 1UL << Options.log2_recursive_passes_chunk_size;
 
         int log2n = bsf(N);
 
-        int nPasses = 
-            log2n > Options.passes_per_recursive_call + Options.log2_optimal_n ?
-                Options.passes_per_recursive_call : 
-                log2n - Options.log2_optimal_n;
+        int nPasses = log2n > log2l + Options.log2_optimal_n ?
+            log2l : log2n - Options.log2_optimal_n;
 
-        int log2m = log2n - Options.passes_per_recursive_call;
+        nPasses = (nPasses & 1) && !(log2l & 1)  ? nPasses + 1 : nPasses;
+
+        int log2m = log2n - log2l;
         size_t m = st!1 << log2m;
         
         size_t tableIOld = tableI;

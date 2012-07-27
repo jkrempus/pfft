@@ -77,7 +77,7 @@ void main(string[] args)
 
     auto prefix = args[1];
 
-    auto log2nRange = iota(1, 23);
+    auto log2nRange = iota(3, 23);
     auto xTickLabels = log2nRange.map!(to!string)().array();
 
     auto test = Test(prefix);
