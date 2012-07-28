@@ -467,8 +467,15 @@ struct FFT(V, Options)
         }
     }
     
-    static void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+    static void fft_two_passes(Tab...)(
+        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
+        // When DMD inlines this function in fft_passes_recursive, strange 
+        // things happen - let's not allow it to inline it:
+    
+        version(DigitalMars)
+            asm{ nop; }
+
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
         for(; pr < pend ; pr += m, pi += m)
@@ -658,10 +665,13 @@ struct FFT(V, Options)
                 nextTableRow(table, tableRowLen, tableI);  
             }
     }
-    
+   
+
+    // bug_killer below is a dummy parameter which apparently causes a DMD 
+    // stack alignment bug to go away. 
     static void fft_passes_strided(int l, int chunk_size)(
         vec * pr, vec * pi, size_t N , 
-        ref T * table, ref size_t tableI, 
+        ref T * table, ref size_t tableI, void* bug_killer, 
         size_t stride, int nPasses)
     {
         ubyte[aligned_size!vec(l * chunk_size, 64)] rmem = void;
@@ -775,7 +785,7 @@ struct FFT(V, Options)
             tableI = tableIOld;
 
             fft_passes_strided!(l, chunk_size)(
-                pr + i, pi + i, N, table, tableI, m, nPasses);
+                pr + i, pi + i, N, table, tableI, null, m, nPasses);
         }
 
         {
