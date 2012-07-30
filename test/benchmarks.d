@@ -77,7 +77,7 @@ void main(string[] args)
 
     auto prefix = args[1];
 
-    auto log2nRange = iota(3, 23);
+    auto log2nRange = iota(1, 23);
     auto xTickLabels = log2nRange.map!(to!string)().array();
 
     auto test = Test(prefix);
@@ -117,7 +117,7 @@ void main(string[] args)
 
     auto versions = ["avx", "sse"];
 
-    /*makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
+    makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-double.png", "-s", "double", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-real-double.png", "-s -r", "double", ["pfft", "fftw"], versions);
@@ -126,8 +126,8 @@ void main(string[] args)
     makePlot("pfft-std-phobos-float-sse.png", "-s", "float", ["pfft", "std", "phobos"], ["sse"]);
     makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["avx"]);
     
-    makePlot("pfft-float-sse-gdmd-ldc-dmd.png", "-s", "float", ["pfft"], ["sse"], ["gdmd", "ldc", "dmd"]);*/
+    makePlot("pfft-float-sse-gdmd-ldc-dmd.png", "-s", "float", ["pfft"], ["sse"], ["gdmd", "ldc", "dmd"]);
     
     //makePlot("pfft-float-sse-gdmd32-gdmd64", "-s", "float", ["pfft"], ["sse"], ["gdmd32", "gdmd64"]);
-    makePlot("tmp.png", "-m 100000 -s", "float", ["pfft"], ["avx"], ["0", "1"]);
+    //makePlot("tmp.png", "-m 100000 -s", "float", ["pfft"], ["avx"], ["0", "1"]);
 }
