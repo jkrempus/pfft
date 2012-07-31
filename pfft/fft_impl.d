@@ -1197,6 +1197,9 @@ mixin template Instantiate()
 
     struct RTableValue{};
     alias RTableValue* RTable;
+    
+    struct ITableValue{};
+    alias ITableValue* ITable;
 
     template selected(string func_name, Ret...)
     {
@@ -1224,9 +1227,6 @@ mixin template Instantiate()
 
     alias FFTs[0] FFT0;
     alias FFT0.T T;
-
-    struct ITableValue{};
-    alias ITableValue* ITable;
 
     void fft(T* re, T* im, uint log2n, Table t)
     {
