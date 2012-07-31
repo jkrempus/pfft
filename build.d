@@ -7,26 +7,33 @@
 import std.stdio, std.process, std.string, std.array, std.algorithm, 
        std.conv, std.range, std.getopt, std.file, std.path : buildPath, absolutePath;
 
-enum SIMD{ AVX, SSE, Neon, Scalar, SSE_AVX }
+enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
+enum SIMD{ AVX, SSE, Neon, Scalar}
 enum Compiler{ DMD, GDMD, LDC}
 
-struct Versions
-{ 
-    SIMD[] simd; 
-    string[] types; 
+auto parseVersion(string simdOpt)
+{
+    return [
+        "sse": Version.SSE,
+        "avx": Version.AVX,
+        "sse-avx": Version.SSE_AVX,
+        "neon": Version.Neon,
+        "scalar": Version.Scalar][simdOpt];
 }
 
-void setSimdAndFlagsForSimdOpt(string simdOpt, ref string flags, ref SIMD[] simd)
+auto baseSIMD(Version v)
 {
-    simd = [
-        "sse": [SIMD.SSE],
-        "avx": [SIMD.AVX],
-        "sse-avx": [SIMD.SSE, SIMD.AVX],
-        "neon": [SIMD.Neon],
-        "scalar": [SIMD.Scalar]][simdOpt];
- 
-    if(simdOpt == "sse-avx")
-        flags ~= " -version=SSE_AVX";
+    return [
+        Version.SSE: SIMD.SSE,
+        Version.AVX: SIMD.AVX,
+        Version.Neon: SIMD.Neon,
+        Version.Scalar: SIMD.Scalar,
+        Version.SSE_AVX: SIMD.SSE][v];
+}
+
+auto additionalSIMD(Version v)
+{
+    return v == Version.SSE_AVX ? [SIMD.AVX] : [];
 }
 
 alias format fm;
@@ -92,29 +99,25 @@ auto fileName(string moduleName)
 
 string implSources(SIMD simd, string[] types)
 {
-    auto modules = types.map!(t => simdModuleName(simd, t)).array();
-    if(simd == SIMD.AVX)
-        modules ~= "detect_avx";
-
-    return modules.map!(m => fileName(m))().join(" ");
+    return types.map!(t => fileName(simdModuleName(simd, t)))().join(" ");
 }
 
-string sources(Versions v, string[] additional)
+string sources(Version v, string[] types, string[] additional)
 {
+    auto simd = baseSIMD(v);
     auto m = 
-        map!(t => simdModuleName(v.simd[0], t))(v.types).array() ~ 
-        map!q{"impl_" ~ a}(v.types).array() ~
+        map!(t => simdModuleName(simd, t))(types).array() ~ 
+        map!q{"impl_" ~ a}(types).array() ~
         ["fft_impl", "shuffle"] ~
-        additional; 
+        additional ~ 
+        (v == Version.SSE_AVX ? ["detect_avx"] : []); 
 
     return join(map!fileName(m), " "); 
 }
 
-void buildCObjects(Versions v, string dcpath, string ccpath)
+void buildCObjects(string[] types, string dcpath, string ccpath)
 {
-    auto typeFlags = join(
-        map!(a => "-version=" ~ capitalize(a))(v.types), 
-        " "); 
+    auto typeFlags = join(map!(a => "-version=" ~ capitalize(a))(types), " "); 
 
     shellf("%s -O -inline -release -c -Iinclude %s %s", 
             dcpath, typeFlags,  buildPath("..", "pfft", "clib.d"));
@@ -124,13 +127,13 @@ void buildCObjects(Versions v, string dcpath, string ccpath)
 enum dmdOpt = "-O -inline -release";
 enum dmdDbg = "-debug -g";
 
-void buildTests(Versions v, string dcpath, Compiler c, string outDir, 
+void buildTests(string[] types, string dcpath, Compiler c, string outDir, 
     bool optimized = true, bool dbg = false, string flags = "")
 {
     auto srcPath = buildPath("..", "test", "test.d");
     auto clibSrc = buildPath("..", "pfft", "clib.d");
 
-    foreach(type; v.types)
+    foreach(type; types)
     {
         auto binPath = buildPath(outDir, "test_" ~ type);
         auto ver = capitalize(type);
@@ -156,11 +159,11 @@ void buildTests(Versions v, string dcpath, Compiler c, string outDir,
     }
 }
 
-void runBenchmarks(Versions v)
+void runBenchmarks(string[] types)
 {
     import std.parallelism;
 
-    foreach(type; v.types)
+    foreach(type; types)
     {
         if(verbose)
             writefln("Running benchmarks for type %s.", type);
@@ -171,40 +174,45 @@ void runBenchmarks(Versions v)
             auto r = taskPool.parallel(iota(4,21));
 
         foreach(i; r)
-            shell(fm("%s_%s -s -m 1000 pfft \"%s\"", absolutePath("test"), type, i));
+            shell(fm("%s_%s -s -m 1000 pfft \"%s\"", 
+                absolutePath("test"), type, i));
     }
 }
 
-void buildDmd(Versions v, string dcpath, string ccpath, bool clib, bool dbg)
+void buildDmd(Version v, string[] types, string dcpath, 
+    string ccpath, bool clib, bool dbg)
 {
-    auto simdStr = to!string(v.simd[0]);
-    auto src = sources(v, clib ? ["clib"] : ["stdapi", "pfft"]);
+    auto simd = baseSIMD(v);
+    auto simdStr = to!string(simd);
+    auto src = sources(v, types, clib ? ["clib"] : ["stdapi", "pfft"]);
 
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
     shellf("%s %s -lib -of%s -version=%s %s", 
-        dcpath, optOrDbg,  clib ? clibPath : libPath, simdStr, src);
+        dcpath, optOrDbg,  clib ? clibPath : libPath, to!string(v), src);
 }
 
-void buildLdc(Versions v, string dcpath, string ccpath, bool clib)
+void buildLdc(Version v, string[] types, string dcpath, 
+    string ccpath, bool clib)
 {
+    auto simd = baseSIMD(v);
     enum mattrDict = [SIMD.SSE : "sse2"];
 
-    auto simdStr = to!string(v.simd[0]);
+    auto simdStr = to!string(simd);
     auto simdStrLC = toLower(simdStr);
-    auto llcMattr = mattrDict.get(v.simd[0], simdStrLC);
+    auto llcMattr = mattrDict.get(simd, simdStrLC);
     
-    auto src = sources(v, clib ? ["capi"] : ["stdapi"]);
+    auto src = sources(v, types, clib ? ["capi"] : ["stdapi"]);
     auto path = buildPath("lib", "libpfft.a");
 
-    if(v.simd[0] == SIMD.Scalar)
+    if(simd == SIMD.Scalar)
         shellf("%s -O3 -release -lib -of%s -d-version=%s %s", 
             dcpath, path, simdStr, src);
     else
     {
         execute(
             fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
-                dcpath,  simdStr, src),
+                dcpath,  to!string(v), src),
             fm("llvm-link %s pfft.bc -o both.bc", 
                 buildPath("..", "ldc", simdStrLC ~ ".ll")),
             "opt -O3 -std-link-opts -std-compile-opts both.bc -o both.bc",
@@ -220,7 +228,8 @@ enum gccArchFlagDict = [
     SIMD.Scalar: "",
     SIMD.AVX :   "-mavx"];
     
-string buildGdcImplObject(SIMD simd, string[] types, string dcpath, bool dbg, string flags)
+string buildGdcImplObject(Version v, SIMD simd, string[] types, 
+    string dcpath, bool dbg, string flags)
 {
     auto arch = gccArchFlagDict[simd];
     auto optOrDbg = dbg ? dmdDbg : dmdOpt;
@@ -229,42 +238,50 @@ string buildGdcImplObject(SIMD simd, string[] types, string dcpath, bool dbg, st
     auto fname = toLower(simdStr) ~ ".o";
     
     shellf("%s %s %s %s -version=%s -c -of%s -I.. %s", 
-        dcpath, optOrDbg, arch, flags, simdStr, fname, src);
+        dcpath, optOrDbg, arch, flags, to!string(v), fname, src);
 
     return fname;
 }
 
-void buildGdcLib(Versions v, string dcpath, string ccpath, bool clib, bool dbg, string flags)
+void buildGdcLib(Version v, string[] types, string dcpath, 
+    string ccpath, bool clib, bool dbg, string flags)
 {
-    auto arch = gccArchFlagDict[v.simd[0]];
-    auto src = sources(v, clib ? [] : ["stdapi", "pfft"]);
+    auto simd = baseSIMD(v);
+    auto arch = gccArchFlagDict[simd];
+    auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
   
-    auto implObjs = v.simd[1 .. $]
-        .map!(s => buildGdcImplObject(s, v.types, dcpath, dbg, flags))()
+    auto implObjs = additionalSIMD(v)
+        .map!(s => buildGdcImplObject(v, s, types, dcpath, dbg, flags))()
         .array().join(" ");
  
     execute(
         fm("%s %s -version=%s %s %s %s -ofpfft.o -c -I..", 
-            dcpath, optOrDbg, to!string(v.simd[0]), arch, flags, src),
+            dcpath, optOrDbg, to!string(v), arch, flags, src),
         fm("ar cr %s pfft.o %s %s", 
             clib ? clibPath : libPath, clib ? "dummy.o clib.o" : "", implObjs));
 }
 
-void buildGdc(Versions v, string dcpath, string ccpath, bool pgo, bool clib, bool dbg, string flags)
+void buildGdc(Version v, string[] types, string dcpath, 
+    string ccpath, bool pgo, bool clib, bool dbg, string flags)
 {
     if(pgo)
     {
-        buildGdcLib(v, dcpath, ccpath, false, dbg, "-fprofile-generate " ~ flags);
-        buildTests(v, dcpath, Compiler.GDMD, ".", false, dbg, "-fprofile-generate " ~ flags);
-        runBenchmarks(v);
-        buildGdcLib(v, dcpath, ccpath, clib, dbg, fm("-fprofile-use %s", flags));
+        buildGdcLib(v, types, dcpath, ccpath, false, 
+            dbg, "-fprofile-generate " ~ flags);
+
+        buildTests(types, dcpath, Compiler.GDMD, ".", 
+            false, dbg, "-fprofile-generate " ~ flags);
+        
+        runBenchmarks(types);
+        buildGdcLib(v, types, dcpath, ccpath, clib, dbg, 
+            fm("-fprofile-use %s", flags));
     }
     else
-        buildGdcLib(v, dcpath, ccpath, clib, dbg, flags);
+        buildGdcLib(v, types, dcpath, ccpath, clib, dbg, flags);
 }
 
-void copyIncludes(Versions v, bool clib)
+void copyIncludes(string[] types, bool clib)
 {
     if(clib)
     {
@@ -281,7 +298,7 @@ void copyIncludes(Versions v, bool clib)
         auto iStr = readText(buildPath("..", "c", "pfft.template"));
         auto oStr = "";
 
-        foreach(type; v.types)
+        foreach(type; types)
         {
             auto tmp = replace(iStr, "{type}", typeDict[type]);
             auto s = suffixDict[type];
@@ -293,7 +310,7 @@ void copyIncludes(Versions v, bool clib)
         std.file.write(buildPath("include", "pfft.h"), oStr);
     }
 
-    foreach(type; v.types)
+    foreach(type; types)
     {
         auto name = fm("impl_%s.di", type);
         copy(
@@ -327,9 +344,15 @@ Options:
   --dc-path PATH        A path to D compiler
   --cc-path PATH        A path to C compiler (used when building with --clib
                         or with LDC).
-  --simd SIMD           SIMD instruction set to use. Must be one of SSE, AVX,
-                        Neon and Scalar. This flag is ignored when building 
-                        tests.
+  --simd SIMD           SIMD instruction set to use. Must be one of sse, avx,
+                        neon, sse-avx and scalar. sse-avx builds both sse and
+                        avx implementations. An implementations is then 
+                        selected at run time, based on what is supported - if 
+                        the OS and CPU support AVX, AVX implementation is used, 
+                        otherwise we use the SSE implementation. On GDC 
+                        on Linux this is the default value for this flag. 
+                        On other platforms and compilers sse is the default.  
+                        This flag is ignored when building tests.
   --type TYPE           Arithmetic type that the resulting library will support.
                         TYPE must be one of float, double and real. There can
                         be more than one --type flag. Omitting this flag is 
@@ -363,7 +386,7 @@ void invalidCmd(string message = "")
 void doit(string[] args)
 {
     auto simdOpt = "";
-    Versions v;
+    string[] types;
     string dcpath = "";
     string ccpath = "gcc";
     bool clib;
@@ -376,7 +399,7 @@ void doit(string[] args)
 
     getopt(args, 
         "simd", &simdOpt, 
-        "type", &v.types, 
+        "type", &types, 
         "dc-path", &dcpath, 
         "cc-path", &ccpath,
         "clib", &clib,
@@ -397,7 +420,7 @@ void doit(string[] args)
     if(tests && clib)
         invalidCmd("Can not build tests for the c library.");
 
-    v.types = array(uniq(sort(v.types)));
+    types = array(uniq(sort(types)));
 
     if(dcpath == "")
         dcpath = [
@@ -405,22 +428,22 @@ void doit(string[] args)
             Compiler.GDMD : "gdmd", 
             Compiler.LDC : "ldc2"][dc];
    
-    if(v.types == [])
-        v.types = ["float", "double", "real"];
+    if(types == [])
+        types = ["float", "double", "real"];
 
     if(simdOpt == "")
         simdOpt = dc == Compiler.GDMD && isLinux ? "sse-avx" : "sse";
-
-    setSimdAndFlagsForSimdOpt(simdOpt, flags, v.simd);
 
     auto buildDir = clib ? "generated-c" : "generated";
     if(tests)
     {
         chdir(buildDir);
-        buildTests(v, dcpath, dc, buildPath("..", "test"), !dbg, dbg, flags);
+        buildTests(types, dcpath, dc, buildPath("..", "test"), !dbg, dbg, flags);
     }
     else
     {
+        Version v = parseVersion(simdOpt);
+
         try rmdirRecurse(buildDir); catch{}
         mkdir(buildDir);
         chdir(buildDir);
@@ -428,17 +451,17 @@ void doit(string[] args)
         mkdir("include");
         mkdir(buildPath("include", "pfft"));
 
-        copyIncludes(v, clib);
+        copyIncludes(types, clib);
 
         if(clib)
-            buildCObjects(v, dcpath, ccpath);
+            buildCObjects(types, dcpath, ccpath);
         
         if(dc == Compiler.GDMD)
-            buildGdc(v, dcpath, ccpath, !nopgo, clib, dbg, flags);
+            buildGdc(v, types, dcpath, ccpath, !nopgo, clib, dbg, flags);
         else if(dc == Compiler.LDC)
-            buildLdc(v, dcpath, ccpath, clib);
+            buildLdc(v, types, dcpath, ccpath, clib);
         else
-            buildDmd(v, dcpath, ccpath, clib, dbg);
+            buildDmd(v, types, dcpath, ccpath, clib, dbg);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
@@ -457,7 +480,6 @@ void main(string[] args)
         auto s = findSplit(to!string(e), "---")[0];
         stderr.writefln("Exception was thrown: %s", s);
         stderr.writeln(usage);
-        //writeln(e);
         core.stdc.stdlib.exit(1); 
     }
 }
