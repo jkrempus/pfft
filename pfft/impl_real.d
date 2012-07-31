@@ -5,9 +5,8 @@
 
 module pfft.impl_real;
 
-public import pfft.scalar_real;
+import pfft.scalar_real, pfft.fft_impl;
 
-import pfft.fft_impl;
-
-alias FFT!(Vector, Options) F;
+enum implementation = 0;
+alias TypeTuple!(FFT!(Vector, Options)) FFTs;
 mixin Instantiate!();

@@ -196,3 +196,10 @@ struct Options
     enum { fast_init };
 }
 
+version(SSE_AVX)
+{
+    import pfft.fft_impl;
+    enum implementation = 0;
+    alias TypeTuple!(FFT!(Vector, Options)) FFTs;
+    mixin Instantiate!();
+}

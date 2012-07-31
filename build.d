@@ -228,9 +228,13 @@ enum gccArchFlagDict = [
     SIMD.Scalar: "",
     SIMD.AVX :   "-mavx"];
     
-string buildGdcImplObject(Version v, SIMD simd, string[] types, 
+string buildGdcAdditionaSIMD(Version v, SIMD simd, string[] types, 
     string dcpath, bool dbg, string flags)
 {
+    types = types.filter!(
+            t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
+        .array(); 
+
     auto arch = gccArchFlagDict[simd];
     auto optOrDbg = dbg ? dmdDbg : dmdOpt;
     auto simdStr = to!string(simd);
@@ -252,7 +256,7 @@ void buildGdcLib(Version v, string[] types, string dcpath,
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
   
     auto implObjs = additionalSIMD(v)
-        .map!(s => buildGdcImplObject(v, s, types, dcpath, dbg, flags))()
+        .map!(s => buildGdcAdditionaSIMD(v, s, types, dcpath, dbg, flags))()
         .array().join(" ");
  
     execute(

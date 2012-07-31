@@ -4,30 +4,42 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 module pfft.impl_double;
+import pfft.fft_impl;
 
-version(Scalar)
+version(SSE_AVX)
 {
-    public import pfft.scalar_double;
-}
-else version(AVX)
-{
-    public import pfft.avx_double;
-}
-else version(X86)
-{
-    public import pfft.sse_double;
-}
-else version(X86_64)
-{
-    public import pfft.sse_double;
+    import sse = pfft.sse_double, avx = pfft.avx_double, pfft.detect_avx;  
+    
+    alias get implementation;
+    alias TypeTuple!(FFT!(sse.Vector, sse.Options), avx) FFTs;
 }
 else
 {
-    public import pfft.scalar_double;
+    version(Scalar)
+    {
+        import pfft.scalar_double;
+    }
+    else version(Neon)
+    {
+        import pfft.neon_double;
+    }
+    else version(StdSimd)
+    {
+        import pfft.stdsimd;
+    }
+    else version(AVX)
+    {
+        import pfft.avx_double;
+    }
+    else
+    {
+        import pfft.sse_double;
+    }
+    
+    alias FFT!(Vector,Options) F;
+    alias TypeTuple!F FFTs;
+    enum implementation = 0;
 }
 
-import pfft.fft_impl;
-
-alias FFT!(Vector, Options) F;
 mixin Instantiate!();
 
