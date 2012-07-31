@@ -108,10 +108,36 @@ version(DisableLarge)
 else 
     enum disableLarge = false;
 
-struct _Tuple(A...)
+// reinventing some Phobos stuff...
+
+struct Tuple(A...)
 {
     A a;
     alias a this;
+}
+
+template TypeTuple(A...)
+{
+    alias A TypeTuple;
+}
+
+template ParamTypeTuple(alias f)
+{
+    auto params_struct(Ret, Params...)(Ret function(Params) f) 
+    {
+        struct R
+        {
+            Params p;
+        }
+        return R.init;
+    }
+
+    static if(is(typeof(params_struct(&f))))
+        alias f f_instance;
+    else
+        alias f!() f_instance;
+
+    alias typeof(params_struct(&f_instance).tupleof) ParamTypeTuple;
 }
 
 void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
@@ -208,7 +234,7 @@ struct FFT(V, Options)
 
     template st(alias a){ enum st = cast(size_t) a; }
 
-    alias _Tuple!(T,T) Pair;
+    alias Tuple!(T,T) Pair;
     
     static void complex_array_to_vector()(Pair * pairs, size_t n)
     {
@@ -1166,89 +1192,114 @@ struct FFT(V, Options)
 
 mixin template Instantiate()
 {
-    alias F.T T;
-
     struct TableValue{};
     alias TableValue* Table;
-
-    void fft(T* re, T* im, uint log2n, Table t)
-    {
-        F.fft(re, im, log2n, cast(F.Table) t);
-    }
-
-    auto fft_table(uint log2n, void* p = null)
-    {
-        return cast(Table) F.fft_table(log2n, p);
-    }
-
-    auto table_size_bytes(uint log2n)
-    {
-        return F.table_size_bytes(log2n);
-    }
-
-    void scale(T* data, size_t n, T factor)
-    {
-        F.scale(data, n, factor); 
-    }
-
-    size_t alignment(size_t n)
-    {
-        return F.alignment(n);
-    }
 
     struct RTableValue{};
     alias RTableValue* RTable;
 
-    void rfft(T* re, T* im, uint log2n, Table t, RTable rt)
+    template selected(string func_name, Ret...)
     {
-        F.rfft(re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
+        auto selected(A...)(A args)
+        {
+            auto impl = implementation;
+            foreach(i, F; FFTs)
+                if(i == impl)
+                {
+                    mixin("alias F." ~ func_name ~ " func;");
+                    ParamTypeTuple!func fargs;
+
+                    foreach(j, _; fargs)
+                        fargs[j] = cast(typeof(fargs[j])) args[j];
+
+                    static if(Ret.length == 0)
+                        return func(fargs);
+                    else
+                        return cast(Ret[0]) func(fargs);
+                }
+          
+            assert(false);
+        }
     }
 
-    void irfft(T* re, T* im, uint log2n, Table t, RTable rt)
-    {
-        F.irfft(re, im, log2n, cast(F.Table) t, cast(F.RTable) rt);
-    }
-
-    auto rfft_table(uint log2n, void* p = null)
-    {
-        return cast(RTable) F.rfft_table(log2n, p);
-    }
-
-    size_t rtable_size_bytes(int log2n)
-    {
-        return F.rtable_size_bytes(log2n);
-    }
-
-    void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
-    {
-        F.deinterleave_array(even, odd, interleaved, n);
-    }
-
-    void interleave_array(T* even, T* odd, T* interleaved, size_t n)
-    {
-        F.interleave_array(even, odd, interleaved, n);
-    }
+    alias FFTs[0] FFT0;
+    alias FFT0.T T;
 
     struct ITableValue{};
     alias ITableValue* ITable;
 
-    auto itable_size_bytes(uint log2n)
+    void fft(T* re, T* im, uint log2n, Table t)
     {
-        return F.itable_size_bytes(log2n);
+        selected!"fft"(re, im, log2n, cast(FFT0.Table) t);
     }
 
-    auto interleave_table(uint log2n, void* p)
+    Table fft_table(uint log2n, void* p = null)
     {
-        return cast(ITable) F.interleave_table(log2n, p);
+        return selected!("fft_table", Table)(log2n, p);
+    }
+
+    size_t table_size_bytes(uint log2n)
+    {
+        return selected!"table_size_bytes"(log2n);
+    }
+
+    void scale(T* data, size_t n, T factor)
+    {
+        selected!"scale"(data, n, factor); 
+    }
+
+    size_t alignment(size_t n)
+    {
+        return selected!"alignment"(n);
+    }
+
+    void rfft(T* re, T* im, uint log2n, Table t, RTable rt)
+    {
+        selected!"rfft"(re, im, log2n, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
+    }
+
+    void irfft(T* re, T* im, uint log2n, Table t, RTable rt)
+    {
+        selected!"irfft"(re, im, log2n, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
+    }
+
+    RTable rfft_table(uint log2n, void* p = null)
+    {
+        return selected!("rfft_table", RTable)(log2n, p);
+    }
+
+    size_t rtable_size_bytes(int log2n)
+    {
+        return selected!"rtable_size_bytes"(log2n);
+    }
+
+    void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
+    {
+        selected!"deinterleave_array"(even, odd, interleaved, n);
+    }
+
+    void interleave_array(T* even, T* odd, T* interleaved, size_t n)
+    {
+        selected!"interleave_array"(even, odd, interleaved, n);
+    }
+
+    size_t itable_size_bytes(uint log2n)
+    {
+        return selected!"itable_size_bytes"(log2n);
+    }
+
+    ITable interleave_table(uint log2n, void* p)
+    {
+        return selected!("interleave_table", ITable)(log2n, p);
     }
 
     void interleave(T* p, uint log2n, ITable table)
     {
-        F.interleave(p, log2n, cast(F.ITable) table);  
+        selected!"interleave"(p, log2n, cast(FFT0.ITable) table);  
     }
 
     void deinterleave(T* p, uint log2n, ITable table)
     {
-        F.deinterleave(p, log2n, cast(F.ITable) table);  
+        selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
     }
 }    

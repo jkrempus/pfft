@@ -5,28 +5,41 @@
 
 module pfft.impl_float;
 
-version(Scalar)
+import pfft.fft_impl;
+
+version(SSE_AVX)
 {
-    public import pfft.scalar_float;
-}
-else version(Neon)
-{
-    public import pfft.neon_float;
-}
-else version(StdSimd)
-{
-    public import pfft.stdsimd;
-}
-else version(AVX)
-{
-    public import pfft.avx_float;
+    import sse = pfft.sse_float, avx = pfft.avx_float, pfft.detect_avx;  
+    
+    alias get implementation;
+    alias TypeTuple!(FFT!(sse.Vector, sse.Options), avx) FFTs;
 }
 else
 {
-    public import pfft.sse_float;
+    version(Scalar)
+    {
+        import pfft.scalar_float;
+    }
+    else version(Neon)
+    {
+        import pfft.neon_float;
+    }
+    else version(StdSimd)
+    {
+        import pfft.stdsimd;
+    }
+    else version(AVX)
+    {
+        import pfft.avx_float;
+    }
+    else
+    {
+        import pfft.sse_float;
+    }
+    
+    alias FFT!(Vector,Options) F;
+    alias TypeTuple!F FFTs;
+    enum implementation = 0;
 }
 
-import pfft.fft_impl;
-
-alias FFT!(Vector,Options) F;
 mixin Instantiate!();
