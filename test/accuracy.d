@@ -24,7 +24,7 @@ void main()
     foreach(log2n;  iota(1, 21))
     {
         auto path =  absolutePath(fm("test_%s", type));
-        auto cmd = fm("%s %s %s %s", path, flags, impl, log2n);
+        auto cmd = fm(`%s %s %s "%s"`, path, flags, impl, log2n);
         scope(failure)
             writefln("Error when executing %s.", cmd);
 

@@ -137,7 +137,7 @@ template ParamTypeTuple(alias f)
     else
         alias f!() f_instance;
 
-    alias typeof(params_struct(&f_instance).tupleof) ParamTypeTuple;
+    alias typeof(params_struct(&f_instance).tupleof) type;
 }
 
 void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
@@ -1210,7 +1210,8 @@ mixin template Instantiate()
                 if(i == impl)
                 {
                     mixin("alias F." ~ func_name ~ " func;");
-                    ParamTypeTuple!func fargs;
+
+                    ParamTypeTuple!(func).type fargs;
 
                     foreach(j, _; fargs)
                         fargs[j] = cast(typeof(fargs[j])) args[j];
