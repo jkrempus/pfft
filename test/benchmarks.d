@@ -115,7 +115,7 @@ void main(string[] args)
             .saveToFile(prefix ~ fileName, 640, 360);
     }
 
-    auto versions = ["avx", "sse"];
+    auto versions = ["sse_avx", "sse"];
 
     makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-double.png", "-s", "double", ["pfft", "fftw"], versions);
@@ -130,4 +130,9 @@ void main(string[] args)
     
     //makePlot("pfft-float-sse-gdmd32-gdmd64", "-s", "float", ["pfft"], ["sse"], ["gdmd32", "gdmd64"]);
     //makePlot("tmp.png", "-m 100000 -s", "float", ["pfft"], ["avx"], ["0", "1"]);
+    
+    /*makePlot("fftw-float.png", "-s", "float", ["fftw"], versions);
+    makePlot("fftw-double.png", "-s", "double", ["fftw"], versions);
+    makePlot("fftw-float.png", "-s -r", "float", ["fftw"], versions);
+    makePlot("fftw-float.png", "-s -r", "double", ["fftw"], versions);*/
 }
