@@ -56,7 +56,7 @@ auto shellf(A...)(A a)
 version(Windows)
 {
         version(DigitalMars)
-		version = WindowsDMD;
+		enum isWindowsDMD = true;
 	    
   	
 	enum libPath = buildPath("lib", "pfft.lib");
@@ -67,6 +67,9 @@ else
 	enum libPath = buildPath("lib", "libpfft.a");
 	enum clibPath = buildPath("lib", "libpfft-c.a");
 }
+
+static if(!is(typeof(isWindowsDMD)))
+    enum isWindowsDMD = false;
 
 version(Linux)
     enum isLinux = true;
@@ -142,17 +145,8 @@ void buildTests(string[] types, string dcpath, Compiler c, string outDir,
 {
     auto srcPath = buildPath("..", "test", "test.d");
 
-    version(WindowsDMD)
-    {
-        auto clibSrc = "";
-        auto clibVersion = "NoBenchClib";
-    }
-    else
-    {
-        auto clibSrc = buildPath("..", "pfft", "clib.d");
-        auto clibVersion = "BenchClib";
-    }
-
+    auto clibSrc = isWindowsDMD ? "" : buildPath("..", "pfft", "clib.d");
+    auto clibVersion = isWindowsDMD ? "NoBenchClib" : "BenchClib";
 
     foreach(type; types)
     {
@@ -444,6 +438,9 @@ void doit(string[] args)
   
     if(tests && clib)
         invalidCmd("Can not build tests for the c library.");
+
+    if(isWindowsDMD && clib)
+        invalidCmd("Can not build the C library using DMD on Windows.");
 
     types = array(uniq(sort(types)));
 
