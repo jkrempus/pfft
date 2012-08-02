@@ -103,6 +103,13 @@ struct Scalar(_T)
     static T reverse(T a){ return a; }           
 }
 
+version(Windows)
+    version(DigitalMars)
+	    enum disable_two_passes = true;
+
+static if(!is(typeof(disable_two_passes)))
+    enum disable_two_passes = false;
+
 version(DisableLarge)
     enum disableLarge = true;
 else 
@@ -321,7 +328,10 @@ struct FFT(V, Options)
             
             p += m2;
         }
-        
+       
+	    static if(disable_two_passes)
+            return;
+
         p = r;
         for (int s = 0; s + 1 < log2n - log2(vec_size);  s += 2)
         {
@@ -612,25 +622,36 @@ struct FFT(V, Options)
             table += tableRowLen;
             tableRowLen += tableRowLen;
         }
-        
-        for (; m2 > 1 ; m2 >>= 2)
+       	
+       	static if(disable_two_passes)
+            for (; m2 > 0 ; m2 >>= 1)
+            {
+                fft_pass(re, im, pend, table, m2);
+                table += tableRowLen;
+                tableRowLen += tableRowLen;
+            }
+        else
         {
-            static if(compact_table)
-                fft_two_passes(re, im, pend, m2, table);
-            else 
-                fft_two_passes(re, im, pend, m2, table);
+            for (; m2 > 1 ; m2 >>= 2)
+            {
+                static if(compact_table)
+                    fft_two_passes(re, im, pend, m2, table, table);
+                else 
+                    fft_two_passes(re, im, pend, m2, table);
 
-            table += tableRowLen;
-            tableRowLen += tableRowLen;
-            table += tableRowLen;
-            tableRowLen += tableRowLen;
-        }
-        
-        if (m2 != 0)
-        {
-            fft_pass(re, im, pend, table, m2);
-            table += tableRowLen;
-            tableRowLen += tableRowLen;
+                table += tableRowLen;
+                tableRowLen += tableRowLen;
+                table += tableRowLen;
+                tableRowLen += tableRowLen;
+            }
+
+            for (; m2 > 0 ; m2 >>= 1)
+                //if (m2 != 0)
+            {
+                fft_pass(re, im, pend, table, m2);
+                table += tableRowLen;
+                tableRowLen += tableRowLen;
+            }
         }
     }
     
