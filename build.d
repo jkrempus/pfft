@@ -451,7 +451,7 @@ void doit(string[] args)
             Compiler.LDC : "ldc2"][dc];
    
     if(types == [])
-        types = ["float", "double", "real"];
+        types = ["double", "float", "real"];
 
     if(simdOpt == "")
         simdOpt = dc == Compiler.GDMD && isLinux ? "sse-avx" : "sse";
