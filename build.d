@@ -45,12 +45,20 @@ auto shellf(A...)(A a)
     auto cmd = fm(a);
     if(verbose) 
         writeln(cmd); 
-    
-    return shell(cmd); 
+   
+    auto r = shell(cmd);
+    if(verbose)
+        writeln(r);
+
+    return r; 
 }
 
 version(Windows)
 {
+        version(DigitalMars)
+		version = WindowsDMD;
+	    
+  	
 	enum libPath = buildPath("lib", "pfft.lib");
 	enum clibPath = buildPath("lib", "pfft-c.lib");
 }
@@ -72,7 +80,9 @@ void execute(Cmds...)(Cmds cmds)
         if(verbose)
             writeln(c);
         
-        shell(c);
+        auto r = shell(c);
+	if(verbose)
+            writeln(r);
     }
 }
 
@@ -131,7 +141,18 @@ void buildTests(string[] types, string dcpath, Compiler c, string outDir,
     bool optimized = true, bool dbg = false, string flags = "")
 {
     auto srcPath = buildPath("..", "test", "test.d");
-    auto clibSrc = buildPath("..", "pfft", "clib.d");
+
+    version(WindowsDMD)
+    {
+        auto clibSrc = "";
+        auto clibVersion = "NoBenchClib";
+    }
+    else
+    {
+        auto clibSrc = buildPath("..", "pfft", "clib.d");
+        auto clibVersion = "BenchClib";
+    }
+
 
     foreach(type; types)
     {
@@ -147,14 +168,14 @@ void buildTests(string[] types, string dcpath, Compiler c, string outDir,
             case Compiler.GDMD:
                 auto opt = optimized ? dmdOpt : "";
                 opt ~= dbg ? dmdDbg : ""; 
-                shellf("%s %s -version=BenchClib -version=%s", 
-                    dcpath, opt, common);
+                shellf("%s %s -version=%s -version=%s", 
+                    dcpath, opt, clibVersion, common);
                 break;
 
             case Compiler.LDC:
                 auto opt = optimized ? "-O5 -release" : "";
-                shellf("%s %s -d-version=BenchClib -d-version=%s", 
-                    dcpath, opt, common);
+                shellf("%s %s -d-version=%s -d-version=%s", 
+                    dcpath, opt, clibVersion, common);
         }
     }
 }
