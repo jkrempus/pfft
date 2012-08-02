@@ -307,9 +307,12 @@ struct FFT(V, Options)
     
     static void twiddle_table()(int log2n, Pair * r)
     {
-        if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size))
+        if(log2n >= Options.large_limit 
+            || log2n < 2 * log2(vec_size) || disable_two_passes)
+        {
             return sines_cosines!false(
                 r, st!1 << (log2n - 1), 0.0, -2 * _asin(1), true);
+        }
 
         r++;
 
@@ -329,9 +332,6 @@ struct FFT(V, Options)
             p += m2;
         }
        
-	    static if(disable_two_passes)
-            return;
-
         p = r;
         for (int s = 0; s + 1 < log2n - log2(vec_size);  s += 2)
         {
@@ -503,7 +503,7 @@ struct FFT(V, Options)
     }
     
     static void fft_two_passes(Tab...)(
-        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab) if(!disable_two_passes)
     {
         // When DMD inlines this function in fft_passes_recursive, strange 
         // things happen - let's not allow it to inline it:
@@ -603,6 +603,13 @@ struct FFT(V, Options)
         }
     }
     
+    static void fft_two_passes()(vec *pr, vec *pi, vec *pend, 
+        size_t m2, T* tab0, T* tab1) if(disable_two_passes)
+    {
+        fft_pass(pr, pi, pend, tab0, m2);
+        fft_pass(pr, pi, pend, tab1, m2 / 2);
+    }
+
     static void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N , T* table)
     {
@@ -623,35 +630,24 @@ struct FFT(V, Options)
             tableRowLen += tableRowLen;
         }
        	
-       	static if(disable_two_passes)
-            for (; m2 > 0 ; m2 >>= 1)
-            {
-                fft_pass(re, im, pend, table, m2);
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-            }
-        else
+        for (; m2 > 1 ; m2 >>= 2)
         {
-            for (; m2 > 1 ; m2 >>= 2)
-            {
-                static if(compact_table)
-                    fft_two_passes(re, im, pend, m2, table, table);
-                else 
-                    fft_two_passes(re, im, pend, m2, table);
+            static if(compact_table)
+                fft_two_passes(re, im, pend, m2, table, table);
+            else 
+                fft_two_passes(re, im, pend, m2, table);
 
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-            }
+            table += tableRowLen;
+            tableRowLen += tableRowLen;
+            table += tableRowLen;
+            tableRowLen += tableRowLen;
+        }
 
-            for (; m2 > 0 ; m2 >>= 1)
-                //if (m2 != 0)
-            {
-                fft_pass(re, im, pend, table, m2);
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-            }
+        if (m2 != 0)
+        {
+            fft_pass(re, im, pend, table, m2);
+            table += tableRowLen;
+            tableRowLen += tableRowLen;
         }
     }
     
@@ -924,9 +920,9 @@ struct FFT(V, Options)
         // assert(log2n >= 2*log2(vec_size));
         
         size_t N = (1<<log2n);
-        fft_passes!false(
+        fft_passes!(disable_two_passes)(
             v(re), v(im), N / vec_size, 
-            twiddle_table_ptr(tables, log2n) + 2);
+            twiddle_table_ptr(tables, log2n) + (disable_two_passes ? 0 : 2));
         
         bit_reverse_small_two!(2 * log2(vec_size))(
             re, im, log2n, br_table_ptr(tables, log2n));
