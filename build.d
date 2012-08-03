@@ -71,7 +71,7 @@ else
 static if(!is(typeof(isWindowsDMD)))
     enum isWindowsDMD = false;
 
-version(Linux)
+version(linux)
     enum isLinux = true;
 else 
     enum isLinux = false;

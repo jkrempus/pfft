@@ -243,6 +243,18 @@ struct BitReverse(alias V, Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
+    static void strided_copy(size_t chunk_size, TT)(
+        TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
+    {
+        for(
+            TT* s = src, d = dst; 
+            s < src + nchunks * src_stride; 
+            s += src_stride, d += dst_stride)
+        {
+            copy_array!chunk_size(d, s);
+        }
+    } 
+
     static void bit_reverse_large()(T* p, int log2n, uint * table)
     {
         enum log2l = Options.log2_bitreverse_large_chunk_size;
@@ -254,28 +266,30 @@ struct BitReverse(alias V, Options)
         int log2m = log2n - log2l;
         size_t m = 1<<log2m, n = 1<<log2n;
         T * pend = p + n;
-        
+       
         iter_bit_reversed_pairs!(function (size_t i0, size_t i1, 
 	    T* p, T* pend, size_t m, uint* table, T* buffer)
         {
             if(i1 >= i0)
             {
-          
-                for(T* pp = p + i0 * l, pb = buffer; pp < pend; pb += l, pp += m)
-                    copy_array!l(pb, pp);
+                strided_copy!l(buffer, p + i0 * l, l, m, l);
           
                 bit_reverse_small(buffer,log2l+log2l, table);
 
                 if(i1 != i0)
                 {
-                    for(T* pp = p + i1 * l, pb = buffer; pp < pend; pb += l, pp += m)
+                    for(
+                        T* pp = p + i1 * l, pb = buffer;
+                        pp < pend; 
+                        pb += l, pp += m)
+                    {
                         swap_array!l(pp, pb);
+                    }
                 
                     bit_reverse_small(buffer,log2l+log2l, table);
                 }
 
-                for(T* pp = p + i0*l, pb = buffer; pp < pend; pp += m, pb += l)
-                    copy_array!l(pp, pb);
+                strided_copy!l(p + i0 * l, buffer, m, l, l);
             }
         })(log2m-log2l, p, pend, m, table, buffer);
     }

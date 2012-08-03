@@ -307,9 +307,12 @@ struct FFT(V, Options)
     
     static void twiddle_table()(int log2n, Pair * r)
     {
-        if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size))
+        if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size)
+            || disable_two_passes)
+        {
             return sines_cosines!false(
                 r, st!1 << (log2n - 1), 0.0, -2 * _asin(1), true);
+        }
 
         r++;
 
@@ -603,93 +606,50 @@ struct FFT(V, Options)
         }
     }
     
-    static void fft_passes(bool compact_table)(
+    static void fft_passes(bool compact_table, bool dtp = disable_two_passes)(
         vec* re, vec* im, size_t N , T* table)
     {
         vec * pend = re + N;
 
-        size_t tableRowLen = compact_table ? 0 : 2;
+        size_t tableRowLen = 2;
         size_t m2 = N/2;
+
+        static nextRow(ref T* table, ref size_t len)
+        {
+            static if(!compact_table)
+            {
+                table += len;
+                len += len;
+            }
+        }
 
         if(m2 > 1)
         {
             first_fft_passes(re, im, N);
             
-            m2 >>= 1;
-            table += tableRowLen;
-            tableRowLen += tableRowLen;
-            m2 >>= 1;
-            table += tableRowLen;
-            tableRowLen += tableRowLen;
+            m2 >>= 2;
+
+            nextRow(table, tableRowLen);
+            nextRow(table, tableRowLen);
         }
        	
-       	static if(disable_two_passes)
-            for (; m2 > 0 ; m2 >>= 1)
-            {
-                fft_pass(re, im, pend, table, m2);
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-            }
-        else
-        {
+       	static if(!dtp)
             for (; m2 > 1 ; m2 >>= 2)
             {
                 static if(compact_table)
                     fft_two_passes(re, im, pend, m2, table, table);
-                else 
+                else
                     fft_two_passes(re, im, pend, m2, table);
 
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
+                nextRow(table, tableRowLen);
+                nextRow(table, tableRowLen);
             }
-
-            for (; m2 > 0 ; m2 >>= 1)
-                //if (m2 != 0)
-            {
-                fft_pass(re, im, pend, table, m2);
-                table += tableRowLen;
-                tableRowLen += tableRowLen;
-            }
-        }
-    }
-    
-    static void nextTableRow()(
-        ref T*  table, ref size_t tableRowLen, ref size_t tableI)
-    {
-        table += tableRowLen;
-        tableI += tableI;
-        tableRowLen += tableRowLen;        
-    }
-
-    static void fft_pass_interleaved(int interleaved)(
-        vec * pr, vec * pi, vec * pend, T * table) 
-    if(is(typeof(V.transpose!2)))
-    {
-        for(; pr < pend; pr += 2, pi += 2, table += 2*interleaved)
+        
+        for (; m2 > 0 ; m2 >>= 1)
         {
-            vec tmpr, ti, ur, ui, wr, wi;
-            V.complex_array_to_real_imag_vec!interleaved(table, wr, wi);
-                
-            V.transpose!interleaved(pr[0], pr[1], ur, tmpr);
-            V.transpose!interleaved(pi[0], pi[1], ui, ti);
-
-            vec tr = tmpr * wr - ti * wi;
-            ti = tmpr * wi + ti * wr;
-
-            static if(interleaved == vec_size)
-            {
-                V.interleave(ur + tr, ur - tr, pr[0], pr[1]);
-                V.interleave(ui + ti, ui - ti, pi[0], pi[1]);
-            }
-            else
-            {
-                pr[0] = ur + tr;
-                pr[1] = ur - tr;
-                pi[0] = ui + ti;
-                pi[1] = ui - ti;
-            }
+            fft_pass(re, im, pend, table, m2);
+            
+            nextRow(table, tableRowLen);
         }
     }
     
@@ -699,14 +659,6 @@ struct FFT(V, Options)
     {
         static if(is(typeof(V.transpose!2)))
         {
-            /*foreach(i; ints_up_to!(log2(vec_size)))
-            {
-                fft_pass_interleaved!(1 << (1 + i))(
-                    pr, pi, pend, table + tableI);
-
-                tableI *= 2;
-            }*/
-
             for(; pr < pend; pr += 2, pi += 2, tableI += 4)
             {
                 auto ar = pr[0];
@@ -747,29 +699,6 @@ struct FFT(V, Options)
             }
     }
   
-    static void strided_copy(bool src_strided, size_t chunk_size)(
-        vec* dst, vec* src, size_t nchunks, size_t stride)
-    {
-        static if(src_strided)
-        {
-            alias chunk_size dst_stride;
-            alias stride src_stride;
-        }
-        else
-        {
-            alias chunk_size src_stride;
-            alias stride dst_stride;
-        }
-
-        for(
-            vec* s = src, d = dst; 
-            s < src + nchunks * src_stride; 
-            s += src_stride, d += dst_stride)
-        {
-            BR.copy_array!chunk_size(d, s);
-        }
-    } 
-
     // bug_killer below is a dummy parameter which apparently causes the DMD 
     // stack alignment bug to go away. 
     static void fft_passes_strided(int l, int chunk_size)(
@@ -783,8 +712,8 @@ struct FFT(V, Options)
         auto rbuf = aligned_ptr!vec(rmem.ptr, 64);
         auto ibuf = aligned_ptr!vec(imem.ptr, 64);
       
-        strided_copy!(true, chunk_size)(rbuf, pr, l, stride);
-        strided_copy!(true, chunk_size)(ibuf, pi, l, stride);
+        BR.strided_copy!(chunk_size)(rbuf, pr, chunk_size, stride, l);
+        BR.strided_copy!(chunk_size)(ibuf, pi, chunk_size, stride, l);
         
         size_t m2 = l*chunk_size/2;
         size_t m2_limit = m2>>nPasses;
@@ -797,14 +726,15 @@ struct FFT(V, Options)
             m2 >>= 1;
             tableI *= 2;
         }
-        
-        for(; m2 > 2 * m2_limit; m2 >>= 2)
-        {
-            fft_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
-                table + tableI, table + 2 * tableI);
-            
-            tableI *= 4;
-        }
+       
+        static if(!disable_two_passes) 
+            for(; m2 > 2 * m2_limit; m2 >>= 2)
+            {
+                fft_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
+                    table + tableI, table + 2 * tableI);
+
+                tableI *= 4;
+            }
         
         for(; m2 > m2_limit; m2 >>= 1)
         {
@@ -812,8 +742,8 @@ struct FFT(V, Options)
             tableI *= 2;
         }
       
-        strided_copy!(false, chunk_size)(pr, rbuf, l, stride);
-        strided_copy!(false, chunk_size)(pi, ibuf, l, stride);
+        BR.strided_copy!(chunk_size)(pr, rbuf, stride, chunk_size, l);
+        BR.strided_copy!(chunk_size)(pi, ibuf, stride, chunk_size, l);
     }
     
     static void fft_passes_recursive()(
@@ -823,14 +753,17 @@ struct FFT(V, Options)
         if(N <= (1<<Options.log2_optimal_n))
         {
             size_t m2 = N >> 1;
-            for (; m2 > 1 ; m2 >>= 2)
-            {
-                auto tmp = table + tableI; 
-                tableI *= 2;
-                fft_two_passes(pr, pi, pr + N, m2, tmp, table + tableI);
-                tableI *= 2;
-            }
-            if (m2 != 0)
+            
+            static if(!disable_two_passes) 
+                for (; m2 > 1 ; m2 >>= 2)
+                {
+                    fft_two_passes(pr, pi, pr + N, m2, table + tableI, 
+                        table + 2 * tableI);
+                    
+                    tableI *= 4;
+                }
+
+            for (; m2 > 0 ; m2 >>= 1)
             {
                 fft_pass(pr, pi, pr + N, table + tableI, m2);
                 tableI *= 2;
@@ -908,7 +841,7 @@ struct FFT(V, Options)
         // assert(log2n > log2(vec_size));
         
         auto N = st!1 << log2n;
-        fft_passes!true(v(re), v(im), N / vec_size, 
+        fft_passes!(true, true)(v(re), v(im), N / vec_size, 
             twiddle_table_ptr(tables, log2n));
         
         fft_passes_fractional(
@@ -924,9 +857,9 @@ struct FFT(V, Options)
         // assert(log2n >= 2*log2(vec_size));
         
         size_t N = (1<<log2n);
-        fft_passes!false(
+        fft_passes!disable_two_passes(
             v(re), v(im), N / vec_size, 
-            twiddle_table_ptr(tables, log2n) + 2);
+            twiddle_table_ptr(tables, log2n) + (disable_two_passes ? 0 : 2));
         
         bit_reverse_small_two!(2 * log2(vec_size))(
             re, im, log2n, br_table_ptr(tables, log2n));
