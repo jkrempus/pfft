@@ -332,9 +332,6 @@ struct FFT(V, Options)
             p += m2;
         }
        
-	    static if(disable_two_passes)
-            return;
-
         p = r;
         for (int s = 0; s + 1 < log2n - log2(vec_size);  s += 2)
         {
@@ -506,7 +503,7 @@ struct FFT(V, Options)
     }
     
     static void fft_two_passes(Tab...)(
-        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab) if(!disable_two_passes)
     {
         // When DMD inlines this function in fft_passes_recursive, strange 
         // things happen - let's not allow it to inline it:
@@ -857,6 +854,7 @@ struct FFT(V, Options)
         // assert(log2n >= 2*log2(vec_size));
         
         size_t N = (1<<log2n);
+        
         fft_passes!disable_two_passes(
             v(re), v(im), N / vec_size, 
             twiddle_table_ptr(tables, log2n) + (disable_two_passes ? 0 : 2));
