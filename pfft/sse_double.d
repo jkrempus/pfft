@@ -41,7 +41,6 @@ struct Vector
             r0 = __builtin_ia32_unpcklpd(a0, a1);
             r1 = __builtin_ia32_unpckhpd(a0, a1);
         }
-
         
         static vec unaligned_load(T* p)
         {
@@ -60,8 +59,9 @@ struct Vector
     }
     else version(LDC)
     {
-        import pfft.sse_declarations;
-        
+        pragma(shufflevector) 
+            double2 shufflevector(double2, double2, int, int);
+
         static vec scalar_to_vector(T a)
         {
             return a;
@@ -70,8 +70,8 @@ struct Vector
         static void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
-            r0 = unpcklpd(a0, a1);
-            r1 = unpckhpd(a0, a1);
+            r0 = shufflevector(a0, a1, 0, 2);
+            r1 = shufflevector(a0, a1, 1, 3);
         }
     }
     else 

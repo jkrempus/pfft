@@ -34,56 +34,15 @@ struct Vector
         {
             return a;
         }  
-              
-        static void complex_array_to_real_imag_vec(int len)(
-            float * arr, ref vec rr, ref vec ri)
+
+        private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
         {
-            static if(len==2)
-            {
-                rr = ri = (cast(vec*)arr)[0];
-                rr = __builtin_ia32_shufps(rr, rr, shuf_mask!(2,2,0,0));    // I could use __builtin_ia32_movsldup here but it doesn't seem to increase performance
-                ri = __builtin_ia32_shufps(ri, ri, shuf_mask!(3,3,1,1));
-            }
-            else static if(len==4)
-            {
-                vec tmp = (cast(vec*)arr)[0];
-                ri = (cast(vec*)arr)[1];
-                rr = __builtin_ia32_shufps(tmp, ri, shuf_mask!(2,0,2,0));
-                ri = __builtin_ia32_shufps(tmp, ri, shuf_mask!(3,1,3,1));
-            }
+            return shufps!(m0, m1, m2, m3)(a, b);
         }
 
-        static void transpose(int elements_per_vector)(
-            vec a0,  vec a1, ref vec r0, ref vec r1)
-        {
-            if(elements_per_vector==4)
-            {
-                r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(2,0,2,0));
-                r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,1,3,1));
-                r0 = __builtin_ia32_shufps(r0,r0,shuf_mask!(3,1,2,0));
-                r1 = __builtin_ia32_shufps(r1,r1,shuf_mask!(3,1,2,0));
-            }
-            else if(elements_per_vector==2)
-            {
-                r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(1,0,1,0));
-                r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,2,3,2));
-            }
-        }
-        
-        static void interleave( 
-            vec a0,  vec a1, ref vec r0, ref vec r1)
-        {
-            r0 = __builtin_ia32_unpcklps(a0,a1);
-            r1 = __builtin_ia32_unpckhps(a0,a1);
-        }
-        
-        static void deinterleave(
-            vec a0,  vec a1, ref vec r0, ref vec r1)
-        {
-            r0 = __builtin_ia32_shufps(a0,a1,shuf_mask!(2,0,2,0));
-            r1 = __builtin_ia32_shufps(a0,a1,shuf_mask!(3,1,3,1));
-        }
-        
+        alias __builtin_ia32_unpcklps unpcklps;
+        alias __builtin_ia32_unpckhps unpckhps;
+              
         static vec unaligned_load(T* p)
         {
             return __builtin_ia32_loadups(p);
@@ -96,23 +55,15 @@ struct Vector
 
         static vec reverse(vec v)
         {
-            return __builtin_ia32_shufps(v, v, shuf_mask!(0, 1, 2, 3));
-        }
-    
-        private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
-        {
-            return __builtin_ia32_shufps(a, b, shuf_mask!(m0, m1, m2, m3));
+            return shufps!(0, 1, 2, 3)(v, v);
         }
     }
-    else
+    
+    version(DigitalMars)
     {
         static vec scalar_to_vector()(float a)
         {
-            version(LDC)
-            {
-                return a;
-            }
-            else version(linux_x86_64)
+            version(linux_x86_64)
                 asm
                 {
                     naked;
@@ -128,7 +79,7 @@ struct Vector
                     float c;
                     float d;
                 };
-		auto q = quad(a,a,a,a);
+                auto q = quad(a,a,a,a);
                 return *cast(vec*)& q;
             }
         }
@@ -136,6 +87,11 @@ struct Vector
     
     version(LDC)
     {    
+        static vec scalar_to_vector()(float a)
+        {
+            return a;
+        }
+
         pragma(shufflevector) 
             float4 shufflevector(float4, float4, int, int, int, int);
 
@@ -143,10 +99,69 @@ struct Vector
         {
             return shufflevector(a, b, m3, m2, m1 + 4, m0 + 4);
         }
+        
+        static vec unpcklps(vec a, vec b)
+        { 
+            return shufflevector(a, b, 0, 4, 1, 5);
+        }
+        
+        static vec unpckhps(vec a, vec b)
+        { 
+            return shufflevector(a, b, 2, 6, 3, 7);
+        }
     }
     
     static if(is(typeof(shufps)))
     {
+        static void complex_array_to_real_imag_vec(int len)(
+            float * arr, ref vec rr, ref vec ri)
+        {
+            static if(len==2)
+            {
+                rr = ri = (cast(vec*)arr)[0];
+                rr = shufps!(2,2,0,0)(rr, rr);    // I could use __builtin_ia32_movsldup here but it doesn't seem to increase performance
+                ri = shufps!(3,3,1,1)(ri, ri);
+            }
+            else static if(len==4)
+            {
+                vec tmp = (cast(vec*)arr)[0];
+                ri = (cast(vec*)arr)[1];
+                rr = shufps!(2,0,2,0)(tmp, ri);
+                ri = shufps!(3,1,3,1)(tmp, ri);
+            }
+        }
+
+        static void transpose(int elements_per_vector)(
+            vec a0,  vec a1, ref vec r0, ref vec r1)
+        {
+            if(elements_per_vector==4)
+            {
+                r0 = shufps!(2,0,2,0)(a0,a1);
+                r1 = shufps!(3,1,3,1)(a0,a1);
+                r0 = shufps!(3,1,2,0)(r0,r0);
+                r1 = shufps!(3,1,2,0)(r1,r1);
+            }
+            else if(elements_per_vector==2)
+            {
+                r0 = shufps!(1,0,1,0)(a0,a1);
+                r1 = shufps!(3,2,3,2)(a0,a1);
+            }
+        }
+        
+        static void interleave( 
+            vec a0,  vec a1, ref vec r0, ref vec r1)
+        {
+            r0 = unpcklps(a0,a1);
+            r1 = unpckhps(a0,a1);
+        }
+        
+        static void deinterleave(
+            vec a0,  vec a1, ref vec r0, ref vec r1)
+        {
+            r0 = shufps!(2,0,2,0)(a0,a1);
+            r1 = shufps!(3,1,3,1)(a0,a1);
+        }
+        
         private static float4 * v()(float * a)
         {
             return cast(float4*)a;
