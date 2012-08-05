@@ -903,7 +903,7 @@ struct FFT(V, Options)
         return T.sizeof << (log2n - 1);
     }
 
-    enum supportsReal = is(typeof(
+    enum supports_real = is(typeof(
     {
         T a;
         vec v = V.unaligned_load(&a);
@@ -911,7 +911,7 @@ struct FFT(V, Options)
         V.unaligned_store(&a, v);
     }));
 
-    static RTable rfft_table()(int log2n, void *p) if(supportsReal)
+    static RTable rfft_table()(int log2n, void *p) if(supports_real)
     {
         if(log2n < 2)
             return cast(RTable) p;
@@ -936,7 +936,7 @@ struct FFT(V, Options)
         return cast(RTable) r.ptr;
     }
 
-    static auto rfft_table()(int log2n, void *p) if(!supportsReal)
+    static auto rfft_table()(int log2n, void *p) if(!supports_real)
     {
         return SFFT.rfft_table(log2n, p);
     }
@@ -979,7 +979,7 @@ struct FFT(V, Options)
     }
 
     static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
-    if(supportsReal)
+    if(supports_real)
     {
         if(st!1 << log2n < 4 * vec_size)
             return SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable);       
@@ -1058,7 +1058,7 @@ struct FFT(V, Options)
     }
     
     static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
-    if(!supportsReal)
+    if(!supports_real)
     {
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }

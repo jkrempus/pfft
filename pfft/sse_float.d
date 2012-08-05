@@ -18,6 +18,19 @@ version(X86_64)
     version(linux)
         version = linux_x86_64;
 
+
+version(LDC)
+{
+    pragma(shufflevector) 
+        float4 shufflevector(float4, float4, int, int, int, int);
+
+    pragma(intrinsic, "llvm.x86.sse.storeu.ps")
+        void __builtin_ia32_storeups(float* p, float4 v);
+
+//  pragma(intrinsic, "llvm.x86.sse.loadu.ps")
+//      float4 __builtin_ia32_loadups(float* p);
+}
+        
 struct Vector 
 {
     alias float4 vec;
@@ -92,9 +105,6 @@ struct Vector
             return a;
         }
 
-        pragma(shufflevector) 
-            float4 shufflevector(float4, float4, int, int, int, int);
-
         static auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
         {
             return shufflevector(a, b, m3, m2, m1 + 4, m0 + 4);
@@ -108,6 +118,28 @@ struct Vector
         static vec unpckhps(vec a, vec b)
         { 
             return shufflevector(a, b, 2, 6, 3, 7);
+        }
+
+        static vec unaligned_load(T* p)
+        {
+            // there is no LLVM intrinsic for unaligned load but LLVM is
+            // smart enough to compile this to movups.
+            vec a;
+            (cast(T*) &a)[0] = p[0]; 
+            (cast(T*) &a)[1] = p[1]; 
+            (cast(T*) &a)[2] = p[2]; 
+            (cast(T*) &a)[3] = p[3]; 
+            return a;
+        }
+
+        static void unaligned_store(T* p, vec v)
+        {
+            return __builtin_ia32_storeups(p, v);
+        }
+        
+        static vec reverse(vec v)
+        {
+            return shufps!(0, 1, 2, 3)(v, v);
         }
     }
     
