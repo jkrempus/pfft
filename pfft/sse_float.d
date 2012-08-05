@@ -137,6 +137,12 @@ struct Vector
     version(LDC)
     {    
         import pfft.sse_declarations;    
+        
+        auto foo(float4 a, float4 b)
+        {
+            return shufps!(2, 0, 2, 0)(a, b);
+        }
+
     }
     
     static if(is(typeof(shufps)))

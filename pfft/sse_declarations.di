@@ -256,15 +256,23 @@ extern(C) float4 shufps253(float4, float4);
 extern(C) float4 shufps254(float4, float4);
 extern(C) float4 shufps255(float4, float4);
 
-    auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+    /*auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
     {
 
         enum sm = m3 | (m2<<2) | (m1<<4) | (m0<<6);
         mixin("auto r = shufps" ~ sm.stringof ~ "(a, b);");
         return r;
-    }    
-
-
+    }*/  
+    
     extern(C) double2 unpcklpd(double2, double2);
     extern(C) double2 unpckhpd(double2, double2);
+
+    pragma(shufflevector) 
+        float4 shufflevector(float4, float4, int, int, int, int);
+
+    auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+    {
+        return shufflevector(a, b, m3, m2, m1 + 4, m0 + 4);
+    }
+
 

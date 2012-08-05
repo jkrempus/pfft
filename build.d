@@ -217,7 +217,7 @@ void buildLdc(Version v, string[] types, string dcpath,
     auto simdStrLC = toLower(simdStr);
     auto llcMattr = mattrDict.get(simd, simdStrLC);
     
-    auto src = sources(v, types, clib ? ["capi"] : ["stdapi"]);
+    auto src = sources(v, types, clib ? ["capi"] : ["stdapi", "pfft"]);
     auto path = buildPath("lib", "libpfft.a");
 
     if(simd == SIMD.Scalar)
