@@ -136,13 +136,13 @@ struct Vector
     
     version(LDC)
     {    
-        import pfft.sse_declarations;    
-        
-        auto foo(float4 a, float4 b)
-        {
-            return shufps!(2, 0, 2, 0)(a, b);
-        }
+        pragma(shufflevector) 
+            float4 shufflevector(float4, float4, int, int, int, int);
 
+        static auto shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+        {
+            return shufflevector(a, b, m3, m2, m1 + 4, m0 + 4);
+        }
     }
     
     static if(is(typeof(shufps)))

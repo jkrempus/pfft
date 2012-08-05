@@ -221,19 +221,17 @@ void buildLdc(Version v, string[] types, string dcpath,
     auto path = buildPath("lib", "libpfft.a");
 
     if(simd == SIMD.Scalar)
-        shellf("%s -O3 -release -lib -of%s -d-version=%s %s", 
-            dcpath, path, simdStr, src);
+        shellf("%s -O5 -release -lib -of%s -d-version=%s %s", 
+            dcpath, clib ? clibPath : libPath, simdStr, src);
     else
     {
         execute(
             fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
                 dcpath,  to!string(v), src),
-            fm("llvm-link %s pfft.bc -o both.bc", 
-                buildPath("..", "ldc", simdStrLC ~ ".ll")),
-            "opt -O3 -std-link-opts -std-compile-opts both.bc -o both.bc",
-            fm("llc both.bc -o both.s -mattr=+%s", llcMattr),
-            fm("%s both.s -c", ccpath),
-            fm("ar cr %s both.o", path));
+            "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc",
+            fm("llc pfft.bc -o pfft.s -mattr=+%s", llcMattr),
+            fm("%s pfft.s -c", ccpath),
+            fm("ar cr %s pfft.o", path));
     }
 }
 
