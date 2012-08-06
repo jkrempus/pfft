@@ -1138,7 +1138,8 @@ struct FFT(V, Options)
         auto bytes = T.sizeof << bsr(n);
         
         bytes = bytes < a ? bytes : a;
-        return bytes > (void*).sizeof ? bytes : (void*).sizeof;
+        return bytes > (void*).sizeof && (bytes & (bytes - 1)) == 0 ? 
+            bytes : (void*).sizeof;
     }
 }
 
