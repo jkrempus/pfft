@@ -50,7 +50,7 @@ struct Vector
 
         private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
         {
-            return shufps!(m0, m1, m2, m3)(a, b);
+            return __builtin_ia32_shufps(a, b, shuf_mask!(m0, m1, m2, m3));
         }
 
         alias __builtin_ia32_unpcklps unpcklps;

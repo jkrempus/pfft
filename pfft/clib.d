@@ -9,16 +9,30 @@ import core.stdc.stdlib, core.bitop;
 
 version(Windows)
 {
-	
-    extern(Windows) void * _aligned_malloc( size_t size, size_t alignment);
-    extern(Windows) void _aligned_free(void*);
-
-    auto allocate_aligned(size_t alignment, size_t size)
+    version(GNU)
     {
-        return _aligned_malloc(size, alignment);
-    }
+		extern(C) void* __mingw_aligned_malloc(size_t, size_t);
+		extern(C) void __mingw_aligned_free(void*);
+		
+		auto allocate_aligned(size_t alignment, size_t size)
+		{
+			return __mingw_aligned_malloc(size, alignment);
+		}
 
-    alias _aligned_free free_aligned;
+		alias __mingw_aligned_free free_aligned;
+	}
+	else
+	{		
+		extern(Windows) void * _aligned_malloc( size_t size, size_t alignment);
+		extern(Windows) void _aligned_free(void*);
+
+		auto allocate_aligned(size_t alignment, size_t size)
+		{
+			return _aligned_malloc(size, alignment);
+		}
+
+		alias _aligned_free free_aligned;
+	}
 }
 else
 {
