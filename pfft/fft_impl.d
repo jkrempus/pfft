@@ -104,10 +104,8 @@ struct Scalar(_T)
 }
 
 version(Windows)
-    version(DigitalMars)
-        enum disable_two_passes = true;
-
-static if(!is(typeof(disable_two_passes)))
+    enum disable_two_passes = (void*).sizeof == 4;
+else
     enum disable_two_passes = false;
 
 version(DisableLarge)
