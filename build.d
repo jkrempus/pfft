@@ -5,7 +5,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.process, std.string, std.array, std.algorithm, 
-       std.conv, std.range, std.getopt, std.file, std.path : buildPath, absolutePath;
+       std.conv, std.range, std.getopt, std.file, std.path : buildPath, absolutePath, dirSeparator;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
@@ -56,14 +56,14 @@ auto shellf(A...)(A a)
 version(Windows)
 {
 	enum isWindows = true;
-	enum libPath = buildPath("lib", "pfft.lib");
-	enum clibPath = buildPath("lib", "pfft-c.lib");
+	enum libPath = "lib\\pfft.lib";
+	enum clibPath = "lib\\pfft-c.lib";
 }
 else
 {
 	enum isWindows = false;
-	enum libPath = buildPath("lib", "libpfft.a");
-	enum clibPath = buildPath("lib", "libpfft-c.a");
+	enum libPath = "lib/libpfft.a";
+	enum clibPath = "lib/libpfft-c.a";
 }
 
 version(linux)
@@ -191,7 +191,7 @@ void runBenchmarks(string[] types)
 }
 
 void buildDmd(Version v, string[] types, string dcpath, 
-    string ccpath, bool clib, bool dbg)
+    string ccpath, bool clib, bool dbg, string flags)
 {
     auto simd = baseSIMD(v);
     auto simdStr = to!string(simd);
@@ -199,8 +199,8 @@ void buildDmd(Version v, string[] types, string dcpath,
 
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
-    shellf("%s %s -lib -of%s -version=%s %s", 
-        dcpath, optOrDbg,  clib ? clibPath : libPath, to!string(v), src);
+    shellf("%s %s -lib -of%s -version=%s %s %s", 
+        dcpath, optOrDbg,  clib ? clibPath : libPath, to!string(v), src, flags);
 }
 
 void buildLdc(Version v, string[] types, string dcpath, 
@@ -342,7 +342,7 @@ void copyIncludes(string[] types, bool clib)
 void deleteDOutput()
 {
     try rmdirRecurse(buildPath("include", "pfft")); catch{}
-    try remove(libPath); catch{}
+    try std.file.remove(libPath); catch{}
 }
 
 enum usage = `
@@ -477,7 +477,7 @@ void doit(string[] args)
         else if(dc == Compiler.LDC)
             buildLdc(v, types, dcpath, ccpath, clib);
         else
-            buildDmd(v, types, dcpath, ccpath, clib, dbg);
+            buildDmd(v, types, dcpath, ccpath, clib, dbg, flags);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)

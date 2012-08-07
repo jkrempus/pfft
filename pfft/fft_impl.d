@@ -105,7 +105,7 @@ struct Scalar(_T)
 
 version(Windows)
     version(DigitalMars)
-	    enum disable_two_passes = true;
+        enum disable_two_passes = true;
 
 static if(!is(typeof(disable_two_passes)))
     enum disable_two_passes = false;
@@ -508,8 +508,9 @@ struct FFT(V, Options)
         // When DMD inlines this function in fft_passes_recursive, strange 
         // things happen - let's not allow it to inline it:
     
-        version(DigitalMars)
-            asm{ nop; }
+        /*version(DigitalMars)
+            static if(caller_passes_recursive)
+                asm{ nop; }*/
 
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
