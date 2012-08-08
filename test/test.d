@@ -192,7 +192,6 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
         itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
         rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
         table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1)));
-        writeln((cast(T*) rtable)[0 .. n / 2]);
     }
     
     void compute()
@@ -470,7 +469,7 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
         static if(isReal)
             a[] = cast(T) 0;
         else
-            a[] = Complex!T(0, 0);
+            (cast(T[])a)[] = cast(T) 0; // work around a dmd bug
         
         fft = new Fft(st!1 << log2n);
     }
@@ -677,8 +676,6 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     auto im = (size_t a){ return cast(ST) tested.inIm(a); };
     simple.fill(re, im);
     
-    writeln();
-
     simple.compute();
     tested.compute();
     

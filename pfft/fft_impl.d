@@ -103,15 +103,15 @@ struct Scalar(_T)
     static T reverse(T a){ return a; }           
 }
 
-version(Windows)
+version(DigitalMars)
     enum disable_two_passes = (void*).sizeof == 4;
 else
     enum disable_two_passes = false;
 
 version(DisableLarge)
-    enum disableLarge = true;
+    enum disable_large = true;
 else 
-    enum disableLarge = false;
+    enum disable_large = false;
 
 // reinventing some Phobos stuff...
 
@@ -503,12 +503,18 @@ struct FFT(V, Options)
     static void fft_two_passes(Tab...)(
         vec *pr, vec *pi, vec *pend, size_t m2, Tab tab) if(!disable_two_passes)
     {
-        // When DMD inlines this function in fft_passes_recursive, strange 
-        // things happen - let's not allow it to inline it:
+        // When this function is called with tab.length == 2 on DMD, it 
+        // sometimes gives an incorrect result (for example when building with 
+        // SSE on 64 bit Linux and runnitg test_float  pfft "14".), so lets's 
+        // use fft_pass instead.
     
-        /*version(DigitalMars)
-            static if(caller_passes_recursive)
-                asm{ nop; }*/
+        version(DigitalMars)
+            static if(tab.length == 2)
+            {
+               fft_pass(pr, pi, pend, tab[0], m2);
+               fft_pass(pr, pi, pend, tab[1], m2 / 2);
+               return;
+            }
 
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
@@ -888,10 +894,10 @@ struct FFT(V, Options)
 
         if(log2n < 2 * log2(vec_size))
             return fft_tiny(re, im, log2n, tables);
-        else if( log2n < Options.large_limit || disableLarge)
+        else if( log2n < Options.large_limit || disable_large)
             return fft_small(re, im, log2n, tables);
         else 
-            static if(!disableLarge)
+            static if(!disable_large)
                 fft_large(re, im, log2n, tables);
     }
   
