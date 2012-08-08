@@ -103,11 +103,6 @@ struct Scalar(_T)
     static T reverse(T a){ return a; }           
 }
 
-version(DigitalMars)
-    enum disable_two_passes = (void*).sizeof == 4;
-else
-    enum disable_two_passes = false;
-
 version(DisableLarge)
     enum disable_large = true;
 else 
@@ -305,8 +300,7 @@ struct FFT(V, Options)
     
     static void twiddle_table()(int log2n, Pair * r)
     {
-        if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size)
-            || disable_two_passes)
+        if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size))
         {
             return sines_cosines!false(
                 r, st!1 << (log2n - 1), 0.0, -2 * _asin(1), true);
@@ -501,7 +495,7 @@ struct FFT(V, Options)
     }
     
     static void fft_two_passes(Tab...)(
-        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab) if(!disable_two_passes)
+        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
         // sometimes gives an incorrect result (for example when building with 
@@ -608,7 +602,7 @@ struct FFT(V, Options)
         }
     }
     
-    static void fft_passes(bool compact_table, bool dtp = disable_two_passes)(
+    static void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N , T* table)
     {
         vec * pend = re + N;
@@ -635,24 +629,19 @@ struct FFT(V, Options)
             nextRow(table, tableRowLen);
         }
        	
-       	static if(!dtp)
-            for (; m2 > 1 ; m2 >>= 2)
-            {
-                static if(compact_table)
-                    fft_two_passes(re, im, pend, m2, table, table);
-                else
-                    fft_two_passes(re, im, pend, m2, table);
-
-                nextRow(table, tableRowLen);
-                nextRow(table, tableRowLen);
-            }
-        
-        for (; m2 > 0 ; m2 >>= 1)
+        for (; m2 > 1 ; m2 >>= 2)
         {
-            fft_pass(re, im, pend, table, m2);
-            
+            static if(compact_table)
+                fft_two_passes(re, im, pend, m2, table, table);
+            else
+                fft_two_passes(re, im, pend, m2, table);
+
+            nextRow(table, tableRowLen);
             nextRow(table, tableRowLen);
         }
+        
+        if(m2 != 0)
+            fft_pass(re, im, pend, table, m2);
     }
     
     static static void fft_passes_fractional()(
@@ -729,16 +718,15 @@ struct FFT(V, Options)
             tableI *= 2;
         }
        
-        static if(!disable_two_passes) 
-            for(; m2 > 2 * m2_limit; m2 >>= 2)
-            {
-                fft_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
-                    table + tableI, table + 2 * tableI);
+        for(; m2 > 2 * m2_limit; m2 >>= 2)
+        {
+            fft_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
+                table + tableI, table + 2 * tableI);
 
-                tableI *= 4;
-            }
+            tableI *= 4;
+        }
         
-        for(; m2 > m2_limit; m2 >>= 1)
+        if(m2 != m2_limit)
         {
             fft_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
             tableI *= 2;
@@ -756,16 +744,15 @@ struct FFT(V, Options)
         {
             size_t m2 = N >> 1;
             
-            static if(!disable_two_passes) 
-                for (; m2 > 1 ; m2 >>= 2)
-                {
-                    fft_two_passes(pr, pi, pr + N, m2, table + tableI, 
-                        table + 2 * tableI);
-                    
-                    tableI *= 4;
-                }
+            for (; m2 > 1 ; m2 >>= 2)
+            {
+                fft_two_passes(pr, pi, pr + N, m2, table + tableI, 
+                    table + 2 * tableI);
+                
+                tableI *= 4;
+            }
 
-            for (; m2 > 0 ; m2 >>= 1)
+            if(m2 != 0)
             {
                 fft_pass(pr, pi, pr + N, table + tableI, m2);
                 tableI *= 2;
@@ -843,7 +830,7 @@ struct FFT(V, Options)
         // assert(log2n > log2(vec_size));
         
         auto N = st!1 << log2n;
-        fft_passes!(true, true)(v(re), v(im), N / vec_size, 
+        fft_passes!(true)(v(re), v(im), N / vec_size, 
             twiddle_table_ptr(tables, log2n));
         
         fft_passes_fractional(
@@ -860,9 +847,9 @@ struct FFT(V, Options)
         
         size_t N = (1<<log2n);
         
-        fft_passes!disable_two_passes(
+        fft_passes!false(
             v(re), v(im), N / vec_size, 
-            twiddle_table_ptr(tables, log2n) + (disable_two_passes ? 0 : 2));
+            twiddle_table_ptr(tables, log2n) + 2);
         
         bit_reverse_small_two!(2 * log2(vec_size))(
             re, im, log2n, br_table_ptr(tables, log2n));
