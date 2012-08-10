@@ -20,7 +20,7 @@ compiled with GCC 4.8.0 20120715. All the benchmarks were done
 using the test/test.d file and were run on an Intel Core i5 2500K CPU. The 
 operating system was Debian Wheezy.
 
-The benchmarks on this page are for the [ebfc8b8a](https://github.com/jerro/pfft/tree/ebfc8b8a08a8d36b919b255809b1ec80e7062016) revision of pfft. For 0.1 release benchmarks go [here](../benchmarks-0.1).
+The benchmarks on this page are for 0.1.1 release of pfft.
 
 ### Comparison with FFTW
 
@@ -72,8 +72,8 @@ three graphs uses scalar floating point math.
 ### Comparison of different D compilers
 
 The chart below compares the speed of pfft when compiled with DMD, 
-LDC and GDC. The version of DMD was 2.59. The LDC used was from the llvm-3.1 
-branch and based on the 2.59 DMD frontend.
+LDC and GDC. The version of DMD was 2.59. The LDC used was revision
+[56233a373ce](https://github.com/ldc-developers/ldc/tree/56233a373ce3d57758b1d4f64949b5b7c1b1d309).
 
 #### Complex single precision transform
 
