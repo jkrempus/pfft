@@ -26,9 +26,6 @@ version(LDC)
 
     pragma(intrinsic, "llvm.x86.sse.storeu.ps")
         void __builtin_ia32_storeups(float* p, float4 v);
-
-//  pragma(intrinsic, "llvm.x86.sse.loadu.ps")
-//      float4 __builtin_ia32_loadups(float* p);
 }
         
 struct Vector 

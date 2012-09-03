@@ -11,7 +11,30 @@ import pfft.fft_impl;
 
 version(LDC)
 {
-    import pfft.avx_declarations;
+    pragma(shufflevector) 
+        float8 shufflevector(
+            float8, float8, int, int, int, int, int, int, int, int);
+
+    pragma(intrinsic, "llvm.x86.avx.storeu.ps")
+        void storeups(float* p, float8 v);
+    
+    auto shufps(int m0, int m1, int m2, int m3)(float8 a, float8 b)
+    {
+        return shufflevector(
+            a, b, 
+            m3, m2, m1 + 8, m0 + 8, 
+            m3 + 4, m2 + 4, m1 + 12, m0 + 12);
+    }
+    
+    float8 interleave128_lo(float8 a, float8 b)
+    {
+        return shufflevector(a, b, 0, 1, 2, 3, 8, 9, 10, 11);
+    }
+    
+    float8 interleave128_hi(float8 a, float8 b)
+    {
+        return shufflevector(a, b, 4, 5, 6, 7, 12, 13, 14, 15);
+    }
 }
 else version(GNU)
 {
@@ -87,69 +110,73 @@ struct Vector
         r0 = interleave128_lo(a0, a1);
         r1 = interleave128_hi(a0, a1);
     }
-   
-    // the three functions below do not do exactly what the names imply, but that's
-    // ok (fft works correctly when using them)
- 
-    static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
+  
+    static if(
+        is(typeof(insert128_0)) &&
+        is(typeof(insert128_1)) &&
+        is(typeof(unpcklps)) &&
+        is(typeof(unpckhps)))
     {
-        static if(n == 8)
+        static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
         {
-            deinterleave(v8(arr)[0], v8(arr)[1], rr, ri); 
+            static if(n == 8)
+            {
+                deinterleave(v8(arr)[0], v8(arr)[1], rr, ri); 
+            }
+            else static if (n == 4)
+            {
+                vec a = *v8(arr);
+                rr = shufps!(2, 2, 0, 0)(a, a);
+                ri = shufps!(3, 3, 1, 1)(a, a);
+            }
+            else static if(n == 2)
+            {
+                rr = insert128_0(rr, arr[0]);
+                rr = insert128_1(rr, arr[2]);
+                ri = insert128_0(ri,  arr[1]);
+                ri = insert128_1(ri,  arr[3]);
+            }
+            else
+                static assert(0);
         }
-        else static if (n == 4)
-        {
-            vec a = *v8(arr);
-            rr = shufps!(2, 2, 0, 0)(a, a);
-            ri = shufps!(3, 3, 1, 1)(a, a);
-        }
-        else static if(n == 2)
-        {
-            rr = insert128_0(rr, arr[0]);
-            rr = insert128_1(rr, arr[2]);
-            ri = insert128_0(ri,  arr[1]);
-            ri = insert128_1(ri,  arr[3]);
-        }
-        else
-            static assert(0);
-    }
-   
-    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
-    {
-        vec a0_tmp = unpcklps(a0, a1);
-        a1 =         unpckhps(a0, a1);
-        _deinterleave2(a0_tmp, a1, r0, r1);
-    }
-    
-    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
-    {
-        _deinterleave2(a0, a1, a0, a1); 
-        r0 = shufps!(2,0,2,0)(a0, a1);
-        r1 = shufps!(3,1,3,1)(a0, a1);
-    }
 
-    static void transpose(int elements_per_vector)(
-        vec a0, vec a1, ref vec r0, ref vec r1)
-    {
-        static if(elements_per_vector == 8)
+        static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
         {
+            vec a0_tmp = unpcklps(a0, a1);
+            a1 =         unpckhps(a0, a1);
+            _deinterleave2(a0_tmp, a1, r0, r1);
+        }
+
+        static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+        {
+            _deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(2,0,2,0)(a0, a1);
             r1 = shufps!(3,1,3,1)(a0, a1);
-            r0 = shufps!(3,1,2,0)(r0, r0);
-            r1 = shufps!(3,1,2,0)(r1, r1);
         }
-        else static if(elements_per_vector == 4)
+
+        static void transpose(int elements_per_vector)(
+                vec a0, vec a1, ref vec r0, ref vec r1)
         {
-            r0 = shufps!(1,0,1,0)(a0, a1);
-            r1 = shufps!(3,2,3,2)(a0, a1);
+            static if(elements_per_vector == 8)
+            {
+                r0 = shufps!(2,0,2,0)(a0, a1);
+                r1 = shufps!(3,1,3,1)(a0, a1);
+                r0 = shufps!(3,1,2,0)(r0, r0);
+                r1 = shufps!(3,1,2,0)(r1, r1);
+            }
+            else static if(elements_per_vector == 4)
+            {
+                r0 = shufps!(1,0,1,0)(a0, a1);
+                r1 = shufps!(3,2,3,2)(a0, a1);
+            }
+            else static if(elements_per_vector == 2)
+            {
+                r0 = interleave128_lo(a0, a1);
+                r1 = interleave128_hi(a0, a1);
+            }
+            else
+                static assert(0);
         }
-        else static if(elements_per_vector == 2)
-        {
-            r0 = interleave128_lo(a0, a1);
-            r1 = interleave128_hi(a0, a1);
-        }
-        else
-            static assert(0);
     }
 
     private static void br16_two(ref vec a0, ref vec a1, ref vec a2, ref vec a3)
@@ -227,20 +254,26 @@ struct Vector
         return a;
     }
 
-    static vec unaligned_load(T* p)
+    static if(
+        is(typeof(loadups)) &&
+        is(typeof(storeups)) &&
+        is(typeof(reverse128)))
     {
-        return loadups(p);
-    }
+        static vec unaligned_load(T* p)
+        {
+            return loadups(p);
+        }
 
-    static void unaligned_store(T* p, vec v)
-    {
-        storeups(p, v);
-    }
+        static void unaligned_store(T* p, vec v)
+        {
+            storeups(p, v);
+        }
 
-    static vec reverse(vec v)
-    {
-        v = shufps!(0, 1, 2, 3)(v, v);
-        return reverse128(v);
+        static vec reverse(vec v)
+        {
+            v = shufps!(0, 1, 2, 3)(v, v);
+            return reverse128(v);
+        }
     }
 }
 
