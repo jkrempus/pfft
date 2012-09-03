@@ -26,3 +26,34 @@ void _D10TypeInfo_l6__initZ()
 	fputs("_D10TypeInfo_l6__initZ should not be called!\n", stderr);
 	abort();
 }
+
+void _D10TypeInfo_m6__initZ()
+{
+	fputs("_D10TypeInfo_m6__initZ should not be called!\n", stderr);
+	abort();
+}
+
+void _D10TypeInfo_d6__initZ()
+{
+	fputs("_D10TypeInfo_d6__initZ should not be called!\n", stderr);
+	abort();
+}
+
+
+void _D10TypeInfo_k6__initZ()
+{
+	fputs("_D10TypeInfo_k6__initZ should not be called!\n", stderr);
+	abort();
+}
+
+void _D10TypeInfo_v6__initZ()
+{
+	fputs("_D10TypeInfo_v6__initZ should not be called!\n", stderr);
+	abort();
+}
+
+void _D16TypeInfo_Pointer6__vtblZ()
+{
+	fputs("_D16TypeInfo_Pointer6__vtblZ should not be called!\n", stderr);
+	abort();
+}

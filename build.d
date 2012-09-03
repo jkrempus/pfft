@@ -195,12 +195,13 @@ void buildDmd(Version v, string[] types, string dcpath,
 {
     auto simd = baseSIMD(v);
     auto simdStr = to!string(simd);
-    auto src = sources(v, types, clib ? ["clib"] : ["stdapi", "pfft"]);
+    auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
 
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
-    shellf("%s %s -lib -of%s -version=%s %s %s", 
-        dcpath, optOrDbg,  clib ? clibPath : libPath, to!string(v), src, flags);
+    shellf("%s %s -lib -of%s -version=%s %s %s %s", 
+        dcpath, optOrDbg,  clib ? clibPath : libPath, to!string(v), src, flags,
+            clib ? "clib.o dummy.o" : "");
 }
 
 void buildLdc(Version v, string[] types, string dcpath, 
@@ -237,7 +238,7 @@ enum gccArchFlagDict = [
     SIMD.Scalar: "",
     SIMD.AVX :   "-mavx"];
     
-string buildGdcAdditionaSIMD(Version v, SIMD simd, string[] types, 
+string buildGdcAdditionalSIMD(Version v, SIMD simd, string[] types, 
     string dcpath, bool dbg, string flags)
 {
     types = types.filter!(
@@ -265,7 +266,7 @@ void buildGdcLib(Version v, string[] types, string dcpath,
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
   
     auto implObjs = additionalSIMD(v)
-        .map!(s => buildGdcAdditionaSIMD(v, s, types, dcpath, dbg, flags))()
+        .map!(s => buildGdcAdditionalSIMD(v, s, types, dcpath, dbg, flags))()
         .array().join(" ");
  
     execute(
