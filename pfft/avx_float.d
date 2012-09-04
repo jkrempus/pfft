@@ -10,6 +10,12 @@ import core.simd;
 import pfft.fft_impl;
 
 version(LDC)
+    version = GNU_OR_LDC;
+
+version(GNU)
+    version = GNU_OR_LDC;
+
+version(LDC)
 {
     pragma(shufflevector) 
         float8 shufflevector(
@@ -18,7 +24,13 @@ version(LDC)
     pragma(intrinsic, "llvm.x86.avx.storeu.ps")
         void storeups(float* p, float8 v);
     
-    auto shufps(int m0, int m1, int m2, int m3)(float8 a, float8 b)
+    pragma(intrinsic, "llvm.x86.avx.vinsertf128.ps.256")
+        float8 __builtin_ia32_vinsertf128_ps256(float8 a, float4 b, byte i);
+    
+    pragma(intrinsic, "llvm.x86.avx.vextractf128.ps.256")
+        float4 __builtin_ia32_vextractf128_ps256(float8 a, byte i);
+
+    float8 shufps(int m0, int m1, int m2, int m3)(float8 a, float8 b)
     {
         return shufflevector(
             a, b, 
@@ -35,6 +47,16 @@ version(LDC)
     {
         return shufflevector(a, b, 4, 5, 6, 7, 12, 13, 14, 15);
     }
+
+    float8 unpcklps(float8 a, float8 b)
+    {
+        return shufflevector(a, b, 0, 8, 1, 9, 4, 12, 5, 13); 
+    }
+    
+    float8 unpckhps(float8 a, float8 b)
+    {
+        return shufflevector(a, b, 2, 10, 3, 11, 6, 14, 7, 15); 
+    }
 }
 else version(GNU)
 {
@@ -43,26 +65,6 @@ else version(GNU)
     template shuf_mask(int a3, int a2, int a1, int a0)
     { 
         enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
-    }
-
-    float8 insert128_0(float8 a, float4 b)
-    {
-        return __builtin_ia32_vinsertf128_ps256(a, b, 0);
-    }
-    
-    float8 insert128_1(float8 a, float4 b)
-    {
-        return __builtin_ia32_vinsertf128_ps256(a, b, 1);
-    }
-
-    float4 extract128_0(float8 a)
-    {
-        return __builtin_ia32_vextractf128_ps256(a, 0);
-    }
-
-    float4 extract128_1(float8 a)
-    {
-        return __builtin_ia32_vextractf128_ps256(a, 1);
     }
 
     float8 interleave128_lo(float8 a, float8 b)
@@ -82,7 +84,6 @@ else version(GNU)
 
     alias __builtin_ia32_unpcklps256 unpcklps;
     alias __builtin_ia32_unpckhps256 unpckhps;
-    alias __builtin_ia32_vbroadcastf128_ps256 broadcast128;
     alias __builtin_ia32_loadups256 loadups;
     alias __builtin_ia32_storeups256 storeups;
     
@@ -91,6 +92,29 @@ else version(GNU)
         return __builtin_ia32_shufps256(a, b, shuf_mask!param);
     }
 
+}
+
+version(GNU_OR_LDC)
+{
+    float8 insert128_0(float8 a, float4 b)
+    {
+        return __builtin_ia32_vinsertf128_ps256(a, b, 0);
+    }
+    
+    float8 insert128_1(float8 a, float4 b)
+    {
+        return __builtin_ia32_vinsertf128_ps256(a, b, 1);
+    }
+
+    float4 extract128_0(float8 a)
+    {
+        return __builtin_ia32_vextractf128_ps256(a, 0);
+    }
+
+    float4 extract128_1(float8 a)
+    {
+        return __builtin_ia32_vextractf128_ps256(a, 1);
+    }
 }
 
 struct Vector 
@@ -110,10 +134,12 @@ struct Vector
         r0 = interleave128_lo(a0, a1);
         r1 = interleave128_hi(a0, a1);
     }
-  
+
     static if(
         is(typeof(insert128_0)) &&
-        is(typeof(insert128_1)) &&
+        is(typeof(insert128_0)) &&
+        is(typeof(extract128_1)) &&
+        is(typeof(extract128_1)) &&
         is(typeof(unpcklps)) &&
         is(typeof(unpckhps)))
     {
