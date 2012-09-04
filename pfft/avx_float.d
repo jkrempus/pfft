@@ -21,8 +21,8 @@ version(LDC)
         float8 shufflevector(
             float8, float8, int, int, int, int, int, int, int, int);
 
-    pragma(intrinsic, "llvm.x86.avx.storeu.ps")
-        void storeups(float* p, float8 v);
+    pragma(intrinsic, "llvm.x86.avx.storeu.ps.256")
+        void __builtin_ia32_storeups256(float* p, float8 v);
     
     pragma(intrinsic, "llvm.x86.avx.vinsertf128.ps.256")
         float8 __builtin_ia32_vinsertf128_ps256(float8 a, float4 b, byte i);
@@ -57,6 +57,28 @@ version(LDC)
     {
         return shufflevector(a, b, 2, 10, 3, 11, 6, 14, 7, 15); 
     }
+    
+    float8 reverse128(float8 v)
+    {
+        return shufflevector(v, v, 4, 5, 6, 7, 0, 1, 2, 3);
+    }
+    
+    float8 loadups(float* p)
+    {
+        // there is no LLVM intrinsic for unaligned load but LLVM is
+        // smart enough to compile this to vmovups.
+        float8 a;
+        (cast(float*) &a)[0] = p[0]; 
+        (cast(float*) &a)[1] = p[1]; 
+        (cast(float*) &a)[2] = p[2]; 
+        (cast(float*) &a)[3] = p[3]; 
+        (cast(float*) &a)[4] = p[4]; 
+        (cast(float*) &a)[5] = p[5]; 
+        (cast(float*) &a)[6] = p[6]; 
+        (cast(float*) &a)[7] = p[7]; 
+        return a;
+    }
+
 }
 else version(GNU)
 {
@@ -77,7 +99,7 @@ else version(GNU)
         return __builtin_ia32_vperm2f128_ps256(a, b, shuf_mask!(0,3,0,1));
     }
 
-    float8  reverse128(float8 v)
+    float8 reverse128(float8 v)
     {
         return __builtin_ia32_vperm2f128_ps256(v, v, shuf_mask!(0, 0, 0, 1));
     }
@@ -85,13 +107,11 @@ else version(GNU)
     alias __builtin_ia32_unpcklps256 unpcklps;
     alias __builtin_ia32_unpckhps256 unpckhps;
     alias __builtin_ia32_loadups256 loadups;
-    alias __builtin_ia32_storeups256 storeups;
     
     auto shufps(param...)(float8 a, float8 b)
     {
         return __builtin_ia32_shufps256(a, b, shuf_mask!param);
     }
-
 }
 
 version(GNU_OR_LDC)
@@ -115,6 +135,8 @@ version(GNU_OR_LDC)
     {
         return __builtin_ia32_vextractf128_ps256(a, 1);
     }
+    
+    alias __builtin_ia32_storeups256 storeups;
 }
 
 struct Vector 
