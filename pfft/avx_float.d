@@ -65,8 +65,7 @@ version(LDC)
     
     float8 loadups(float* p)
     {
-        // there is no LLVM intrinsic for unaligned load but LLVM is
-        // smart enough to compile this to vmovups.
+        // there is no LLVM intrinsic for unaligned load 
         float8 a;
         (cast(float*) &a)[0] = p[0]; 
         (cast(float*) &a)[1] = p[1]; 

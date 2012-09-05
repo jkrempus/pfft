@@ -21,7 +21,7 @@ auto parseVersion(string simdOpt)
         "scalar": Version.Scalar][simdOpt];
 }
 
-auto baseSIMD(Version v)
+@property baseSIMD(Version v)
 {
     return [
         Version.SSE: SIMD.SSE,
@@ -112,9 +112,8 @@ string implSources(SIMD simd, string[] types)
 
 string sources(Version v, string[] types, string[] additional)
 {
-    auto simd = baseSIMD(v);
     auto m = 
-        map!(t => simdModuleName(simd, t))(types).array() ~ 
+        map!(t => simdModuleName(v.baseSIMD, t))(types).array() ~ 
         map!q{"impl_" ~ a}(types).array() ~
         ["fft_impl", "shuffle"] ~
         additional ~ 
@@ -128,7 +127,7 @@ void buildCObjects(string[] types, string dcpath, string ccpath)
     auto typeFlags = join(map!(a => "-version=" ~ capitalize(a))(types), " "); 
 
     shellf("%s -O -inline -release -c -Iinclude %s %s", 
-            dcpath, typeFlags,  buildPath("..", "pfft", "clib.d"));
+        dcpath, typeFlags,  buildPath("..", "pfft", "clib.d"));
     shellf("%s %s -c", ccpath, buildPath("..", "c", "dummy.c")); 
 }
 
@@ -193,8 +192,6 @@ void runBenchmarks(string[] types)
 void buildDmd(Version v, string[] types, string dcpath, 
     string ccpath, bool clib, bool dbg, string flags)
 {
-    auto simd = baseSIMD(v);
-    auto simdStr = to!string(simd);
     auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
 
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
@@ -204,39 +201,37 @@ void buildDmd(Version v, string[] types, string dcpath,
             clib ? "clib.o dummy.o" : "");
 }
 
+auto llcMattrFlag(SIMD simd)
+{
+    enum llcMattrDict = [SIMD.SSE : "sse2"];
+
+    return simd == SIMD.Scalar ? "" : format(
+        "-mattr=+%s", llcMattrDict.get(simd, toLower(to!string(simd))));
+}
+
 void buildLdc(Version v, string[] types, string dcpath, 
     string ccpath, bool clib)
 {
-    auto simd = baseSIMD(v);
-    enum mattrDict = [SIMD.SSE : "sse2"];
+    auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
 
-    auto simdStr = to!string(simd);
-    auto simdStrLC = toLower(simdStr);
-    auto llcMattr = mattrDict.get(simd, simdStrLC);
-    
-    auto src = sources(v, types, clib ? ["capi"] : ["stdapi", "pfft"]);
-    auto path = buildPath("lib", "libpfft.a");
-
-    if(simd == SIMD.Scalar)
-        shellf("%s -O5 -release -lib -of%s -d-version=%s %s", 
-            dcpath, clib ? clibPath : libPath, simdStr, src);
-    else
-    {
-        execute(
-            fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
-                dcpath,  to!string(v), src),
-            "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc",
-            fm("llc pfft.bc -o pfft.s -mattr=+%s", llcMattr),
-            fm("%s pfft.s -c", ccpath),
-            fm("ar cr %s pfft.o", path));
-    }
+    execute(
+        fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
+            dcpath,  to!string(v), src),
+        "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc",
+        fm("llc pfft.bc -o pfft.s %s", llcMattrFlag(v.baseSIMD)),
+        fm("%s pfft.s -c", ccpath),
+        fm("ar cr %s %s pfft.o", 
+            clib ? clibPath : libPath, clib ? "dummy.o clib.o" : ""));
 }
 
-enum gccArchFlagDict = [
-    SIMD.SSE:    "-msse2", 
-    SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a8",
-    SIMD.Scalar: "",
-    SIMD.AVX :   "-mavx"];
+auto gccArchFlag(SIMD simd)
+{
+    return [
+        SIMD.SSE:    "-msse2", 
+        SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a8",
+        SIMD.Scalar: "",
+        SIMD.AVX :   "-mavx"][simd];
+}
     
 string buildGdcAdditionalSIMD(Version v, SIMD simd, string[] types, 
     string dcpath, bool dbg, string flags)
@@ -245,14 +240,12 @@ string buildGdcAdditionalSIMD(Version v, SIMD simd, string[] types,
             t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
         .array(); 
 
-    auto arch = gccArchFlagDict[simd];
     auto optOrDbg = dbg ? dmdDbg : dmdOpt;
-    auto simdStr = to!string(simd);
     auto src = implSources(simd, types);
-    auto fname = toLower(simdStr) ~ ".o";
+    auto fname = toLower(to!string(simd)) ~ ".o";
     
     shellf("%s %s %s %s -version=%s -c -of%s -I.. %s", 
-        dcpath, optOrDbg, arch, flags, to!string(v), fname, src);
+        dcpath, optOrDbg, gccArchFlag(simd), flags, to!string(v), fname, src);
 
     return fname;
 }
@@ -260,18 +253,16 @@ string buildGdcAdditionalSIMD(Version v, SIMD simd, string[] types,
 void buildGdcLib(Version v, string[] types, string dcpath, 
     string ccpath, bool clib, bool dbg, string flags)
 {
-    auto simd = baseSIMD(v);
-    auto arch = gccArchFlagDict[simd];
     auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
-  
+ 
     auto implObjs = additionalSIMD(v)
         .map!(s => buildGdcAdditionalSIMD(v, s, types, dcpath, dbg, flags))()
         .array().join(" ");
  
     execute(
         fm("%s %s -version=%s %s %s %s -ofpfft.o -c -I..", 
-            dcpath, optOrDbg, to!string(v), arch, flags, src),
+            dcpath, optOrDbg, to!string(v), gccArchFlag(v.baseSIMD), flags, src),
         fm("ar cr %s pfft.o %s %s", 
             clib ? clibPath : libPath, clib ? "dummy.o clib.o" : "", implObjs));
 }
