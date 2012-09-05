@@ -127,16 +127,6 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
-auto aligned_ptr(T, U)(U * ptr, size_t alignment)
-{
-    return cast(T*)(((cast(size_t)ptr) + alignment) & ~(alignment - 1UL));
-}
-
-auto aligned_size(T)(size_t size, size_t alignment)
-{
-    return size * T.sizeof + alignment;
-}
-
 struct BitReverse(alias V, Options)
 {
     alias V.T T;
@@ -255,20 +245,19 @@ struct BitReverse(alias V, Options)
         }
     } 
 
-    static void bit_reverse_large()(T* p, int log2n, uint * table)
+    static void bit_reverse_large()(T* p, int log2n, uint * table, void* tmp_buffer)
     {
         enum log2l = Options.log2_bitreverse_large_chunk_size;
         enum l = 1<<log2l;
         
-        ubyte[aligned_size!T(l * l, 64)] mem = void;
-        auto buffer = aligned_ptr!T(mem.ptr, 64);
+        auto buffer = cast(T*) tmp_buffer;
         
         int log2m = log2n - log2l;
         size_t m = 1<<log2m, n = 1<<log2n;
         T * pend = p + n;
        
         iter_bit_reversed_pairs!(function (size_t i0, size_t i1, 
-	    T* p, T* pend, size_t m, uint* table, T* buffer)
+            T* p, T* pend, size_t m, uint* table, T* buffer)
         {
             if(i1 >= i0)
             {

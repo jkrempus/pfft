@@ -208,7 +208,7 @@ struct FFT(V, Options)
     alias V.T T;
     alias V.vec vec;
     alias FFT!(Scalar!T, Options) SFFT;
-  
+ 
     import cmath = core.stdc.math;
 
     static if(is(T == float))
@@ -368,9 +368,30 @@ struct FFT(V, Options)
         return cast(T*)p;
     }
     
+    static size_t tmp_buffer_size_bytes(int log2n)
+    {
+        enum rec = vec.sizeof << (
+            Options.log2_recursive_passes_chunk_size + 
+            Options.passes_per_recursive_call + 1);
+
+        enum br = 
+            T.sizeof << (2 * Options.log2_bitreverse_large_chunk_size);
+
+        return 
+            disable_large || log2n < Options.large_limit ? 0 :
+            rec > br ? rec : br;
+    }
+
+    static void* tmp_buffer_ptr(void* p, int log2n)
+    {
+        return p + twiddle_table_size_bytes(log2n);
+    }
+ 
     static uint* br_table_ptr(void* p, int log2n)
     {
-        return cast(uint*)(p + twiddle_table_size_bytes(log2n));
+        return cast(uint*)(
+            p + twiddle_table_size_bytes(log2n) + 
+            tmp_buffer_size_bytes(log2n));
     }
     
     static size_t table_size_bytes()(uint log2n)
@@ -380,6 +401,7 @@ struct FFT(V, Options)
         
         return 
             twiddle_table_size_bytes(log2n) + 
+            tmp_buffer_size_bytes(log2n) + 
             BR.br_table_size(log2nbr) * uint.sizeof;
     }
     
@@ -694,14 +716,11 @@ struct FFT(V, Options)
     // stack alignment bug to go away. 
     static void fft_passes_strided(int l, int chunk_size)(
         vec * pr, vec * pi, size_t N , 
-        ref T * table, ref size_t tableI, void* bug_killer, 
+        ref T * table, ref size_t tableI, void* tmp_buffer, 
         size_t stride, int nPasses)
     {
-        ubyte[aligned_size!vec(l * chunk_size, 64)] rmem = void;
-        ubyte[aligned_size!vec(l * chunk_size, 64)] imem = void;
-        
-        auto rbuf = aligned_ptr!vec(rmem.ptr, 64);
-        auto ibuf = aligned_ptr!vec(imem.ptr, 64);
+        auto rbuf = cast(vec*) tmp_buffer;
+        auto ibuf = rbuf + l * chunk_size;
       
         BR.strided_copy!(chunk_size)(rbuf, pr, chunk_size, stride, l);
         BR.strided_copy!(chunk_size)(ibuf, pi, chunk_size, stride, l);
@@ -738,7 +757,7 @@ struct FFT(V, Options)
     
     static void fft_passes_recursive()(
         vec * pr, vec *  pi, size_t N , 
-        T * table, size_t tableI)
+        T * table, size_t tableI, void* tmp_buffer)
     {
         if(N <= (1<<Options.log2_optimal_n))
         {
@@ -783,7 +802,7 @@ struct FFT(V, Options)
             tableI = tableIOld;
 
             fft_passes_strided!(l, chunk_size)(
-                pr + i, pi + i, N, table, tableI, null, m, nPasses);
+                pr + i, pi + i, N, table, tableI, tmp_buffer, m, nPasses);
         }
 
         {
@@ -792,7 +811,7 @@ struct FFT(V, Options)
             for(int i = 0; i<(1<<nPasses); i++)
                 fft_passes_recursive(
                     pr + nextN*i, pi  + nextN*i, nextN, 
-                    table, tableI + 2*i);
+                    table, tableI + 2*i, tmp_buffer);
         }
     }
    
@@ -861,16 +880,18 @@ struct FFT(V, Options)
                 N / vec_size/vec_size);
     }
     
-    static void fft_large()(T * re, T * im, int log2n, Table tables)
+    static void fft_large()(
+        T * re, T * im, int log2n, Table tables)
     {
         size_t N = (1<<log2n);
-        
+        auto tmp_buf = tmp_buffer_ptr(tables, log2n);
+ 
         fft_passes_recursive(
             v(re), v(im), N / vec_size, 
-            twiddle_table_ptr(tables, log2n), 0);
+            twiddle_table_ptr(tables, log2n), 0, tmp_buf);
         
-        BR.bit_reverse_large(re, log2n, br_table_ptr(tables, log2n)); 
-        BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n));
+        BR.bit_reverse_large(re, log2n, br_table_ptr(tables, log2n), tmp_buf); 
+        BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf);
     }
     
     static void fft()(T * re, T * im, int log2n, Table tables)
