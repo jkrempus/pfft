@@ -11,7 +11,35 @@ import pfft.fft_impl;
 
 version(LDC)
 {
-    import pfft.avx_declarations;
+    pragma(shufflevector) 
+        double4 shufflevector(
+            double4, double4, int, int, int, int);
+
+    double4 interleave128_lo(double4 a, double4 b)
+    {
+        return shufflevector(a, b, 0, 1, 4, 5);
+    }
+    
+    double4 interleave128_hi(double4 a, double4 b)
+    {
+        return shufflevector(a, b, 2, 3, 6, 7);
+    }
+    
+    double4 unpcklpd(double4 a, double4 b)
+    {
+        return shufflevector(a, b, 0, 4, 2, 6); 
+    }
+    
+    double4 unpckhpd(double4 a, double4 b)
+    {
+        return shufflevector(a, b, 1, 5, 3, 7); 
+    }
+    
+    double4 reverse_elements(double4 v)
+    {
+        return shufflevector(v, v, 3, 2, 1, 0);
+    }
+    
 }
 else version(GNU)
 {
@@ -22,12 +50,12 @@ else version(GNU)
         enum shuf_mask = a0 | (a1<<2) | (a2<<4) | (a3<<6); 
     }
 
-    double4 interleave128_lo_d(double4 a, double4 b)
+    double4 interleave128_lo(double4 a, double4 b)
     {
         return __builtin_ia32_vperm2f128_pd256(a, b, shuf_mask!(0,2,0,0));
     }
 
-    double4 interleave128_hi_d(double4 a, double4 b)
+    double4 interleave128_hi(double4 a, double4 b)
     {
         return __builtin_ia32_vperm2f128_pd256(a, b, shuf_mask!(0,3,0,1));
     }
@@ -36,6 +64,13 @@ else version(GNU)
     alias __builtin_ia32_unpckhpd256 unpckhpd;
     alias __builtin_ia32_loadupd256 loadupd;
     alias __builtin_ia32_storeupd256 storeupd;
+    
+    double4 reverse_elements(double4 v)
+    {
+        v = __builtin_ia32_shufpd256(v, v, shuf_mask!(0, 0, 1, 1));
+        v = __builtin_ia32_vperm2f128_pd256(v, v, shuf_mask!(0,0,0,1));
+        return v;
+    }
 }
 
 struct Vector 
@@ -71,8 +106,8 @@ struct Vector
         }
         else static if(elements_per_vector == 2)
         {
-            r0 = interleave128_lo_d(a0, a1);
-            r1 = interleave128_hi_d(a0, a1);
+            r0 = interleave128_lo(a0, a1);
+            r1 = interleave128_hi(a0, a1);
         }
         else
             static assert(0);
@@ -111,10 +146,10 @@ struct Vector
         b1 = unpcklpd(a1, a3);
         b3 = unpckhpd(a1, a3);
 
-        a0 = interleave128_lo_d(b0, b1);
-        a1 = interleave128_hi_d(b0, b1);
-        a2 = interleave128_lo_d(b2, b3);
-        a3 = interleave128_hi_d(b2, b3);
+        a0 = interleave128_lo(b0, b1);
+        a1 = interleave128_hi(b0, b1);
+        a2 = interleave128_lo(b2, b3);
+        a3 = interleave128_hi(b2, b3);
 
         b0 = *v(p1 + 0 * m);
         b1 = *v(p1 + 1 * m);
@@ -131,10 +166,10 @@ struct Vector
         a1 = unpcklpd(b1, b3);
         a3 = unpckhpd(b1, b3);
 
-        b0 = interleave128_lo_d(a0, a1);
-        b1 = interleave128_hi_d(a0, a1);
-        b2 = interleave128_lo_d(a2, a3);
-        b3 = interleave128_hi_d(a2, a3);
+        b0 = interleave128_lo(a0, a1);
+        b1 = interleave128_hi(a0, a1);
+        b2 = interleave128_lo(a2, a3);
+        b3 = interleave128_hi(a2, a3);
 
         *v(p0 + 0 * m) = b0;
         *v(p0 + 1 * m) = b1;
@@ -156,32 +191,33 @@ struct Vector
         b1 = unpcklpd(a1, a3);
         b3 = unpckhpd(a1, a3);
 
-        *v(p + 0 * m) = interleave128_lo_d(b0, b1);
-        *v(p + 1 * m) = interleave128_hi_d(b0, b1);
-        *v(p + 2 * m) = interleave128_lo_d(b2, b3);
-        *v(p + 3 * m) = interleave128_hi_d(b2, b3);
-    }
+        *v(p + 0 * m) = interleave128_lo(b0, b1);
+        *v(p + 1 * m) = interleave128_hi(b0, b1);
+        *v(p + 2 * m) = interleave128_lo(b2, b3);
+        *v(p + 3 * m) = interleave128_hi(b2, b3);
+    }    
 
     static vec scalar_to_vector(T a)
     {
         return a;
     }
-    
-    static vec unaligned_load(T* p)
+   
+    static if(
+        is(typeof(loadupd)) &&
+        is(typeof(storeupd)) &&
+        is(typeof(reverse_elements)))
     {
-        return loadupd(p);
-    }
+        static vec unaligned_load(T* p)
+        {
+            return loadupd(p);
+        }
 
-    static void unaligned_store(T* p, vec v)
-    {
-        storeupd(p, v);
-    }
+        static void unaligned_store(T* p, vec v)
+        {
+            storeupd(p, v);
+        }
 
-    static vec reverse(vec v)
-    {
-        v = __builtin_ia32_shufpd256(v, v, 0x5);
-        v = __builtin_ia32_vperm2f128_pd256(v, v, shuf_mask!(0,0,0,1));
-        return v;
+        alias reverse_elements reverse;
     }
 }
 
