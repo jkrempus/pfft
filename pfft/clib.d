@@ -7,59 +7,43 @@ module pfft.clib;
 
 import core.stdc.stdlib, core.bitop;
 
-version(Windows)
-{
-    version(GNU)
-    {
-		extern(C) void* __mingw_aligned_malloc(size_t, size_t);
-		extern(C) void __mingw_aligned_free(void*);
-		
-		auto allocate_aligned(size_t alignment, size_t size)
-		{
-			return __mingw_aligned_malloc(size, alignment);
-		}
-
-		alias __mingw_aligned_free free_aligned;
-	}
-	else
-	{		
-		extern(Windows) void * _aligned_malloc( size_t size, size_t alignment);
-		extern(Windows) void _aligned_free(void*);
-
-		auto allocate_aligned(size_t alignment, size_t size)
-		{
-			return _aligned_malloc(size, alignment);
-		}
-
-		alias _aligned_free free_aligned;
-	}
-}
-else
-{
-    extern(C) void *memalign(size_t alignment, size_t size);
-
+version(Posix)
     import core.sys.posix.stdlib; 
     
+static if(is(typeof(posix_memalign)))
+{
     auto allocate_aligned(size_t alignment, size_t size)
     {
-        version(Android)
-            return memalign(alignment, size);
-        else
-        {
-            void* ptr;
-            posix_memalign(&ptr, alignment, size);
-            return ptr;
-        }
+	    void* ptr;
+	    posix_memalign(&ptr, alignment, size);
+	    return ptr;
     }
 
     alias free free_aligned;
+}
+else
+{
+    auto allocate_aligned(size_t alignment, size_t size)
+    {
+        enum psize = (void*).sizeof;
+        auto p = malloc(size + alignment + psize);
+        auto aligned = cast(void*)(
+            (cast(size_t)p + psize + alignment) & ~(alignment - 1U));
+        *cast(void**)(aligned - psize) = p;
+        return aligned; 
+    }
+
+    void free_aligned(void* p)
+    {
+        free(*cast(void**)(p - (void*).sizeof)); 
+    } 
 }
 
 private void assert_power2(size_t n)
 {
     if(n & (n - 1))
     {
-    	version(Posix)
+        version(Posix)
         {
             import core.stdc.stdio; 
             fprintf(stderr, 
