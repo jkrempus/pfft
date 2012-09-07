@@ -130,9 +130,8 @@ void buildTests(string[] types, string dcpath, Compiler c, string outDir,
 {
     auto srcPath = buildPath("..", "test", "test.d");
 
-    auto isWindowsDMD = isWindows && c == Compiler.DMD;
-    auto clibSrc = isWindowsDMD ? "" : buildPath("..", "pfft", "clib.d");
-    auto clibVersion = isWindowsDMD ? "NoBenchClib" : "BenchClib";
+    auto clibSrc = buildPath("..", "pfft", "clib.d");
+    auto clibVersion = "BenchClib";
 
     foreach(type; types)
     {

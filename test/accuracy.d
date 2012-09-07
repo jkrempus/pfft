@@ -4,23 +4,23 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import std.stdio, std.process, std.string, std.range, std.algorithm, std.conv,
-    std.file, std.format, std.exception, std.parallelism, std.path : absolutePath;
+import std.stdio, std.process, std.string, std.range, std.algorithm, 
+    std.conv, std.file, std.format, std.exception, std.parallelism, 
+    std.getopt, std.path : absolutePath;
 
 alias format fm;
 
 @property p(string[] a){ return taskPool.parallel(a); }
 
-auto verbose = true;
+auto verbose = 1;
 
-auto shellf(A...)(A a)
+auto vshell(string cmd, int vcmd, int vout)
 {
-    auto cmd = fm(a);
-    if(verbose) 
+    if(verbose >= vcmd) 
         writeln(cmd); 
    
     auto r = shell(cmd);
-    if(verbose)
+    if(verbose >= vout)
         write(r);
 
     return r; 
@@ -44,7 +44,7 @@ void test()
         scope(failure)
             writefln("Error when executing %s.", cmd);
 
-        auto err = to!double(strip(shellf(cmd)));
+        auto err = to!double(strip(vshell(cmd, 3, 4)));
         auto tolerated = toleratedError[type];
 
         enforce(err < tolerated, fm(
@@ -60,9 +60,8 @@ void build(string flags)
 
     auto dir = getcwd();
     chdir("..");
-    auto out1 = shellf("rdmd build.d %s", flags);
-    auto out2 = shellf("rdmd build.d --tests %s", flags);
-    enforce(out1 == "" && out2 == "");
+    vshell(fm("rdmd build.d %s", flags), 2, 2);
+    vshell(fm("rdmd build.d --tests %s", flags), 2, 2);
     chdir(dir); 
 }
 
@@ -88,9 +87,9 @@ void all()
     else version(Windows)
     {
         auto flags = 
-            f("--dc GDMD", ["sse", "scalar"]) ~
+            f("--dc GDMD --no-pgo", ["sse", "scalar"]) ~
             f("--dc DMD",  ["scalar"]) ~
-            f(`--dc GDMD --dflags "-m32"`, ["sse", "scalar"]);
+            f(`--dc GDMD --no-pgo --dflags "-m32"`, ["sse", "scalar"]);
     }
     else
         static assert("Not supported on this platform.");
@@ -103,12 +102,15 @@ void all()
                 "Error when running tests for executables built with %s", e);
                 
         test();
-        writefln("Successfully ran tests for build flags %s.", e);
+        if(verbose)
+		writefln("Successfully ran tests for build flags %s.", e);
     }
 }
 
 void main(string[] args)
 {
+    getopt(args, "v", &verbose);
+
     if(args[1 .. $] == ["all"])
         all();
     else
