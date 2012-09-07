@@ -10,9 +10,15 @@ import std.stdio, std.process, std.string, std.range, std.algorithm,
 
 alias format fm;
 
-@property p(string[] a){ return taskPool.parallel(a); }
+@property p(string[] a)
+{
+    version(OSX)   // Avoid a bug on OSX.
+        return a;
+    else
+        return taskPool.parallel(a);
+}
 
-auto verbose = 1;
+shared verbose = 1;
 
 auto vshell(string cmd, int vcmd, int vout)
 {
@@ -44,7 +50,10 @@ void test()
         scope(failure)
             writefln("Error when executing %s.", cmd);
 
-        auto err = to!double(strip(vshell(cmd, 3, 4)));
+        auto output = vshell(cmd, 3, 4);
+        scope(failure)
+            writefln("Command output was %s", output);
+        auto err = to!double(strip(output));
         auto tolerated = toleratedError[type];
 
         enforce(err < tolerated, fm(
@@ -82,6 +91,7 @@ void all()
     else version(OSX)
     {
         auto flags = 
+            f(`--dc DMD --dflags="-m32"`,  ["sse", "scalar"]) ~
             f("--dc DMD",  ["sse", "scalar"]);
     }
     else version(Windows)
