@@ -312,7 +312,7 @@ template hasInterleaving(V)
         is(typeof(V.deinterleave));
 }
 
-struct InterleaveImpl(V, int chunk_size, bool isInverse) 
+struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd) 
 {
     static size_t itable_size_bytes()(int log2n)
     {
@@ -369,7 +369,7 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
 
             while(true)
             {
-                static if(isInverse)
+                static if(is_inverse)
                     j = j & 1 ? j / 2 + n_chunks / 2 : j / 2;
                 else
                     j = j < n_chunks / 2 ? 2 * j : 2 * (j - n_chunks / 2) + 1;
@@ -400,6 +400,27 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
         }
     }
 
+    static void interleave_static_size(int n)(V.vec* p)
+    {
+        RepeatType!(V.vec, 2 * n) tmp;
+
+        enum even = swap_even_odd ? n : 0;
+        enum odd = swap_even_odd ? 0 : n;
+
+        static if(is_inverse)
+            foreach(j; ints_up_to!n)
+                V.deinterleave(
+                    p[2 * j], p[2 * j + 1], tmp[even + j], tmp[odd + j]);
+        else
+            foreach(j; ints_up_to!n)
+                V.interleave(
+                    p[even + j], p[odd + j], tmp[2 * j], tmp[2 * j + 1]);
+
+        foreach(j; ints_up_to!(2 * n))
+            p[j] = tmp[j];
+
+    }
+
     static void interleave_tiny()(V.vec* p, size_t len)
     {
         switch(len)
@@ -407,23 +428,7 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
             foreach(n; powers_up_to!(2 * chunk_size))
             {
                 case 2 * n:
-
-                    RepeatType!(V.vec, 2 * n) tmp;
-
-                    static if(isInverse)
-                        foreach(j; ints_up_to!n)
-                            V.deinterleave(
-                                p[2 * j], p[2 * j + 1], tmp[j], 
-                                tmp[n + j]);
-                    else
-                        foreach(j; ints_up_to!n)
-                            V.interleave(
-                                p[j], p[n + j], 
-                                tmp[2 * j], tmp[2 * j + 1]);
-
-                    foreach(j; ints_up_to!(2 * n))
-                        p[j] = tmp[j];
-
+                    interleave_static_size!n(p); 
                     break;
             }
 
@@ -434,21 +439,7 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
     static void interleave_chunk_elements()(V.vec* a, size_t n_chunks)
     {
         for(auto p = a; p < a + n_chunks * chunk_size; p += 2 * chunk_size)
-        {
-            RepeatType!(V.vec, 2 * chunk_size) tmp;
-
-            static if(isInverse)
-                foreach(j; ints_up_to!chunk_size)
-                    V.deinterleave(
-                        p[2 * j], p[2 * j + 1], tmp[j], tmp[chunk_size + j]);
-            else
-                foreach(j; ints_up_to!chunk_size)
-                    V.interleave(
-                        p[j], p[chunk_size + j], tmp[2 * j], tmp[2 * j + 1]);
-
-            foreach(j; ints_up_to!(2 * chunk_size))
-                p[j] = tmp[j];
-        } 
+            interleave_static_size!chunk_size(p);
     }
 
     static void interleave()(V.T* p, int log2n, bool* table)
@@ -459,7 +450,8 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
             return;
         else if(n < 2 * V.vec_size)
             return 
-                InterleaveImpl!(Scalar!(V.T), V.vec_size / 2, isInverse)
+                InterleaveImpl!(
+                    Scalar!(V.T), V.vec_size / 2, is_inverse, swap_even_odd)
                     .interleave_tiny(p, n);
 
         assert(n >= 2 * V.vec_size);
@@ -472,7 +464,7 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
         else
         {
             auto n_chunks = vn / chunk_size;
-            static if(isInverse)
+            static if(is_inverse)
             {
                 interleave_chunk_elements(vp, n_chunks);
                 interleave_chunks(vp, n_chunks, table);
@@ -486,11 +478,14 @@ struct InterleaveImpl(V, int chunk_size, bool isInverse)
     }
 }
 
-template Interleave(V, int chunk_size, bool isInverse)
+template Interleave(
+    V, int chunk_size, bool is_inverse, bool swap_even_odd = false)
 {
     static if(hasInterleaving!V)
-        alias InterleaveImpl!(V, chunk_size, isInverse) Interleave;
+        alias InterleaveImpl!(V, chunk_size, is_inverse, swap_even_odd) 
+            Interleave;
     else
         alias 
-            InterleaveImpl!(Scalar!(V.T), chunk_size, isInverse) Interleave;
+            InterleaveImpl!(Scalar!(V.T), chunk_size, is_inverse, swap_even_odd) 
+            Interleave;
 }

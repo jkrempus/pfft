@@ -910,6 +910,7 @@ struct FFT(V, Options)
     }
   
     alias T* RTable;
+    alias T* STable;
  
     static auto rtable_size_bytes()(int log2n)
     {
@@ -936,14 +937,6 @@ struct FFT(V, Options)
         auto phi = _asin(1);
         sines_cosines!true(r.ptr, r.length, -phi, phi, false);
 
-        /*foreach(size_t i, ref e; r)
-        {
-            T phi = - (_asin(1.0) * (i + 1)) / r.length;
- 
-            e[0] = _cos(phi);
-            e[1] = _sin(phi);
-        }*/
-        
         complex_array_to_vector(r.ptr, r.length);
 
         return cast(RTable) r.ptr;
@@ -1076,6 +1069,57 @@ struct FFT(V, Options)
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
+    static STable fst_table()(int log2n, void *p)
+    {
+        if(log2n < 2)
+            return cast(RTable) p;
+        
+        auto n = st!1 << log2n;
+        auto r = (cast(T*) p)[0 .. n / 2];
+
+        auto dphi = (2 * _asin(1)) / n;
+        foreach(i, _; r)
+            // we need to start with phase = dphi
+            r[i] = _sin((i + 1) * dphi);
+
+        return cast(STable) r.ptr;
+    }
+
+    static void fst_first_pass(T* p, int log2n, STable* table) 
+    if(supports_real)
+    {
+        auto n = st!1 << log2n;   
+
+        if(n < 2 * vec_size) 
+            return SFFT.fst_first_pass(p, log2n, table);
+        
+        static vec* v(T* a){ return cast(vec*) a; }
+       
+        auto half = V.scalar_to_vector(0.5);
+
+        auto mid = p[n / 2];
+ 
+        for(
+            auto p0 = p + 1, p1 = p + n - vec_size;
+            p0 < p1;
+            p0 += vec_size, p1 -= vec_size, table += vec_size)
+        {
+            auto a0 = V.unaligned_load(p0);
+            auto a1 = V.reverse(*v(p1));
+            auto s = V.reverse(*v(table));
+
+            auto b0 = s * (a0 + a1);
+            auto b1 = half * (a0 - a1);
+
+            V.unaligned_store(p0, b0 + b1);
+            *v = V.reverse(p1, b0 - b1); 
+        }
+
+        // The middle element is undefined here, so we need
+        // to set it separately.
+        p[n / 2] = mid + mid;
+    }
+
     static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.interleave)))
@@ -1163,6 +1207,9 @@ mixin template Instantiate()
 
     struct RTableValue{};
     alias RTableValue* RTable;
+    
+    struct STableValue{};
+    alias STableValue* STable;
     
     struct ITableValue{};
     alias ITableValue* ITable;
