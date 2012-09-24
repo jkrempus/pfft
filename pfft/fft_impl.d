@@ -1069,11 +1069,16 @@ struct FFT(V, Options)
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
+    static size_t stable_size_bytes()(int log2n)
+    {
+        return T.sizeof << (log2n - 1);
+    }
+
     static STable fst_table()(int log2n, void *p)
     {
         if(log2n < 2)
             return cast(RTable) p;
-        
+
         auto n = st!1 << log2n;
         auto r = (cast(T*) p)[0 .. n / 2];
 
@@ -1082,19 +1087,19 @@ struct FFT(V, Options)
             // we need to start with phase = dphi
             r[i] = _sin((i + 1) * dphi);
 
-        return cast(STable) r.ptr;
+        return r.ptr;
     }
 
-    static void fst_first_pass(T* p, int log2n, STable* table) 
+    static void fst_first_pass()(T* p, int log2n, STable stable) 
     if(supports_real)
     {
         auto n = st!1 << log2n;   
 
         if(n < 2 * vec_size) 
-            return SFFT.fst_first_pass(p, log2n, table);
-        
+            return SFFT.fst_first_pass(p, log2n, stable);
+
         static vec* v(T* a){ return cast(vec*) a; }
-       
+
         auto half = V.scalar_to_vector(0.5);
 
         auto mid = p[n / 2];
@@ -1102,23 +1107,32 @@ struct FFT(V, Options)
         for(
             auto p0 = p + 1, p1 = p + n - vec_size;
             p0 < p1;
-            p0 += vec_size, p1 -= vec_size, table += vec_size)
+            p0 += vec_size, p1 -= vec_size, stable += vec_size)
         {
             auto a0 = V.unaligned_load(p0);
             auto a1 = V.reverse(*v(p1));
-            auto s = V.reverse(*v(table));
+            auto s = V.reverse(*v(stable));
 
             auto b0 = s * (a0 + a1);
             auto b1 = half * (a0 - a1);
 
             V.unaligned_store(p0, b0 + b1);
-            *v = V.reverse(p1, b0 - b1); 
+            *v(p1) = V.reverse(b0 - b1); 
         }
 
         // The middle element is undefined here, so we need
         // to set it separately.
         p[n / 2] = mid + mid;
+        
+        //set the first element to 0
+        p[0] = 0;
     }
+
+    static void fst_first_pass()(T* p, int log2n, STable* table) 
+    if(!supports_real)
+    {
+        return SFFT.fst_first_pass(p, log2n, table);
+    } 
 
     static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
