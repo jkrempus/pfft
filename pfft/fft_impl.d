@@ -1111,21 +1111,81 @@ struct FFT(V, Options)
         {
             auto a0 = V.unaligned_load(p0);
             auto a1 = V.reverse(*v(p1));
-            auto s = V.reverse(*v(stable));
+            auto s = *v(stable);
 
             auto b0 = s * (a0 + a1);
-            auto b1 = half * (a0 - a1);
+            auto b1 = half * (a1 - a0);
 
             V.unaligned_store(p0, b0 + b1);
             *v(p1) = V.reverse(b0 - b1); 
         }
 
-        // The middle element is undefined here, so we need
-        // to set it separately.
+        // The middle element is undefined here, so we need to set it.
         p[n / 2] = mid + mid;
-        
-        //set the first element to 0
+
         p[0] = 0;
+    }
+   
+    static void accumulate()(T* a, size_t n) 
+    {
+        enum nchunks = 4;
+
+        if(n < nchunks * vec_size)
+        { 
+            auto s = a[0];
+            foreach(i; 1 .. n)
+            {
+                s += a[i];
+                a[i] = s;
+            }
+            return;
+        } 
+
+        auto m = n / nchunks;
+
+        RepeatType!(V.T*, nchunks) p;
+        p[0] = a;
+        foreach(i; ints_up_to!(nchunks - 1))
+            p[1 + i] = p[i] + m;
+
+        RepeatType!(V.T, nchunks) sum;
+        foreach(i; ints_up_to!nchunks)
+            sum[i] = 0;
+
+        foreach(i; 0 .. m)
+        {
+            foreach(j; ints_up_to!nchunks)
+            {
+                sum[j] += p[j][i];
+                p[j][i] = sum[j]; 
+            }
+        }
+
+        foreach(i; 1 .. nchunks)
+        {
+            auto vsum = V.scalar_to_vector(a[i * m - 1]);
+            auto vp = cast(vec*)(a + i * m);
+            foreach(j; 0 .. (m / vec_size))
+                vp[j] += vsum;
+        }
+    }
+
+    static void fst()(
+        T* p, int log2n, Table table, RTable rtable, 
+        STable stable, ITable itable)
+    {
+        if(log2n < 2)
+            return;
+        
+        auto n2 = st!1 << (log2n - 1);
+
+        fst_first_pass(p, log2n, stable);
+        deinterleave(p, log2n, itable);
+        rfft(p, p + n2, log2n, table, rtable);
+        p[0] *= 0.5;
+        accumulate(p, n2);
+        p[n2] = 0;
+        interleave_swap(p, log2n, itable);  
     }
 
     static void fst_first_pass()(T* p, int log2n, STable* table) 
@@ -1185,6 +1245,9 @@ struct FFT(V, Options)
     alias Interleave!(V, 8, false).interleave interleave;
     alias Interleave!(V, 8, true).interleave deinterleave;
 
+    alias Interleave!(V, 8, false, true).interleave interleave_swap;
+    alias Interleave!(V, 8, true, true).interleave deinterleave_swap;
+    
     static void scale(T* data, size_t n, T factor)
     {
         auto k  = V.scalar_to_vector(factor);
