@@ -110,12 +110,6 @@ else
 
 // reinventing some Phobos stuff...
 
-struct Tuple(A...)
-{
-    A a;
-    alias a this;
-}
-
 template TypeTuple(A...)
 {
     alias A TypeTuple;

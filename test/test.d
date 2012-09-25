@@ -5,9 +5,11 @@
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
     std.random, std.numeric, std.math, std.algorithm, std.range,
-    std.exception, std.typetuple, std.string : toUpper;
+    std.exception, std.typetuple, std.traits, std.string : toUpper;
 
 template st(alias a){ enum st = cast(size_t) a; }
+
+enum Transfer { fft, rfft /*, dst*/ }
 
 auto gc_aligned_array(A)(size_t n)
 {
@@ -140,7 +142,7 @@ template ImportDirect()
         import pfft.impl_float;
 }
 
-struct DirectApi(bool isReal, bool isInverse) if(!isReal)
+struct DirectApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
 {
     mixin ImportDirect!();
     import core.memory; 
@@ -171,7 +173,8 @@ struct DirectApi(bool isReal, bool isInverse) if(!isReal)
     mixin splitElementAccess!();
 }
 
-struct DirectApi(bool isReal, bool isInverse) if(isReal)
+struct DirectApi(Transfer transfer, bool isInverse)
+    if(transfer == Transfer.rfft)
 {
     mixin ImportDirect!();
     import core.memory; 
@@ -211,7 +214,7 @@ struct DirectApi(bool isReal, bool isInverse) if(isReal)
     mixin realSplitElementAccess!();
 }
 
-struct CApi(bool isReal, bool isInverse)  if(!isReal)
+struct CApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
 {
     enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
 
@@ -250,7 +253,7 @@ struct CApi(bool isReal, bool isInverse)  if(!isReal)
     mixin splitElementAccess!();
 }
 
-struct CApi(bool isReal, bool isInverse) if(isReal)
+struct CApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
 {
     enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
     
@@ -286,7 +289,7 @@ struct CApi(bool isReal, bool isInverse) if(isReal)
 }
 
 
-struct PfftApi(bool isReal, bool isInverse) if(!isReal)
+struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
 {
     import pfft.pfft;
    
@@ -318,7 +321,7 @@ struct PfftApi(bool isReal, bool isInverse) if(!isReal)
     mixin splitElementAccess!();
 }
 
-struct PfftApi(bool isReal, bool isInverse) if(isReal)
+struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
 {
     import pfft.pfft;
    
@@ -443,7 +446,7 @@ struct SimpleFft(T, bool isInverse)
 
 auto toComplex(T a){ return complex(a, cast(T) 0); }
 
-struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
+struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
 {
     static if(usePhobos)
         import std.numeric;
@@ -451,11 +454,13 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
         import pfft.stdapi;
        
     enum{ normalizedInverse };
- 
-    static if(isReal)
+
+    static if(transfer == Transfer.rfft)
         T[] a;
-    else
+    else static if(transfer == Transfer.fft)
         Complex!(T)[] a;
+    else
+        static assert(0);
         
     Complex!(T)[] r;
     
@@ -466,10 +471,12 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
         a = gc_aligned_array!(typeof(a[0]))(st!1 << log2n);
         r = gc_aligned_array!(Complex!T)(st!1 << log2n);
 
-        static if(isReal)
+        static if(transfer == Transfer.rfft)
             a[] = cast(T) 0;
-        else
+        else static if(transfer == Transfer.fft)
             (cast(T[])a)[] = cast(T) 0; // work around a dmd bug
+        else
+            static assert(0);
         
         fft = new Fft(st!1 << log2n);
     }
@@ -478,18 +485,18 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
     { 
         static if(isInverse)
         {
-            static if(usePhobos && isReal)
+            static if(usePhobos && transfer == Transfer.rfft)
             {
                 fft.inverseFft(map!toComplex(a), r);
             }
-            else 
-                fft.inverseFft(a, r); 
+            else
+                fft.inverseFft(a, r);
         }
         else 
             fft.fft(a, r); 
     }
     
-    static if(isReal)
+    static if(transfer == Transfer.rfft)
     {
         alias T delegate(size_t) Dg;
 
@@ -504,8 +511,10 @@ struct StdApi(bool usePhobos = false, bool isReal, bool isInverse)
         auto outRe(size_t i){ return r[i].re; }
         auto outIm(size_t i){ return r[i].im; }
     }
-    else
+    else static if(transfer == Transfer.fft)
         mixin ElementAccess!();
+    else
+        static assert(0);
 }
 
 version(BenchFftw)
@@ -566,7 +575,8 @@ version(BenchFftw)
     enum FFTW_MEASURE = 0U;
     enum FFTW_PATIENT = 1U << 5;
 
-    struct FFTW(bool isReal, bool isInverse, int flags) if(!isReal)
+    struct FFTW(Transfer transfer, bool isInverse, int flags) 
+        if(transfer == Transfer.fft)
     {        
         Complex!(T)[] a;
         Complex!(T)[] r;
@@ -588,7 +598,8 @@ version(BenchFftw)
         mixin ElementAccess!();
     }
 
-    struct FFTW(bool isReal, bool isInverse, int flags) if(isReal)
+    struct FFTW(Transfer transfer, bool isInverse, int flags)
+        if(transfer == Transfer.rfft)
     {        
         T[] a;
         Complex!(T)[] r;
@@ -619,7 +630,8 @@ version(BenchFftw)
     }
 }
 
-void speed(F, bool isReal, bool isInverse)(int log2n, long flops)
+
+void speed(F, Transfer transfer, bool isInverse)(int log2n, long flops)
 {    
     auto f = F(log2n);
    
@@ -627,7 +639,8 @@ void speed(F, bool isReal, bool isInverse)(int log2n, long flops)
  
     f.fill(zero, zero);
 
-    ulong flopsPerIter = 5UL * log2n * (1UL << log2n) / (isReal ? 2 : 1); 
+    ulong flopsPerIter = 5UL * log2n * (1UL << log2n) / 
+        (transfer == Transfer.fft ? 1 : 2); 
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
         
@@ -641,7 +654,7 @@ void speed(F, bool isReal, bool isInverse)(int log2n, long flops)
     writefln("%f", to!double(niter * flopsPerIter) / sw.peek().nsecs());
 }
 
-void initialization(F, bool isReal, bool isInverse)(int log2n, long flops)
+void initialization(F, Transfer transfer, bool isInverse)(int log2n, long flops)
 {    
     auto niter = 100_000_000 / (1 << log2n);
     niter = niter ? niter : 1;
@@ -659,7 +672,7 @@ void initialization(F, bool isReal, bool isInverse)(int log2n, long flops)
     writefln("%.3e", sw.peek().nsecs() * 1e-9 / niter);
 }
 
-void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
+void precision(F, Transfer transfer, bool isInverse)(int log2n, long flops)
 {
     alias SimpleFft!(real, isInverse) S;
     alias typeof(S.init.inRe(0)) ST;
@@ -705,7 +718,8 @@ void precision(F, bool isReal, bool isInverse)(int log2n, long flops)
     writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
-void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl, long mflops)
+void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
+    int log2n, string impl, long mflops)
 {
     static if(testSpeed)
         alias speed f;
@@ -713,31 +727,38 @@ void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl
         alias precision f;
 
     long flops = mflops * 1000_000;
-   
+  
     if(impl == "simple")
-        return f!(SimpleFft!(T, isInverse), isReal, isInverse)(log2n, flops);
+        return f!(SimpleFft!(T, isInverse), transfer, isInverse)(log2n, flops);
     if(impl == "direct")
-        return f!(DirectApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+        return f!(DirectApi!(transfer, isInverse), transfer, isInverse)(
+            log2n, flops);
     if(impl == "std")
-        return f!(StdApi!(false, isReal, isInverse), isReal, isInverse)(log2n, flops);
+        return f!(StdApi!(false, transfer, isInverse), transfer, isInverse)(
+            log2n, flops);
     if(impl == "phobos")
-        return f!(StdApi!(true, isReal, isInverse), isReal, isInverse)(log2n, flops);
+        return f!(StdApi!(true, transfer, isInverse), transfer, isInverse)(
+            log2n, flops);
     if(impl == "pfft")
-        return f!(PfftApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+        return f!(PfftApi!(transfer, isInverse), transfer, isInverse)(
+            log2n, flops);
     
     version(BenchFftw)
     {
         if(impl == "fftw")
-            return f!(FFTW!(isReal, isInverse, FFTW_PATIENT), isReal, isInverse)(
-                    log2n, flops);
+            return f!(
+                FFTW!(transfer, isInverse, FFTW_PATIENT), transfer, isInverse)(
+                log2n, flops);
         if(impl == "fftw-measure")
-            return f!(FFTW!(isReal, isInverse, FFTW_MEASURE), isReal, isInverse)(
-                    log2n, flops);
+            return f!(
+                FFTW!(transfer, isInverse, FFTW_MEASURE), transfer, isInverse)(
+                log2n, flops);
     }
 
     version(BenchClib)
         if(impl == "c")
-            return f!(CApi!(isReal, isInverse), isReal, isInverse)(log2n, flops);
+            return f!(
+                CApi!(transfer, isInverse), transfer, isInverse)(log2n, flops);
     
     throw new Exception(
             "Implementation \"" ~ impl ~ "\" is not supported" );
@@ -745,9 +766,15 @@ void runTest(bool testSpeed, bool isReal, bool isInverse)(int log2n, string impl
 
 template Group(A...){ alias A Members; }
 
-auto callInstance(alias f, int n, alias FParams = Group!(), Params...)(Params params)
+auto callInstance(alias f, int n, alias FParams = Group!(), Params...)(
+    Params params)
 {
-    foreach(e; TypeTuple!(true, false))
+    static if(is(Params[0] == enum))
+        alias EnumMembers!(Params[0]) possibleValues;
+    else
+        alias TypeTuple!(true, false) possibleValues; 
+
+    foreach(e; possibleValues)
         if(e == params[0])
         {
             static if(n == 1)
@@ -841,10 +868,13 @@ void main(string[] args)
             return;
         }
 
-        enforce(args.length == 3, "There must be exactly two non option arguments.");
+        enforce(args.length == 3, 
+            "There must be exactly two non option arguments.");
 
-        callInstance!(runTest, 3)(s, r, i, to!int(args[2]), args[1], mflops);
-        //runTest!(true, false, false)(args, mflops);
+        auto transfer = r ? Transfer.rfft : Transfer.fft;
+
+        callInstance!(runTest, 3)(
+            s, transfer, i, to!int(args[2]), args[1], mflops);
     }
     catch(Exception e)
     {

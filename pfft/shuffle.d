@@ -9,6 +9,12 @@ import core.bitop;
 
 template st(alias a){ enum st = cast(size_t) a; }
 
+struct Tuple(A...)
+{
+    A a;
+    alias a this;
+}
+
 void _swap(T)(ref T a, ref T b)
 {
     auto aa = a;
@@ -45,29 +51,37 @@ template RepeatType(T, int n, R...)
         alias RepeatType!(T, n - 1, T, R) RepeatType;
 }
 
-void iter_bit_reversed_pairs(alias dg, A...)(int log2n, A args)
+struct BitReversedPairs
+{
+    int mask;
+    uint i1;
+    uint i2;
+
+    @property front(){ return Tuple!(uint, uint)(i1, i2); }
+
+    void popFront()
+    {
+        i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
+        --i1;
+    }
+
+    @property empty(){ return i1 == 0u - 1u; } 
+}
+    
+auto bit_reversed_pairs(int log2n)
 {
     int mask = (0xffffffff<<(log2n));
     uint i2 = ~mask; 
     uint i1 = i2;
 
-    while(i1 != (0U - 1U))
-    {
-        dg(i1, i2, args);
-        i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
-        --i1;
-    }
+    return BitReversedPairs(mask, i1, i2);
 }
 
 void bit_reverse_simple(T)(T* p, int log2n)
 {
-    static void loopBody(int i0, int i1, T* p)
-    {
+    foreach(i0, i1; bit_reversed_pairs(log2n))
         if(i1 > i0)
             _swap(p[i0],p[i1]);
-    };
-
-    iter_bit_reversed_pairs!loopBody(log2n, p);
 }
 
 template reverse_bits(int i, int bits_left, int r = 0)
@@ -143,24 +157,21 @@ struct BitReverse(alias V, Options)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
 
-        static void loopBody0(int i0, int i1, uint** p)
-        {
+        foreach(i0, i1; bit_reversed_pairs(log2n - 2 * log2l))
             if(i1 == i0)
-                (**p = i0 << log2l), (*p)++;
-        };
-        iter_bit_reversed_pairs!loopBody0(log2n - 2 * log2l, &table);
+            {
+                *table = i0 << log2l;
+                table++;
+            }
 
-        static void loopBody1(int i0, int i1, uint** p)
-        {
+        foreach(i0, i1; bit_reversed_pairs(log2n - 2 * log2l))
             if(i1 < i0)
             {
-                **p = i0 << log2l;
-                (*p)++;
-                **p = i1 << log2l;
-                (*p)++;
+                *table = i0 << log2l;
+                table++;
+                *table = i1 << log2l;
+                table++;
             }
-        };
-        iter_bit_reversed_pairs!loopBody1(log2n - 2 * log2l, &table);
     }
        
     static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
@@ -245,7 +256,8 @@ struct BitReverse(alias V, Options)
         }
     } 
 
-    static void bit_reverse_large()(T* p, int log2n, uint * table, void* tmp_buffer)
+    static void bit_reverse_large()(
+        T* p, int log2n, uint * table, void* tmp_buffer)
     {
         enum log2l = Options.log2_bitreverse_large_chunk_size;
         enum l = 1<<log2l;
@@ -256,19 +268,17 @@ struct BitReverse(alias V, Options)
         size_t m = 1<<log2m, n = 1<<log2n;
         T * pend = p + n;
        
-        iter_bit_reversed_pairs!(function (size_t i0, size_t i1, 
-            T* p, T* pend, size_t m, uint* table, T* buffer)
-        {
-            if(i1 >= i0)
+        foreach(i; bit_reversed_pairs(log2m - log2l))
+            if(i[1] >= i[0])
             {
-                strided_copy!l(buffer, p + i0 * l, l, m, l);
+                strided_copy!l(buffer, p + i[0] * l, l, m, l);
           
                 bit_reverse_small(buffer,log2l+log2l, table);
 
-                if(i1 != i0)
+                if(i[1] != i[0])
                 {
                     for(
-                        T* pp = p + i1 * l, pb = buffer;
+                        T* pp = p + i[1] * l, pb = buffer;
                         pp < pend; 
                         pb += l, pp += m)
                     {
@@ -278,9 +288,8 @@ struct BitReverse(alias V, Options)
                     bit_reverse_small(buffer,log2l+log2l, table);
                 }
 
-                strided_copy!l(p + i0 * l, buffer, m, l, l);
+                strided_copy!l(p + i[0] * l, buffer, m, l, l);
             }
-        })(log2m-log2l, p, pend, m, table, buffer);
     }
 }
 
