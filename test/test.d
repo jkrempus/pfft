@@ -1,4 +1,4 @@
-//          Copyright Jernej Krempuš 2012
+
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
@@ -9,12 +9,21 @@ import std.stdio, std.conv, std.datetime, std.complex, std.getopt,
 
 template st(alias a){ enum st = cast(size_t) a; }
 
-enum Transfer { fft, rfft /*, dst*/ }
+enum Transfer { fft, rfft , fst }
 
 auto gc_aligned_array(A)(size_t n)
 {
     import core.memory;
     return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
+}
+
+bool isIn(A, B...)(A a, B b)
+{
+    foreach(e; b)
+        if(e == a)
+            return true;
+    
+    return false;
 }
 
 mixin template ElementAccess()
@@ -125,6 +134,41 @@ mixin template realSplitElementAccess()
     mixin realElementAccessImpl!();
 }
 
+mixin template GenericFst(F)
+{
+    F f;
+    size_t n;
+
+    this(int log2n)
+    {
+        f = F(log2n + 1);
+        n = st!1 << log2n; 
+    }
+
+    void compute()
+    {
+        f.compute(); 
+    } 
+
+    alias T delegate(size_t) Dg;
+    
+    void fill(Dg fRe, Dg fIm) 
+    {
+        f.fill(
+            (size_t i) => 
+                i == 0 ? 0 :
+                i == n ? 0 :
+                i > n ? -fRe(2 * n - i) : fRe(i),
+            (size_t i) => to!T(0));
+    }
+
+    T inRe(size_t i){ return f.inRe(i); }
+    T outRe(size_t i){ return -0.5 * f.outIm(i); }
+    
+    T inIm(size_t  i){ return 0; }
+    alias inIm outIm; 
+}
+
 version(Real)
     alias real T;
 else version(Double)
@@ -142,7 +186,8 @@ template ImportDirect()
         import pfft.impl_float;
 }
 
-struct DirectApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
+struct DirectApi(Transfer transfer, bool isInverse) 
+if(transfer == Transfer.fft)
 {
     mixin ImportDirect!();
     import core.memory; 
@@ -169,12 +214,12 @@ struct DirectApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
         else 
             fft(_re.ptr, _im.ptr, log2n, table); 
     }
-    
+
     mixin splitElementAccess!();
 }
 
 struct DirectApi(Transfer transfer, bool isInverse)
-    if(transfer == Transfer.rfft)
+if(transfer == Transfer.rfft)
 {
     mixin ImportDirect!();
     import core.memory; 
@@ -212,6 +257,51 @@ struct DirectApi(Transfer transfer, bool isInverse)
     }
     
     mixin realSplitElementAccess!();
+}
+
+struct DirectApi(Transfer transfer, bool isInverse)
+if(transfer == Transfer.fst)
+{
+    mixin ImportDirect!();
+    import core.memory; 
+   
+    T[] data;
+    Table table;
+    RTable rtable;
+    STable stable;
+    ITable itable;
+    int log2n;
+    
+    this(int log2n)
+    {
+        auto n = st!1 << log2n;
+        data = gc_aligned_array!T(n);
+        data[] = 0;
+    
+        this.log2n = log2n;
+        table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1)));
+        rtable = rfft_table(log2n, GC.malloc(rtable_size_bytes(log2n))); 
+        stable = fst_table(log2n, GC.malloc(stable_size_bytes(log2n))); 
+        itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
+    }
+    
+    void compute()
+    {
+        fst(data.ptr, log2n, table, rtable, stable, itable); 
+    }
+    
+    alias T delegate(size_t) Dg;
+    
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i, _; data)
+            data[i] = fRe(i);
+    }
+
+    T inRe(size_t i){ return data[i]; }
+    alias inRe outRe;
+    T inIm(size_t i){ return 0; }
+    alias inIm outIm;
 }
 
 struct CApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
@@ -350,7 +440,8 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
     mixin realSplitElementAccess!();
 }
 
-struct SimpleFft(T, bool isInverse)
+struct SimpleFft(T, Transfer transfer, bool isInverse)
+if(transfer.isIn(Transfer.rfft, Transfer.fft))
 {    
     Complex!(T)[] a;
     Complex!(T)[] w;
@@ -442,6 +533,12 @@ struct SimpleFft(T, bool isInverse)
     auto inIm(size_t i){ return a[i].im; }
     auto outRe(size_t i){ return a[i].re; }
     auto outIm(size_t i){ return a[i].im; }
+}
+
+struct SimpleFft(T, Transfer transfer, bool isInverse)
+if(transfer == Transfer.fst)
+{
+    mixin GenericFst!(SimpleFft!(T, Transfer.fft, false));
 }
 
 auto toComplex(T a){ return complex(a, cast(T) 0); }
@@ -674,7 +771,7 @@ void initialization(F, Transfer transfer, bool isInverse)(int log2n, long flops)
 
 void precision(F, Transfer transfer, bool isInverse)(int log2n, long flops)
 {
-    alias SimpleFft!(real, isInverse) S;
+    alias SimpleFft!(real, transfer, isInverse) S;
     alias typeof(S.init.inRe(0)) ST;
     alias typeof(F.init.inRe(0)) FT;
 
@@ -728,20 +825,31 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
 
     long flops = mflops * 1000_000;
   
-    if(impl == "simple")
-        return f!(SimpleFft!(T, isInverse), transfer, isInverse)(log2n, flops);
     if(impl == "direct")
         return f!(DirectApi!(transfer, isInverse), transfer, isInverse)(
             log2n, flops);
-    if(impl == "std")
-        return f!(StdApi!(false, transfer, isInverse), transfer, isInverse)(
-            log2n, flops);
-    if(impl == "phobos")
-        return f!(StdApi!(true, transfer, isInverse), transfer, isInverse)(
-            log2n, flops);
-    if(impl == "pfft")
-        return f!(PfftApi!(transfer, isInverse), transfer, isInverse)(
-            log2n, flops);
+    
+    version(JustDirect) {} else
+    { 
+        if(impl == "simple")
+            return f!(SimpleFft!(T, transfer, isInverse), transfer, isInverse)(
+                    log2n, flops);
+        if(impl == "std")
+            return f!(StdApi!(false, transfer, isInverse), transfer, isInverse)(
+                    log2n, flops);
+        if(impl == "phobos")
+            return f!(StdApi!(true, transfer, isInverse), transfer, isInverse)(
+                    log2n, flops);
+        if(impl == "pfft")
+            return f!(PfftApi!(transfer, isInverse), transfer, isInverse)(
+                    log2n, flops);
+        
+        version(BenchClib)
+            if(impl == "c")
+                return f!(CApi!(transfer, isInverse), transfer, isInverse)(
+                    log2n, flops);
+    
+    }
     
     version(BenchFftw)
     {
@@ -754,11 +862,6 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
                 FFTW!(transfer, isInverse, FFTW_MEASURE), transfer, isInverse)(
                 log2n, flops);
     }
-
-    version(BenchClib)
-        if(impl == "c")
-            return f!(
-                CApi!(transfer, isInverse), transfer, isInverse)(log2n, flops);
     
     throw new Exception(
             "Implementation \"" ~ impl ~ "\" is not supported" );
@@ -852,6 +955,7 @@ void main(string[] args)
         bool r;
         bool i;
         bool h;
+        bool st;
         int mflops = 10_000;
 
         getopt(
@@ -860,6 +964,7 @@ void main(string[] args)
             "r", &r, 
             "i", &i, 
             "m", &mflops,
+            "st", &st,
             "h|help", &h);
 
         if(h)
@@ -871,7 +976,9 @@ void main(string[] args)
         enforce(args.length == 3, 
             "There must be exactly two non option arguments.");
 
-        auto transfer = r ? Transfer.rfft : Transfer.fft;
+        auto transfer = 
+            r ? Transfer.rfft : 
+            st ? Transfer.fst : Transfer.fft;
 
         callInstance!(runTest, 3)(
             s, transfer, i, to!int(args[2]), args[1], mflops);

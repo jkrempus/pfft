@@ -22,6 +22,7 @@ mixin template Instantiate()
     void deinterleave_array(T* even, T* odd, T* interleaved, size_t n);
     void interleave_array(T* even, T* odd, T* interleaved, size_t n);
     void scale(T* data, size_t n, T factor);
+    size_t alignment(size_t n);
 
     struct ITableValue{};
     alias ITableValue* ITable;
@@ -30,7 +31,13 @@ mixin template Instantiate()
     ITable interleave_table(uint log2n, void* p);
     void interleave(T* p, uint log2n, ITable table);
     void deinterleave(T* p, uint log2n, ITable table);
-    size_t alignment(size_t n);
+    
+    struct STableValue{};
+    alias STableValue* STable;
+
+    void fst(T*, uint, Table, RTable, STable, ITable);
+    size_t stable_size_bytes(uint log2n);
+    STable fst_table(uint log2n, void* p);
 }
 
 mixin Instantiate!();

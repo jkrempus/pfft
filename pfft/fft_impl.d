@@ -1387,4 +1387,21 @@ mixin template Instantiate()
     {
         selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
     }
+    
+    size_t stable_size_bytes(uint log2n)
+    {
+        return selected!"stable_size_bytes"(log2n);
+    }
+
+    STable fst_table(uint log2n, void* p)
+    {
+        return selected!("fst_table", STable)(log2n, p);
+    }
+    
+    void fst(T* data, uint log2n, Table t, RTable rt, STable st, ITable it)
+    {
+        selected!"fst"(
+            data, log2n, cast(FFT0.Table) t, cast(FFT0.RTable) rt,
+            cast(FFT0.STable) st, cast(FFT0.ITable) it);
+    }
 }    
