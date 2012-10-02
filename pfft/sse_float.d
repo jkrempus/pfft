@@ -25,7 +25,12 @@ version(LDC)
         float4 shufflevector(float4, float4, int, int, int, int);
 
     pragma(intrinsic, "llvm.x86.sse.storeu.ps")
-        void __builtin_ia32_storeups(float* p, float4 v);
+        void llvm_storeu_ps(void* p, float4 v);
+
+    void __builtin_ia32_storeups(float* p, float4 v)
+    { 
+        return llvm_storeu_ps(p, v); 
+    }
 }
         
 struct Vector 

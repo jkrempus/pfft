@@ -1063,40 +1063,19 @@ struct FFT(V, Options)
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
-    static size_t stable_size_bytes()(int log2n)
-    {
-        return T.sizeof << (log2n - 1);
-    }
-
-    static STable fst_table()(int log2n, void *p)
-    {
-        if(log2n < 2)
-            return cast(RTable) p;
-
-        auto n = st!1 << log2n;
-        auto r = (cast(T*) p)[0 .. n / 2];
-
-        auto dphi = (2 * _asin(1)) / n;
-        foreach(i, _; r)
-            // we need to start with phase = dphi
-            r[i] = _sin((i + 1) * dphi);
-
-        return r.ptr;
-    }
-
-    static void fst_first_pass()(T* p, int log2n, STable stable) 
+    static void fst_pass()(T* p, int log2n, STable stable) 
     if(supports_real)
     {
         auto n = st!1 << log2n;   
 
         if(n < 2 * vec_size) 
-            return SFFT.fst_first_pass(p, log2n, stable);
+            return SFFT.fst_pass(p, log2n, stable);
 
         static vec* v(T* a){ return cast(vec*) a; }
 
-        auto half = V.scalar_to_vector(0.5);
+        auto k = V.scalar_to_vector(0.25);
 
-        auto mid = p[n / 2];
+        auto mid = 2 * p[n / 2] * stable[n / 2 - 1];
  
         for(
             auto p0 = p + 1, p1 = p + n - vec_size;
@@ -1108,18 +1087,24 @@ struct FFT(V, Options)
             auto s = *v(stable);
 
             auto b0 = s * (a0 + a1);
-            auto b1 = half * (a1 - a0);
+            auto b1 = k * (a1 - a0);
 
             V.unaligned_store(p0, b0 + b1);
             *v(p1) = V.reverse(b0 - b1); 
         }
 
         // The middle element is undefined here, so we need to set it.
-        p[n / 2] = mid + mid;
+        p[n / 2] = mid;
 
         p[0] = 0;
     }
    
+    static void fst_pass()(T* p, int log2n, STable table) 
+    if(!supports_real)
+    {
+        return SFFT.fst_pass(p, log2n, table);
+    } 
+
     static void accumulate()(T* a, size_t n) 
     {
         enum nchunks = 4;
@@ -1164,16 +1149,43 @@ struct FFT(V, Options)
         }
     }
 
-    static void fst()(
-        T* p, int log2n, Table table, RTable rtable, 
-        STable stable, ITable itable)
+    static void diff()(T* a, size_t n) 
+    {
+        for(size_t i = n - 1; i > 0; i --)
+            a[i] -= a[i - 1];
+    }
+
+    static size_t stable_size_bytes()(int log2n)
+    {
+        return T.sizeof << (log2n - 1);
+    }
+    
+    static STable fst0_table()(int log2n, void *p)
+    {
+        if(log2n < 2)
+            return cast(RTable) p;
+
+        auto n = st!1 << log2n;
+        auto r = (cast(T*) p)[0 .. n / 2];
+
+        auto dphi = (2 * _asin(1)) / n;
+        foreach(i, _; r)
+            // we need to start with phase = dphi
+            r[i] = _sin((i + 1) * dphi);
+
+        return r.ptr;
+    }
+
+    static void fst0()(
+            T* p, int log2n, Table table, RTable rtable, 
+            STable stable, ITable itable)
     {
         if(log2n < 2)
             return;
-        
+
         auto n2 = st!1 << (log2n - 1);
 
-        fst_first_pass(p, log2n, stable);
+        fst_pass(p, log2n, stable);
         deinterleave(p, log2n, itable);
         rfft(p, p + n2, log2n, table, rtable);
         p[0] *= 0.5;
@@ -1181,12 +1193,42 @@ struct FFT(V, Options)
         p[n2] = 0;
         interleave_swap(p, log2n, itable);  
     }
-
-    static void fst_first_pass()(T* p, int log2n, STable* table) 
-    if(!supports_real)
+        
+    static void fst()(
+            T* p, int log2n, Table table, RTable rtable, 
+            STable stable, ITable itable)
     {
-        return SFFT.fst_first_pass(p, log2n, table);
-    } 
+        if(log2n < 2)
+            return;
+
+        auto n2 = st!1 << (log2n - 1);
+
+        deinterleave_swap(p, log2n, itable);  
+        auto tmp = p[n2 - 1];
+        diff(p, n2);
+        p[0] *= 2;
+        p[n2] = - 2 * tmp;
+        irfft(p, p + n2, log2n, table, rtable);
+        interleave(p, log2n, itable);
+        fst_pass(p, log2n, stable);
+    }
+
+    static STable fst_table()(int log2n, void *p)
+    {
+        if(log2n < 2)
+            return cast(RTable) p;
+
+        auto n = st!1 << log2n;
+        auto r = (cast(T*) p)[0 .. n / 2];
+
+        auto dphi = (2 * _asin(1)) / n;
+        foreach(i, _; r)
+            // we need to start with phase = dphi
+            // we divide by 8 instead of 4 so we don't need to divide later
+            r[i] = 1 / (8 * _sin((i + 1) * dphi));
+
+        return r.ptr;
+    }
 
     static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {

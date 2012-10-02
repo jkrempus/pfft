@@ -24,7 +24,12 @@ version(LDC)
         double2 shufflevector(double2, double2, int, int);
 
     pragma(intrinsic, "llvm.x86.sse2.storeu.pd")
-        void __builtin_ia32_storeupd(double* p, double2 v);
+        void llvm_storeu_pd(void* p, double2 v);
+
+    void __builtin_ia32_storeupd(double* p, double2 v)
+    { 
+        return llvm_storeu_pd(p, v); 
+    }
 }
 
 struct Vector

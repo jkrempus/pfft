@@ -22,8 +22,13 @@ version(LDC)
             float8, float8, int, int, int, int, int, int, int, int);
 
     pragma(intrinsic, "llvm.x86.avx.storeu.ps.256")
-        void __builtin_ia32_storeups256(float* p, float8 v);
-    
+        void llvm_storeu_ps_256(void* p, float8 v);
+
+    void __builtin_ia32_storeups256(float* p, float8 v)
+    { 
+        return llvm_storeu_ps_256(p, v); 
+    }
+
     pragma(intrinsic, "llvm.x86.avx.vinsertf128.ps.256")
         float8 __builtin_ia32_vinsertf128_ps256(float8 a, float4 b, byte i);
     

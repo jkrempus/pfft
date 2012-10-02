@@ -157,19 +157,19 @@ struct BitReverse(alias V, Options)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
 
-        foreach(i0, i1; bit_reversed_pairs(log2n - 2 * log2l))
-            if(i1 == i0)
+        foreach(i; bit_reversed_pairs(log2n - 2 * log2l))
+            if(i[1] == i[0])
             {
-                *table = i0 << log2l;
+                *table = i[0] << log2l;
                 table++;
             }
 
-        foreach(i0, i1; bit_reversed_pairs(log2n - 2 * log2l))
-            if(i1 < i0)
+        foreach(i; bit_reversed_pairs(log2n - 2 * log2l))
+            if(i[1] < i[0])
             {
-                *table = i0 << log2l;
+                *table = i[0] << log2l;
                 table++;
-                *table = i1 << log2l;
+                *table = i[1] << log2l;
                 table++;
             }
     }
