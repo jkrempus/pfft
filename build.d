@@ -174,7 +174,7 @@ void runBenchmarks(string[] types)
             auto r = taskPool.parallel(iota(4,21));
 
         foreach(i; r)
-            shell(fm("%s_%s -s -m 1000 pfft \"%s\"", 
+            shell(fm("%s_%s -s -m 1000 direct \"%s\"", 
                 absolutePath("test"), type, i));
     }
 }
@@ -252,7 +252,7 @@ void buildGdcObj(
 {
     auto gccArchFlag = [
         SIMD.SSE:    "-msse2", 
-        SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a8",
+        SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a9",
         SIMD.Scalar: "",
         SIMD.AVX :   "-mavx"][simd];
 
@@ -270,7 +270,7 @@ void buildGdc(Version v, string[] types, string dcpath,
             dbg, "-fprofile-generate " ~ flags);
 
         buildTests(types, dcpath, Compiler.GDMD, ".", 
-            false, dbg, "-fprofile-generate " ~ flags);
+            false, dbg, "-fprofile-generate -version=JustDirect" ~ flags);
         
         runBenchmarks(types);
         buildLib(&buildGdcObj, v, types, dcpath, ccpath, clib, dbg, 

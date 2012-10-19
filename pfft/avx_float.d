@@ -70,17 +70,15 @@ version(LDC)
     
     float8 loadups(float* p)
     {
-        // there is no LLVM intrinsic for unaligned load 
-        float8 a;
-        (cast(float*) &a)[0] = p[0]; 
-        (cast(float*) &a)[1] = p[1]; 
-        (cast(float*) &a)[2] = p[2]; 
-        (cast(float*) &a)[3] = p[3]; 
-        (cast(float*) &a)[4] = p[4]; 
-        (cast(float*) &a)[5] = p[5]; 
-        (cast(float*) &a)[6] = p[6]; 
-        (cast(float*) &a)[7] = p[7]; 
-        return a;
+        union U
+        {
+            float8 v;
+            float[8] a;
+        }        
+        
+        U u;
+        u.a = *cast(float[8]*) p;
+        return u.v;
     }
 
 }
@@ -111,7 +109,7 @@ else version(GNU)
     alias __builtin_ia32_unpcklps256 unpcklps;
     alias __builtin_ia32_unpckhps256 unpckhps;
     alias __builtin_ia32_loadups256 loadups;
-    
+
     auto shufps(param...)(float8 a, float8 b)
     {
         return __builtin_ia32_shufps256(a, b, shuf_mask!param);
