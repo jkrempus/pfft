@@ -270,7 +270,7 @@ void buildGdc(Version v, string[] types, string dcpath,
             dbg, "-fprofile-generate " ~ flags);
 
         buildTests(types, dcpath, Compiler.GDMD, ".", 
-            false, dbg, "-fprofile-generate -version=JustDirect" ~ flags);
+            false, dbg, "-fprofile-generate -version=JustDirect " ~ flags);
         
         runBenchmarks(types);
         buildLib(&buildGdcObj, v, types, dcpath, ccpath, clib, dbg, 

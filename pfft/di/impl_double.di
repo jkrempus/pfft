@@ -31,13 +31,6 @@ mixin template Instantiate()
     ITable interleave_table(uint log2n, void* p);
     void interleave(T* p, uint log2n, ITable table);
     void deinterleave(T* p, uint log2n, ITable table);
-    
-    struct STableValue{};
-    alias STableValue* STable;
-
-    void fst(T*, uint, Table, RTable, STable, ITable);
-    size_t stable_size_bytes(uint log2n);
-    STable fst_table(uint log2n, void* p);
 }
 
 mixin Instantiate!();

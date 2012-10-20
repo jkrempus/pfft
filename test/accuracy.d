@@ -12,7 +12,7 @@ alias format fm;
 
 @property p(string[] a){ return taskPool.parallel(a); }
 
-auto verbose = 1;
+shared verbose = 1;
 
 auto vshell(string cmd, int vcmd, int vout)
 {

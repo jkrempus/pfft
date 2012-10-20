@@ -9,7 +9,7 @@ import std.stdio, std.conv, std.datetime, std.complex, std.getopt,
 
 template st(alias a){ enum st = cast(size_t) a; }
 
-enum Transfer { fft, rfft , fst }
+enum Transfer { fft, rfft /*, fst*/ }
 
 auto gc_aligned_array(A)(size_t n)
 {
@@ -259,51 +259,6 @@ if(transfer == Transfer.rfft)
     mixin realSplitElementAccess!();
 }
 
-struct DirectApi(Transfer transfer, bool isInverse)
-if(transfer == Transfer.fst)
-{
-    mixin ImportDirect!();
-    import core.memory; 
-   
-    T[] data;
-    Table table;
-    RTable rtable;
-    STable stable;
-    ITable itable;
-    int log2n;
-    
-    this(int log2n)
-    {
-        auto n = st!1 << log2n;
-        data = gc_aligned_array!T(n);
-        data[] = 0;
-    
-        this.log2n = log2n;
-        table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1)));
-        rtable = rfft_table(log2n, GC.malloc(rtable_size_bytes(log2n))); 
-        stable = fst_table(log2n, GC.malloc(stable_size_bytes(log2n))); 
-        itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
-    }
-    
-    void compute()
-    {
-        fst(data.ptr, log2n, table, rtable, stable, itable); 
-    }
-    
-    alias T delegate(size_t) Dg;
-    
-    void fill(Dg fRe, Dg fIm) 
-    {
-        foreach(i, _; data)
-            data[i] = fRe(i);
-    }
-
-    T inRe(size_t i){ return data[i]; }
-    alias inRe outRe;
-    T inIm(size_t i){ return 0; }
-    alias inIm outIm;
-}
-
 struct CApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
 {
     enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
@@ -536,7 +491,7 @@ if(transfer.isIn(Transfer.rfft, Transfer.fft))
 }
 
 struct SimpleFft(T, Transfer transfer, bool isInverse)
-if(transfer == Transfer.fst)
+if(false)
 {
     mixin GenericFst!(SimpleFft!(T, Transfer.fft, false));
 }
@@ -978,7 +933,7 @@ void main(string[] args)
 
         auto transfer = 
             r ? Transfer.rfft : 
-            st ? Transfer.fst : Transfer.fft;
+            /*st ? Transfer.fst :*/ Transfer.fft;
 
         callInstance!(runTest, 3)(
             s, transfer, i, to!int(args[2]), args[1], mflops);

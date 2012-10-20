@@ -904,7 +904,6 @@ struct FFT(V, Options)
     }
   
     alias T* RTable;
-    alias T* STable;
  
     static auto rtable_size_bytes()(int log2n)
     {
@@ -1063,173 +1062,6 @@ struct FFT(V, Options)
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
-    static void fst_pass()(T* p, int log2n, STable stable) 
-    if(supports_real)
-    {
-        auto n = st!1 << log2n;   
-
-        if(n < 2 * vec_size) 
-            return SFFT.fst_pass(p, log2n, stable);
-
-        static vec* v(T* a){ return cast(vec*) a; }
-
-        auto k = V.scalar_to_vector(0.25);
-
-        auto mid = 2 * p[n / 2] * stable[n / 2 - 1];
- 
-        for(
-            auto p0 = p + 1, p1 = p + n - vec_size;
-            p0 < p1;
-            p0 += vec_size, p1 -= vec_size, stable += vec_size)
-        {
-            auto a0 = V.unaligned_load(p0);
-            auto a1 = V.reverse(*v(p1));
-            auto s = *v(stable);
-
-            auto b0 = s * (a0 + a1);
-            auto b1 = k * (a1 - a0);
-
-            V.unaligned_store(p0, b0 + b1);
-            *v(p1) = V.reverse(b0 - b1); 
-        }
-
-        // The middle element is undefined here, so we need to set it.
-        p[n / 2] = mid;
-
-        p[0] = 0;
-    }
-   
-    static void fst_pass()(T* p, int log2n, STable table) 
-    if(!supports_real)
-    {
-        return SFFT.fst_pass(p, log2n, table);
-    } 
-
-    static void accumulate()(T* a, size_t n) 
-    {
-        enum nchunks = 4;
-
-        if(n < nchunks * vec_size)
-        { 
-            auto s = a[0];
-            foreach(i; 1 .. n)
-            {
-                s += a[i];
-                a[i] = s;
-            }
-            return;
-        } 
-
-        auto m = n / nchunks;
-
-        RepeatType!(V.T*, nchunks) p;
-        p[0] = a;
-        foreach(i; ints_up_to!(nchunks - 1))
-            p[1 + i] = p[i] + m;
-
-        RepeatType!(V.T, nchunks) sum;
-        foreach(i; ints_up_to!nchunks)
-            sum[i] = 0;
-
-        foreach(i; 0 .. m)
-        {
-            foreach(j; ints_up_to!nchunks)
-            {
-                sum[j] += p[j][i];
-                p[j][i] = sum[j]; 
-            }
-        }
-
-        foreach(i; 1 .. nchunks)
-        {
-            auto vsum = V.scalar_to_vector(a[i * m - 1]);
-            auto vp = cast(vec*)(a + i * m);
-            foreach(j; 0 .. (m / vec_size))
-                vp[j] += vsum;
-        }
-    }
-
-    static void diff()(T* a, size_t n) 
-    {
-        for(size_t i = n - 1; i > 0; i --)
-            a[i] -= a[i - 1];
-    }
-
-    static size_t stable_size_bytes()(int log2n)
-    {
-        return T.sizeof << (log2n - 1);
-    }
-    
-    static STable fst0_table()(int log2n, void *p)
-    {
-        if(log2n < 2)
-            return cast(RTable) p;
-
-        auto n = st!1 << log2n;
-        auto r = (cast(T*) p)[0 .. n / 2];
-
-        auto dphi = (2 * _asin(1)) / n;
-        foreach(i, _; r)
-            // we need to start with phase = dphi
-            r[i] = _sin((i + 1) * dphi);
-
-        return r.ptr;
-    }
-
-    static void fst0()(
-            T* p, int log2n, Table table, RTable rtable, 
-            STable stable, ITable itable)
-    {
-        if(log2n < 2)
-            return;
-
-        auto n2 = st!1 << (log2n - 1);
-
-        fst_pass(p, log2n, stable);
-        deinterleave(p, log2n, itable);
-        rfft(p, p + n2, log2n, table, rtable);
-        p[0] *= 0.5;
-        accumulate(p, n2);
-        p[n2] = 0;
-        interleave_swap(p, log2n, itable);  
-    }
-        
-    static void fst()(
-            T* p, int log2n, Table table, RTable rtable, 
-            STable stable, ITable itable)
-    {
-        if(log2n < 2)
-            return;
-
-        auto n2 = st!1 << (log2n - 1);
-
-        deinterleave_swap(p, log2n, itable);  
-        auto tmp = p[n2 - 1];
-        diff(p, n2);
-        p[0] *= 2;
-        p[n2] = - 2 * tmp;
-        irfft(p, p + n2, log2n, table, rtable);
-        interleave(p, log2n, itable);
-        fst_pass(p, log2n, stable);
-    }
-
-    static STable fst_table()(int log2n, void *p)
-    {
-        if(log2n < 2)
-            return cast(RTable) p;
-
-        auto n = st!1 << log2n;
-        auto r = (cast(T*) p)[0 .. n / 2];
-
-        auto dphi = (2 * _asin(1)) / n;
-        foreach(i, _; r)
-            // we need to start with phase = dphi
-            // we divide by 8 instead of 4 so we don't need to divide later
-            r[i] = 1 / (8 * _sin((i + 1) * dphi));
-
-        return r.ptr;
-    }
-
     static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
     {
         static if(is(typeof(V.interleave)))
@@ -1320,9 +1152,6 @@ mixin template Instantiate()
 
     struct RTableValue{};
     alias RTableValue* RTable;
-    
-    struct STableValue{};
-    alias STableValue* STable;
     
     struct ITableValue{};
     alias ITableValue* ITable;
@@ -1428,22 +1257,5 @@ mixin template Instantiate()
     void deinterleave(T* p, uint log2n, ITable table)
     {
         selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
-    }
-    
-    size_t stable_size_bytes(uint log2n)
-    {
-        return selected!"stable_size_bytes"(log2n);
-    }
-
-    STable fst_table(uint log2n, void* p)
-    {
-        return selected!("fst_table", STable)(log2n, p);
-    }
-    
-    void fst(T* data, uint log2n, Table t, RTable rt, STable st, ITable it)
-    {
-        selected!"fst"(
-            data, log2n, cast(FFT0.Table) t, cast(FFT0.RTable) rt,
-            cast(FFT0.STable) st, cast(FFT0.ITable) it);
     }
 }    
