@@ -154,12 +154,12 @@ mixin template GenericFst(F)
     
     void fill(Dg fRe, Dg fIm) 
     {
-        f.fill(
+        /*f.fill(
             (size_t i) => 
                 i == 0 ? 0 :
                 i == n ? 0 :
                 i > n ? -fRe(2 * n - i) : fRe(i),
-            (size_t i) => to!T(0));
+            (size_t i) => to!T(0)); TODO*/
     }
 
     T inRe(size_t i){ return f.inRe(i); }
@@ -396,7 +396,7 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
 }
 
 struct SimpleFft(T, Transfer transfer, bool isInverse)
-if(transfer.isIn(Transfer.rfft, Transfer.fft))
+if(isIn(transfer, Transfer.rfft, Transfer.fft))
 {    
     Complex!(T)[] a;
     Complex!(T)[] w;

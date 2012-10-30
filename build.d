@@ -153,7 +153,7 @@ void buildTests(string[] types, string dcpath, Compiler c, string outDir,
 
             case Compiler.LDC:
                 auto opt = optimized ? "-O5 -release" : "";
-                shellf("%s %s -d-version=%s -d-version=%s", 
+                shellf("%s %s -d-version=%s -d-version=%s -linkonce-templates", 
                     dcpath, opt, clibVersion, common);
         }
     }
@@ -233,10 +233,10 @@ void buildLdcObj(
         "-mattr=+%s", simd == SIMD.SSE ? "sse2" : toLower(to!string(simd)));
 
     execute(
-        fm("%s -I.. -O3 -release -singleobj -output-bc -ofpfft.bc -d-version=%s %s", 
+        fm("%s -I.. -O3 -release -singleobj -enable-inlining -output-bc -ofpfft.bc -d-version=%s %s", 
             dcpath,  to!string(v), src),
         "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc",
-        fm("llc pfft.bc -o pfft.s %s", llcMattrFlag),
+        fm("llc pfft.bc -o pfft.s -O=3 %s", llcMattrFlag),
         fm("%s pfft.s -c -o%s", ccpath, objname));
 }
  

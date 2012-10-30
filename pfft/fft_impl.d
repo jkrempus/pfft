@@ -7,6 +7,19 @@ module pfft.fft_impl;
 
 import pfft.shuffle;
 
+version(Profile)
+{
+    import pfft.profile;
+    
+    enum Actions{ passes_first, passes, passes_last, bit_reverse, br_passes }
+    mixin ProfileMixin!Actions;
+
+    static ~this()
+    {
+        Profile.print();
+    }   
+}
+
 struct Scalar(_T)
 {
     alias _T vec;
@@ -424,7 +437,7 @@ struct FFT(V, Options)
         }
         return tables;
     }
-    
+   
     static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride = 1)
     {
@@ -635,6 +648,9 @@ struct FFT(V, Options)
             }
         }
 
+        version(Profile)
+            Profile.start(Actions.passes_first);
+
         if(m2 > 1)
         {
             first_fft_passes(re, im, N);
@@ -645,6 +661,9 @@ struct FFT(V, Options)
             nextRow(table, tableRowLen);
         }
        	
+        version(Profile)
+            Profile.stop_start(Actions.passes_first, Actions.passes);
+        
         for (; m2 > 1 ; m2 >>= 2)
         {
             static if(compact_table)
@@ -656,8 +675,14 @@ struct FFT(V, Options)
             nextRow(table, tableRowLen);
         }
         
+        version(Profile)
+            Profile.stop_start(Actions.passes, Actions.passes_last);
+        
         if(m2 != 0)
             fft_pass(re, im, pend, table, m2);
+
+        version(Profile)
+            Profile.stop(Actions.passes_last);
     }
     
     static static void fft_passes_fractional()(
@@ -808,7 +833,7 @@ struct FFT(V, Options)
                     table, tableI + 2*i, tmp_buffer);
         }
     }
-   
+  
     static void bit_reverse_small_two(int minLog2n)(
         T* re, T* im, int log2n, uint* brTable)
     {
@@ -863,20 +888,32 @@ struct FFT(V, Options)
         fft_passes!false(
             v(re), v(im), N / vec_size, 
             twiddle_table_ptr(tables, log2n) + 2);
-        
+       
+        version(Profile)
+            Profile.start(Actions.bit_reverse);
+ 
         bit_reverse_small_two!(2 * log2(vec_size))(
             re, im, log2n, br_table_ptr(tables, log2n));
+
+        version(Profile)
+            Profile.stop_start(Actions.bit_reverse, Actions.br_passes);
 
         static if(vec_size > 1) 
             fft_passes_bit_reversed(
                 v(re), v(im) , N / vec_size, 
                 cast(vec*) twiddle_table_ptr(tables, log2n), 
                 N / vec_size/vec_size);
+        
+        version(Profile)
+            Profile.stop(Actions.br_passes);
     }
     
     static void fft_large()(
         T * re, T * im, int log2n, Table tables)
     {
+        version(Profile)
+            Profile.start(Actions.passes);
+        
         size_t N = (1<<log2n);
         auto tmp_buf = tmp_buffer_ptr(tables, log2n);
  
@@ -886,6 +923,9 @@ struct FFT(V, Options)
         
         BR.bit_reverse_large(re, log2n, br_table_ptr(tables, log2n), tmp_buf); 
         BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf);
+        
+        version(Profile)
+            Profile.stop(Actions.passes);
     }
     
     static void fft()(T * re, T * im, int log2n, Table tables)
