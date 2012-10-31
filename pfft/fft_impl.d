@@ -145,7 +145,6 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
 
     foreach(i; ints_up_to!n)
         ar[i] = pr[i];
-
     foreach(i; ints_up_to!n)
         ai[i] = pi[i];
     
@@ -191,7 +190,6 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
 
     foreach(i; ints_up_to!n)
         pr[i] = ar[reverse_bits!(i, log2n)];
-
     foreach(i; ints_up_to!n)
         pi[i] = ai[reverse_bits!(i, log2n)];
 }
@@ -233,22 +231,22 @@ struct FFT(V, Options)
     template st(alias a){ enum st = cast(size_t) a; }
 
     alias Tuple!(T,T) Pair;
-    
+   
     static void complex_array_to_vector()(Pair * pairs, size_t n)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
-          T buffer[vec_size*2] = void;
-          for(size_t j = 0; j < vec_size; j++)
-          {
-            buffer[j] = pairs[i+j][0];
-            buffer[j + vec_size] = pairs[i+j][1];
-          }
-          for(size_t j = 0; j < vec_size; j++)
-          {
-            pairs[i+j][0] = buffer[2*j];
-            pairs[i+j][1] = buffer[2*j+1];
-          }
+            T buffer[vec_size*2] = void;
+            for(size_t j = 0; j < vec_size; j++)
+            {
+                buffer[j] = pairs[i+j][0];
+                buffer[j + vec_size] = pairs[i+j][1];
+            }
+            for(size_t j = 0; j < vec_size; j++)
+            {
+                pairs[i+j][0] = buffer[2*j];
+                pairs[i+j][1] = buffer[2*j+1];
+            }
         }
     }
 
@@ -263,6 +261,16 @@ struct FFT(V, Options)
         return r - 1;
     }
 
+    static int reversed_passes(int log2n)
+    {
+        enum log2vs = log2(vec_size);
+
+        // assert(log2n >= 2 * log2vs);
+
+        return ((log2n > 2 * log2vs) && ((log2vs & 1) & ~(log2n & 1))) ?
+            log2vs + 1 : log2vs;
+    }
+ 
     static void sines_cosines_refine(bool computeEven)(
         Pair* src, Pair* dest, size_t n_from, T dphi)
     {
@@ -295,7 +303,7 @@ struct FFT(V, Options)
                 r + n - len, r + n - 2 * len, len, deltaphi / 2 / denom);
         }
     } 
-    
+
     static void twiddle_table()(int log2n, Pair * r)
     {
         if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size))
@@ -321,12 +329,11 @@ struct FFT(V, Options)
             
             p += m2;
         }
-       
-        p = r;
-        for (int s = 0; s + 1 < log2n - log2(vec_size);  s += 2)
+      
+        static void combine_rows(typeof(r) r, size_t m2)
         {
-            size_t m2 = 1 << s;
-            
+            auto p = r + m2 - 1;
+ 
             foreach(i; 0 .. m2)
                 // p[i] is p[m2 + 2 * i] ^^ 2. We store it here so that we 
                 // don't need to recompute it below, which improves precision 
@@ -346,13 +353,17 @@ struct FFT(V, Options)
                 p[3 * i + 1] = a2;
                 p[3 * i + 2] = a3;
             }
-            
-            p += 3 * m2;
         }
+ 
+        for (int s = 0; s + 1 < log2n - reversed_passes(log2n);  s += 2)
+            combine_rows(r, 1 << s); 
+        
+        //for(int s = log2n - reversed_passes(log2n); s + 1 < log2n; s += 2)
+        //    combine_rows(r, 1 << s); 
     }
-    
+
     alias void* Table;
-   
+
     static size_t twiddle_table_size_bytes(int log2n)
     {
         auto compact = log2n >= Options.large_limit || 
@@ -428,35 +439,127 @@ struct FFT(V, Options)
         }
         return tables;
     }
-   
+
+    static void two_passes_inner(
+        vec* pr, vec* pi, size_t k0, size_t k1, size_t k2, size_t k3,
+        vec w1r, vec w1i, vec w2r, vec w2i, vec w3r, vec w3i)
+    {
+        vec tr, ur, ti, ui;
+
+        vec r0 = pr[k0];
+        vec r1 = pr[k1];
+        vec r2 = pr[k2];
+        vec r3 = pr[k3];
+
+        vec i0 = pi[k0];
+        vec i1 = pi[k1];
+        vec i2 = pi[k2];
+        vec i3 = pi[k3];
+
+        tr = r2 * w2r - i2 * w2i;
+        ti = r2 * w2i + i2 * w2r;
+        r2 = r0 - tr;
+        i2 = i0 - ti;
+        r0 = r0 + tr;
+        i0 = i0 + ti;
+
+        tr = r3 * w3r - i3 * w3i;
+        ti = r3 * w3i + i3 * w3r;
+        ur = r1 * w1r - i1 * w1i;
+        ui = r1 * w1i + i1 * w1r;
+        r3 = ur - tr;
+        i3 = ui - ti;
+        r1 = ur + tr;
+        i1 = ui + ti;
+
+        tr = r1;
+        ti = i1;
+        r1 = r0 - tr;
+        i1 = i0 - ti;
+        r0 = r0 + tr;
+        i0 = i0 + ti;
+
+        tr = i3;
+        ti = r3;                // take minus into account later
+        r3 = r2 - tr;
+        i3 = i2 + ti;
+        r2 = r2 + tr;
+        i2 = i2 - ti;
+
+        pr[k0] = r0;
+        pr[k1] = r1;
+        pr[k2] = r2;
+        pr[k3] = r3;
+
+        pi[k0] = i0;
+        pi[k1] = i1;
+        pi[k2] = i2;
+        pi[k3] = i3;
+    }
+ 
+    static void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
+    {
+        size_t m = m2 + m2;
+        for(; pr < pend; pr += m, pi += m)
+        {
+            for(size_t k1 = 0, k2 = m2; k1<m2; k1++, k2 ++) 
+            {  
+                vec wr = table[2 * k1], wi = table[2 * k1 + 1];                       
+
+                vec tmpr = pr[k2], ti = pi[k2];
+                vec ur = pr[k1], ui = pi[k1];
+                vec tr = tmpr * wr - ti * wi;
+                ti = tmpr * wi + ti * wr;
+                pr[k2] = ur - tr;
+                pr[k1] = ur + tr;                                                    
+                pi[k2] = ui - ti;                                                    
+                pi[k1] = ui + ti;
+            }
+        }
+    }
+ 
+    static void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
+    {
+        size_t m = m2 + m2;
+        size_t m4 = m2 / 2;
+        for(; pr < pend ; pr += m, pi += m)
+        {
+            for (
+                size_t k0 = 0, k1 = m4, k2 = m2, k3 = m2 + m4; 
+                k0 < m4; 
+                k0++, k1++, k2++, k3++) 
+            {
+                vec w0r = table[2 * k0];
+                vec w0i = table[2 * k0 + 1];
+                vec w1r = table[4 * k0];
+                vec w1i = table[4 * k0 + 1];
+                vec w2r = table[4 * k0 + 2];
+                vec w2i = table[4 * k0 + 3];
+
+                two_passes_inner(
+                    pr, pi, k0, k1, k2, k3, w0r, w0i, w1r, w1i, w2r, w2i);
+            }
+        }        
+    }
+
     static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride = 1)
     {
         table += start_stride + start_stride;
-        vec* pend = re + N;
-        for (size_t m2 = start_stride; m2 < N ; m2 <<= 1)
-        {      
-            size_t m = m2 + m2;
-            for(
-                vec* pr = re, pi = im; 
-                pr < pend ;
-                pr += m, pi += m)
-            {
-                for (size_t k1 = 0, k2 = m2; k1<m2; k1++, k2 ++) 
-                {  
-                    vec wr = table[2*k1], wi = table[2*k1+1];                       
+        vec* re_end = re + N;
+        
+        size_t m2 = start_stride;
 
-                    vec tmpr = pr[k2], ti = pi[k2];
-                    vec ur = pr[k1], ui = pi[k1];
-                    vec tr = tmpr*wr - ti*wi;
-                    ti = tmpr*wi + ti*wr;
-                    pr[k2] = ur - tr;
-                    pr[k1] = ur + tr;                                                    
-                    pi[k2] = ui - ti;                                                    
-                    pi[k1] = ui + ti;
-                }
-            }
-            table += m;
+        /*for(; m2 < N; m2 <<= 2)
+        {
+            fft_two_passes_bit_reversed(re, im, re_end, table, m2);
+            table += 6 * m2;
+        }*/
+
+        for(; m2 < N; m2 <<= 1)
+        {
+            fft_pass_bit_reversed(re, im, re_end, table, m2);
+            table += m2 + m2;
         }
     }
     
@@ -513,7 +616,7 @@ struct FFT(V, Options)
             }
         }
     }
-    
+
     static void fft_two_passes(Tab...)(
         vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
@@ -564,66 +667,17 @@ struct FFT(V, Options)
             
             for (
                 size_t k0 = 0, k1 = m4, k2 = m2, k3 = m2 + m4; 
-                k0<m4; k0++, 
-                k1++, k2++, k3++) 
-            {                 
-                vec tr, ur, ti, ui;
-                
-                vec r0 = pr[k0];
-                vec r1 = pr[k1];
-                vec r2 = pr[k2];
-                vec r3 = pr[k3];
-                
-                vec i0 = pi[k0];
-                vec i1 = pi[k1];
-                vec i2 = pi[k2];
-                vec i3 = pi[k3];
-                
-                tr = r2 * w2r - i2 * w2i;
-                ti = r2 * w2i + i2 * w2r;
-                r2 = r0 - tr;
-                i2 = i0 - ti;
-                r0 = r0 + tr;
-                i0 = i0 + ti;
-                
-                tr = r3 * w3r - i3 * w3i;
-                ti = r3 * w3i + i3 * w3r;
-                ur = r1 * w1r - i1 * w1i;
-                ui = r1 * w1i + i1 * w1r;
-                r3 = ur - tr;
-                i3 = ui - ti;
-                r1 = ur + tr;
-                i1 = ui + ti;
-                
-                tr = r1;
-                ti = i1;
-                r1 = r0 - tr;
-                i1 = i0 - ti;
-                r0 = r0 + tr;
-                i0 = i0 + ti;
-                
-                tr = i3;
-                ti = r3;                // take minus into account later
-                r3 = r2 - tr;
-                i3 = i2 + ti;
-                r2 = r2 + tr;
-                i2 = i2 - ti;
-                
-                pr[k0] = r0;
-                pr[k1] = r1;
-                pr[k2] = r2;
-                pr[k3] = r3;
-                
-                pi[k0] = i0;
-                pi[k1] = i1;
-                pi[k2] = i2;
-                pi[k3] = i3;
+                k0 < m4; 
+                k0++, k1++, k2++, k3++) 
+            {
+                two_passes_inner(
+                    pr, pi, k0, k1, k2, k3, w1r, w1i, w2r, w2i, w3r, w3i);
             }
         }
     }
     
     static void fft_passes(bool compact_table)(
-        vec* re, vec* im, size_t N , T* table)
+        vec* re, vec* im, size_t N, size_t end_stride, T* table)
     {
         vec * pend = re + N;
 
@@ -641,7 +695,7 @@ struct FFT(V, Options)
 
         profStart(Action.passes_first);
 
-        if(m2 > 1)
+        if(m2 >= end_stride + 1)
         {
             first_fft_passes(re, im, N);
             
@@ -653,7 +707,7 @@ struct FFT(V, Options)
        	
         profStopStart(Action.passes_first, Action.passes);
         
-        for (; m2 > 1 ; m2 >>= 2)
+        for (; m2 >= end_stride + 1 ; m2 >>= 2)
         {
             static if(compact_table)
                 fft_two_passes(re, im, pend, m2, table, table);
@@ -666,7 +720,7 @@ struct FFT(V, Options)
         
         profStopStart(Action.passes, Action.passes_last);
         
-        if(m2 != 0)
+        if(m2 == end_stride)
             fft_pass(re, im, pend, table, m2);
 
         profStop(Action.passes_last);
@@ -855,7 +909,7 @@ struct FFT(V, Options)
         // assert(log2n > log2(vec_size));
         
         auto N = st!1 << log2n;
-        fft_passes!(true)(v(re), v(im), N / vec_size, 
+        fft_passes!(true)(v(re), v(im), N / vec_size, 1, 
             twiddle_table_ptr(tables, log2n));
         
         fft_passes_fractional(
@@ -873,7 +927,7 @@ struct FFT(V, Options)
         size_t N = (1<<log2n);
         
         fft_passes!false(
-            v(re), v(im), N / vec_size, 
+            v(re), v(im), N / vec_size, 1,
             twiddle_table_ptr(tables, log2n) + 2);
        
         profStart(Action.bit_reverse);
