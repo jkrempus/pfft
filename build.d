@@ -186,7 +186,7 @@ void buildDmd(Version v, string[] types, string dcpath,
 
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
-    shellf("%s %s -lib -of%s -version=%s %s %s %s", 
+    shellf("%s %s -lib -of%s -I.. -version=%s %s %s %s", 
         dcpath, optOrDbg,  clib ? clibPath : libPath, to!string(v), src, flags,
             clib ? "clib.o dummy.o" : "");
 }
