@@ -261,12 +261,11 @@ struct FFT(V, Options)
         return r - 1;
     }
 
-    static int reversed_passes(int log2n)
+    static int n_bit_reversed_passes(int log2n)
     {
         enum log2vs = log2(vec_size);
-
         // assert(log2n >= 2 * log2vs);
-        return log2vs;
+        
         return ((log2n > 2 * log2vs) && ((log2vs & 1) & ~(log2n & 1))) ?
             log2vs + 1 : log2vs;
     }
@@ -317,7 +316,7 @@ struct FFT(V, Options)
         {
             size_t m2 = 1 << s;
             
-            if(s < log2n - log2(vec_size))
+            if(s < log2n - n_bit_reversed_passes(log2n))
                 sines_cosines!false(p, m2, 0.0, -2 * _asin(1), true);
             else
             {
@@ -353,10 +352,10 @@ struct FFT(V, Options)
             }
         }
  
-        for (int s = 0; s + 1 < log2n - reversed_passes(log2n);  s += 2)
+        for (int s = 0; s + 1 < log2n - n_bit_reversed_passes(log2n);  s += 2)
             combine_rows(r, st!1 << s); 
         
-        for(int s = log2n - reversed_passes(log2n); s + 1 < log2n; s += 2)
+        for(int s = log2n - n_bit_reversed_passes(log2n); s + 1 < log2n; s += 2)
         {
             alias Tuple!(vec, vec) VPair;
 
@@ -440,8 +439,6 @@ struct FFT(V, Options)
     {   
         if(log2n == 0)
             return p;
-        //else if(log2n <= log2(vec_size))
-         //   return SFFT.fft_table(log2n, p);
         
         Table tables = p;
         
@@ -949,9 +946,11 @@ struct FFT(V, Options)
         // assert(log2n >= 2*log2(vec_size));
         
         size_t N = (1<<log2n);
-        
+        size_t n_br = n_bit_reversed_passes(log2n);       
+ 
         fft_passes!false(
-            v(re), v(im), N / vec_size, 1,
+            v(re), v(im), N / vec_size, 
+            1 << (n_br - log2(vec_size)),
             twiddle_table_ptr(tables, log2n) + 2);
        
         profStart(Action.bit_reverse);
@@ -965,7 +964,7 @@ struct FFT(V, Options)
             fft_passes_bit_reversed(
                 v(re), v(im) , N / vec_size, 
                 cast(vec*) twiddle_table_ptr(tables, log2n), 
-                N / vec_size/vec_size);
+                (N / vec_size) >> n_br);
         
         profStop(Action.br_passes);
     }
