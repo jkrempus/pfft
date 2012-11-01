@@ -57,3 +57,9 @@ void _D16TypeInfo_Pointer6__vtblZ()
 	fputs("_D16TypeInfo_Pointer6__vtblZ should not be called!\n", stderr);
 	abort();
 }
+
+void _D13TypeInfo_Enum6__vtblZ()
+{
+	fputs("_D13TypeInfo_Enum6__vtblZ should not be called!\n", stderr);
+	abort();
+}

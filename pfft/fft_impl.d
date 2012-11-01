@@ -266,7 +266,7 @@ struct FFT(V, Options)
         enum log2vs = log2(vec_size);
 
         // assert(log2n >= 2 * log2vs);
-
+        return log2vs;
         return ((log2n > 2 * log2vs) && ((log2vs & 1) & ~(log2n & 1))) ?
             log2vs + 1 : log2vs;
     }
@@ -312,9 +312,7 @@ struct FFT(V, Options)
                 r, st!1 << (log2n - 1), 0.0, -2 * _asin(1), true);
         }
 
-        r++;
-
-        auto p = r;
+        auto p = r + 1;
         for (int s = 0; s < log2n; ++s)
         {
             size_t m2 = 1 << s;
@@ -332,7 +330,7 @@ struct FFT(V, Options)
       
         static void combine_rows(typeof(r) r, size_t m2)
         {
-            auto p = r + m2 - 1;
+            auto p = r + m2;
  
             foreach(i; 0 .. m2)
                 // p[i] is p[m2 + 2 * i] ^^ 2. We store it here so that we 
@@ -356,10 +354,34 @@ struct FFT(V, Options)
         }
  
         for (int s = 0; s + 1 < log2n - reversed_passes(log2n);  s += 2)
-            combine_rows(r, 1 << s); 
+            combine_rows(r, st!1 << s); 
         
-        //for(int s = log2n - reversed_passes(log2n); s + 1 < log2n; s += 2)
-        //    combine_rows(r, 1 << s); 
+        for(int s = log2n - reversed_passes(log2n); s + 1 < log2n; s += 2)
+        {
+            alias Tuple!(vec, vec) VPair;
+
+            size_t m2 = (st!1 << s) / vec_size;
+            auto vp = (cast(VPair*) r) + m2;
+
+            foreach(i; 0 .. m2)
+                // move those elements so that we don't overwrite them
+                vp[m2 + m2 + i] = vp[m2 + i];
+            
+            foreach(i; 0 .. m2)
+            {
+                VPair a1 = vp[m2 + m2 + i];
+                VPair a2, a3;
+
+                a2[0] = a1[0] * a1[0] - a1[1] * a1[1];
+                a2[1] = a1[0] * a1[1] + a1[1] * a1[0];
+                a3[0] = a2[0] * a1[0] - a2[1] * a1[1];
+                a3[1] = a2[0] * a1[1] + a2[1] * a1[0];
+                
+                vp[3 * i] = a1;
+                vp[3 * i + 1] = a2;
+                vp[3 * i + 2] = a3;
+            }
+        }
     }
 
     alias void* Table;
@@ -522,6 +544,7 @@ struct FFT(V, Options)
     {
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
+
         for(; pr < pend ; pr += m, pi += m)
         {
             for (
@@ -529,17 +552,18 @@ struct FFT(V, Options)
                 k0 < m4; 
                 k0++, k1++, k2++, k3++) 
             {
-                vec w0r = table[2 * k0];
-                vec w0i = table[2 * k0 + 1];
-                vec w1r = table[4 * k0];
-                vec w1i = table[4 * k0 + 1];
-                vec w2r = table[4 * k0 + 2];
-                vec w2i = table[4 * k0 + 3];
+                vec w0r = table[6 * k0];
+                vec w0i = table[6 * k0 + 1];
+                vec w1r = table[6 * k0 + 2];
+                vec w1i = table[6 * k0 + 3];
+                vec w2r = table[6 * k0 + 4];
+                vec w2i = table[6 * k0 + 5];
 
+                // bit reversed order of indices!
                 two_passes_inner(
-                    pr, pi, k0, k1, k2, k3, w0r, w0i, w1r, w1i, w2r, w2i);
+                    pr, pi, k0, k2, k1, k3, w0r, w0i, w1r, w1i, w2r, w2i);
             }
-        }        
+        }
     }
 
     static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
@@ -550,11 +574,11 @@ struct FFT(V, Options)
         
         size_t m2 = start_stride;
 
-        /*for(; m2 < N; m2 <<= 2)
+        for(; m2 < N / 2; m2 <<= 2)
         {
-            fft_two_passes_bit_reversed(re, im, re_end, table, m2);
+            fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
             table += 6 * m2;
-        }*/
+        }
 
         for(; m2 < N; m2 <<= 1)
         {
