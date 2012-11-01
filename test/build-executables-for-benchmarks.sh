@@ -28,5 +28,4 @@ mv test_float test_float_sse_dmd
 (cd ..; ./build.d --simd sse --type float --dc LDC; ./build.d --tests --type float --dc LDC)
 mv test_float test_float_sse_ldc
 
-cp test_float_avx test_float_avx_gdmd
 cp test_float_sse test_float_sse_gdmd

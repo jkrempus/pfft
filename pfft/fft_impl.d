@@ -311,10 +311,10 @@ struct FFT(V, Options)
                 r, st!1 << (log2n - 1), 0.0, -2 * _asin(1), true);
         }
 
-        auto p = r + 1;
         for (int s = 0; s < log2n; ++s)
         {
             size_t m2 = 1 << s;
+            auto p = r + m2;
             
             if(s < log2n - n_bit_reversed_passes(log2n))
                 sines_cosines!false(p, m2, 0.0, -2 * _asin(1), true);
@@ -323,12 +323,11 @@ struct FFT(V, Options)
                 sines_cosines!false(p, m2, 0.0, -2 * _asin(1), false);
                 complex_array_to_vector(p, m2);
             }
-            
-            p += m2;
         }
       
-        static void combine_rows(typeof(r) r, size_t m2)
+        for (int s = 0; s + 1 < log2n - n_bit_reversed_passes(log2n);  s += 2)
         {
+            size_t m2 = 1 << s;
             auto p = r + m2;
  
             foreach(i; 0 .. m2)
@@ -351,9 +350,6 @@ struct FFT(V, Options)
                 p[3 * i + 2] = a3;
             }
         }
- 
-        for (int s = 0; s + 1 < log2n - n_bit_reversed_passes(log2n);  s += 2)
-            combine_rows(r, st!1 << s); 
         
         for(int s = log2n - n_bit_reversed_passes(log2n); s + 1 < log2n; s += 2)
         {
@@ -549,26 +545,19 @@ struct FFT(V, Options)
                 k0 < m4; 
                 k0++, k1++, k2++, k3++) 
             {
-                vec w0r = table[6 * k0];
-                vec w0i = table[6 * k0 + 1];
-                vec w1r = table[6 * k0 + 2];
-                vec w1i = table[6 * k0 + 3];
-                vec w2r = table[6 * k0 + 4];
-                vec w2i = table[6 * k0 + 5];
-
+                auto t = table + 6 * k0;
                 // bit reversed order of indices!
                 two_passes_inner(
-                    pr, pi, k0, k2, k1, k3, w0r, w0i, w1r, w1i, w2r, w2i);
+                    pr, pi, k0, k2, k1, k3, t[0], t[1], t[2], t[3], t[4], t[5]);
             }
         }
     }
 
     static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
-        vec* table, size_t start_stride = 1)
+        vec* table, size_t start_stride)
     {
         table += start_stride + start_stride;
         vec* re_end = re + N;
-        
         size_t m2 = start_stride;
 
         for(; m2 < N / 2; m2 <<= 2)
