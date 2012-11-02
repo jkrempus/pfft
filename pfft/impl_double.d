@@ -8,9 +8,11 @@ import pfft.fft_impl;
 
 version(SSE_AVX)
 {
-    import sse = pfft.sse_double, avx = pfft.avx_double, pfft.detect_avx;  
-    
-    alias get implementation;
+    import 
+        sse = pfft.sse_double, 
+        avx = pfft.avx_double, 
+        implementation = pfft.detect_avx;
+
     alias TypeTuple!(FFT!(sse.Vector, sse.Options), avx) FFTs;
 }
 else
@@ -38,7 +40,6 @@ else
     
     alias FFT!(Vector,Options) F;
     alias TypeTuple!F FFTs;
-    enum implementation = 0;
 }
 
 mixin Instantiate!();

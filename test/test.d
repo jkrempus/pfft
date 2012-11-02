@@ -176,25 +176,22 @@ else version(Double)
 else
     alias float T;
 
-template ImportDirect()
-{
-    static if(is(T == real))
-        import pfft.impl_real;
-    else static if(is(T == double))
-        import pfft.impl_double;
-    else
-        import pfft.impl_float;
-}
+static if(is(T == real))
+    import direct = pfft.impl_real;
+else static if(is(T == double))
+    import direct = pfft.impl_double;
+else
+    import direct = pfft.impl_float;
 
 struct DirectApi(Transfer transfer, bool isInverse) 
 if(transfer == Transfer.fft)
 {
-    mixin ImportDirect!();
     import core.memory; 
+    alias direct d; 
 
     T[] _re;
     T[] _im;
-    Table table;
+    d.Table table;
     int log2n;
     
     this(int _log2n)
@@ -204,15 +201,15 @@ if(transfer == Transfer.fft)
         _im = gc_aligned_array!T(1 << log2n);
         _re[] = 0;
         _im[] = 0;
-        table = fft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
+        table = d.fft_table(log2n, GC.malloc(d.table_size_bytes(log2n))); 
     }
     
     void compute()
     {
         static if(isInverse)
-            fft(_im.ptr, _re.ptr, log2n, table);
+            d.fft(_im.ptr, _re.ptr, log2n, table);
         else 
-            fft(_re.ptr, _im.ptr, log2n, table); 
+            d.fft(_re.ptr, _im.ptr, log2n, table); 
     }
 
     mixin splitElementAccess!();
@@ -221,13 +218,13 @@ if(transfer == Transfer.fft)
 struct DirectApi(Transfer transfer, bool isInverse)
 if(transfer == Transfer.rfft)
 {
-    mixin ImportDirect!();
     import core.memory; 
+    alias direct d; 
    
     T[] data;
-    ITable itable;
-    RTable rtable;
-    Table table;
+    direct.ITable itable;
+    direct.RTable rtable;
+    direct.Table table;
     int log2n;
     
     this(int log2n)
@@ -237,22 +234,22 @@ if(transfer == Transfer.rfft)
         data[] = 0;
     
         this.log2n = log2n;
-        itable = interleave_table(log2n, GC.malloc(itable_size_bytes(log2n))); 
-        rtable = rfft_table(log2n, GC.malloc(table_size_bytes(log2n))); 
-        table = fft_table(log2n - 1, GC.malloc(table_size_bytes(log2n - 1)));
+        itable = d.interleave_table(log2n, GC.malloc(d.itable_size_bytes(log2n))); 
+        rtable = d.rfft_table(log2n, GC.malloc(d.table_size_bytes(log2n))); 
+        table = d.fft_table(log2n - 1, GC.malloc(d.table_size_bytes(log2n - 1)));
     }
     
     void compute()
     {
         static if(isInverse)
         {
-            irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
-            interleave(data.ptr, log2n, itable);    
+            d.irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
+            d.interleave(data.ptr, log2n, itable);    
         }
         else
         {
-            deinterleave(data.ptr, log2n, itable);    
-            rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
+            d.deinterleave(data.ptr, log2n, itable);    
+            d.rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
         }
     }
     
@@ -912,6 +909,7 @@ void main(string[] args)
         bool h;
         bool st;
         int mflops = 10_000;
+        int impl = -1;
 
         getopt(
             args, 
@@ -920,6 +918,7 @@ void main(string[] args)
             "i", &i, 
             "m", &mflops,
             "st", &st,
+            "impl", &impl,
             "h|help", &h);
 
         if(h)
@@ -927,6 +926,9 @@ void main(string[] args)
             writefln(usage, args[0]);
             return;
         }
+        
+        if(impl != -1)
+            direct.set_implementation(impl);
 
         enforce(args.length == 3, 
             "There must be exactly two non option arguments.");

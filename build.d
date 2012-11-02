@@ -5,7 +5,8 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.process, std.string, std.array, std.algorithm, 
-       std.conv, std.range, std.getopt, std.file, std.path : buildPath, absolutePath, dirSeparator;
+       std.conv, std.range, std.getopt, std.file,
+       std.path : buildPath, absolutePath, dirSeparator;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
@@ -21,6 +22,11 @@ auto parseVersion(string simdOpt)
         "scalar": Version.Scalar][simdOpt];
 }
 
+@property name(Version v)
+{
+    return v.to!string.toLower.replace("_", "-"); 
+}
+
 @property baseSIMD(Version v)
 {
     return [
@@ -31,9 +37,20 @@ auto parseVersion(string simdOpt)
         Version.SSE_AVX: SIMD.SSE][v];
 }
 
-auto additionalSIMD(Version v)
+@property additionalSIMD(Version v)
 {
     return v == Version.SSE_AVX ? [SIMD.AVX] : [];
+}
+
+@property supportedOnHost(Version v)
+{
+    import core.cpuid;
+    
+    foreach(s; v.baseSIMD ~ v.additionalSIMD) with(SIMD)
+        if((s == SSE && !sse2) || (s == AVX && !avx) || s == Neon)
+            return false;
+
+    return true;
 }
 
 alias format fm;
@@ -159,10 +176,11 @@ void buildTests(string[] types, string dcpath, Compiler c, string outDir,
     }
 }
 
-void runBenchmarks(string[] types)
+void runBenchmarks(string[] types, Version v)
 {
     import std.parallelism;
 
+    foreach(impl; 0 .. 1 + v.additionalSIMD.length)
     foreach(type; types)
     {
         if(verbose)
@@ -174,8 +192,8 @@ void runBenchmarks(string[] types)
             auto r = taskPool.parallel(iota(4,21));
 
         foreach(i; r)
-            shell(fm("%s_%s -s -m 1000 direct \"%s\"", 
-                absolutePath("test"), type, i));
+            shell(fm(`%s_%s -s -m 1000 direct "%s" --impl "%s"`, 
+                absolutePath("test"), type, i, impl));
     }
 }
 
@@ -214,7 +232,7 @@ void buildLib(F)(
 {
     auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
  
-    auto implObjs = additionalSIMD(v)
+    auto implObjs = v.additionalSIMD
         .map!(s => buildAdditionalSIMD(
                 buildObj, v, s, types, dcpath, ccpath, dbg, flags))()
         .array().join(" ");
@@ -272,7 +290,7 @@ void buildGdc(Version v, string[] types, string dcpath,
         buildTests(types, dcpath, Compiler.GDMD, ".", 
             false, dbg, "-fprofile-generate -version=JustDirect " ~ flags);
         
-        runBenchmarks(types);
+        runBenchmarks(types, v);
         buildLib(&buildGdcObj, v, types, dcpath, ccpath, clib, dbg, 
             fm("-fprofile-use %s", flags));
     }
@@ -458,6 +476,16 @@ void doit(string[] args)
     else
     {
         Version v = parseVersion(simdOpt);
+
+        if(!v.supportedOnHost && !nopgo)
+        {
+            nopgo = true;
+            stderr.writefln(
+                "Building without the --no-pgo flag, but not all SIMD "
+                "instruction sets needed for \"--simd %s\" are supported on "
+                "host. Continuing with build, but with PGO turned off.", 
+                v.name);
+        }
 
         try rmdirRecurse(buildDir); catch{}
         mkdir(buildDir);

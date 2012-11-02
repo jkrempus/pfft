@@ -11,6 +11,9 @@ enum Action{ passes_first, passes, passes_last, bit_reverse, br_passes }
 import pfft.profile;
 mixin ProfileMixin!Action;
 
+//version(DMD) {} else
+    version = UseMergedBrPasses;
+
 struct Scalar(_T)
 {
     alias _T vec;
@@ -350,33 +353,37 @@ struct FFT(V, Options)
                 p[3 * i + 2] = a3;
             }
         }
-        
-        for(int s = log2n - n_bit_reversed_passes(log2n); s + 1 < log2n; s += 2)
-        {
-            alias Tuple!(vec, vec) VPair;
 
-            size_t m2 = (st!1 << s) / vec_size;
-            auto vp = (cast(VPair*) r) + m2;
-
-            foreach(i; 0 .. m2)
-                // move those elements so that we don't overwrite them
-                vp[m2 + m2 + i] = vp[m2 + i];
-            
-            foreach(i; 0 .. m2)
+        version(UseMergedBrPasses) 
+            for(
+                int s = log2n - n_bit_reversed_passes(log2n); 
+                s + 1 < log2n; 
+                s += 2)
             {
-                VPair a1 = vp[m2 + m2 + i];
-                VPair a2, a3;
+                alias Tuple!(vec, vec) VPair;
 
-                a2[0] = a1[0] * a1[0] - a1[1] * a1[1];
-                a2[1] = a1[0] * a1[1] + a1[1] * a1[0];
-                a3[0] = a2[0] * a1[0] - a2[1] * a1[1];
-                a3[1] = a2[0] * a1[1] + a2[1] * a1[0];
+                size_t m2 = (st!1 << s) / vec_size;
+                auto vp = (cast(VPair*) r) + m2;
+
+                foreach(i; 0 .. m2)
+                    // move those elements so that we don't overwrite them
+                    vp[m2 + m2 + i] = vp[m2 + i];
                 
-                vp[3 * i] = a1;
-                vp[3 * i + 1] = a2;
-                vp[3 * i + 2] = a3;
+                foreach(i; 0 .. m2)
+                {
+                    VPair a1 = vp[m2 + m2 + i];
+                    VPair a2, a3;
+
+                    a2[0] = a1[0] * a1[0] - a1[1] * a1[1];
+                    a2[1] = a1[0] * a1[1] + a1[1] * a1[0];
+                    a3[0] = a2[0] * a1[0] - a2[1] * a1[1];
+                    a3[1] = a2[0] * a1[1] + a2[1] * a1[0];
+                    
+                    vp[3 * i] = a1;
+                    vp[3 * i + 1] = a2;
+                    vp[3 * i + 2] = a3;
+                }
             }
-        }
     }
 
     alias void* Table;
@@ -559,12 +566,13 @@ struct FFT(V, Options)
         table += start_stride + start_stride;
         vec* re_end = re + N;
         size_t m2 = start_stride;
-
-        for(; m2 < N / 2; m2 <<= 2)
-        {
-            fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
-            table += 6 * m2;
-        }
+        
+        version(UseMergedBrPasses)
+            for(; m2 < N / 2; m2 <<= 2)
+            {
+                fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
+                table += 6 * m2;
+            }
 
         for(; m2 < N; m2 <<= 1)
         {
@@ -1244,7 +1252,11 @@ mixin template Instantiate()
     {
         auto selected(A...)(A args)
         {
-            auto impl = implementation;
+            static if(is(typeof(implementation)))
+                auto impl = implementation.get();
+            else
+                enum impl = 0;
+    
             foreach(i, F; FFTs)
                 if(i == impl)
                 {
@@ -1342,4 +1354,10 @@ mixin template Instantiate()
     {
         selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
     }
-}    
+
+    void set_implementation(int i)
+    {
+        static if(is(typeof(implementation.set)))
+            implementation.set(i);
+    }
+}

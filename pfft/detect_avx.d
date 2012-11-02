@@ -49,7 +49,7 @@ private void set_avx_state()
     avx_state = r | 2;  
 }
 
-@property get()()
+int get()()
 {
     if(!avx_state)
         set_avx_state();
@@ -57,3 +57,7 @@ private void set_avx_state()
     return avx_state & 1;
 }
 
+void set()(int i)
+{
+    avx_state = i | 2; 
+}
