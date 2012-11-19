@@ -180,6 +180,7 @@ void runBenchmarks(string[] types, Version v)
 {
     import std.parallelism;
 
+    foreach(isReal; [false])        // only profile complex transforms for now
     foreach(impl; 0 .. 1 + v.additionalSIMD.length)
     foreach(type; types)
     {
@@ -192,8 +193,8 @@ void runBenchmarks(string[] types, Version v)
             auto r = taskPool.parallel(iota(4,21));
 
         foreach(i; r)
-            shell(fm(`%s_%s -s -m 1000 direct "%s" --impl "%s"`, 
-                absolutePath("test"), type, i, impl));
+            shell(fm(`%s_%s -s -m 1000 direct "%s" --impl "%s" %s`, 
+                absolutePath("test"), type, i, impl, isReal ? "-r" : ""));
     }
 }
 

@@ -33,7 +33,7 @@ auto vshell(string cmd, int vcmd, int vout)
 }
 
 
-void test()
+void test(string common = "")
 {
     auto toleratedError = [
         "float" : 1e-6,
@@ -46,7 +46,7 @@ void test()
     foreach(log2n;  iota(1, 21))
     {
         auto path =  absolutePath(fm("test_%s", type));
-        auto cmd = fm(`%s %s %s "%s"`, path, flags, impl, log2n);
+        auto cmd = fm(`%s %s %s "%s" %s`, path, flags, impl, log2n, common);
         scope(failure)
             writefln("Error when executing %s.", cmd);
 
@@ -119,10 +119,11 @@ void all()
 
 void main(string[] args)
 {
-    getopt(args, "v", &verbose);
+    string flags = "";
+    getopt(args, "v", &verbose, "flags", &flags);
 
     if(args[1 .. $] == ["all"])
         all();
     else
-        test();
+        test(flags);
 }

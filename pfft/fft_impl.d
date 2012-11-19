@@ -462,10 +462,12 @@ struct FFT(V, Options)
         return tables;
     }
 
-    static void two_passes_inner(
+    /*static void two_passes_inner(
         vec* pr, vec* pi, size_t k0, size_t k1, size_t k2, size_t k3,
         vec w1r, vec w1i, vec w2r, vec w2i, vec w3r, vec w3i)
-    {
+    {*/
+
+    enum two_passes_inner = q{
         vec tr, ur, ti, ui;
 
         vec r0 = pr[k0];
@@ -517,7 +519,7 @@ struct FFT(V, Options)
         pi[k1] = i1;
         pi[k2] = i2;
         pi[k3] = i3;
-    }
+    };
  
     static void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
@@ -548,14 +550,19 @@ struct FFT(V, Options)
         for(; pr < pend ; pr += m, pi += m)
         {
             for (
-                size_t k0 = 0, k1 = m4, k2 = m2, k3 = m2 + m4; 
+                size_t k0 = 0, k2 = m4, k1 = m2, k3 = m2 + m4; 
                 k0 < m4; 
                 k0++, k1++, k2++, k3++) 
             {
                 auto t = table + 6 * k0;
+                auto 
+                    w1r = t[0], w1i = t[1], 
+                    w2r = t[2], w2i = t[3], 
+                    w3r = t[4], w3i = t[5];
+                mixin(two_passes_inner);
                 // bit reversed order of indices!
-                two_passes_inner(
-                    pr, pi, k0, k2, k1, k3, t[0], t[1], t[2], t[3], t[4], t[5]);
+                //two_passes_inner(
+                    //pr, pi, k0, k2, k1, k3, t[0], t[1], t[2], t[3], t[4], t[5]);
             }
         }
     }
@@ -688,8 +695,9 @@ struct FFT(V, Options)
                 k0 < m4; 
                 k0++, k1++, k2++, k3++) 
             {
-                two_passes_inner(
-                    pr, pi, k0, k1, k2, k3, w1r, w1i, w2r, w2i, w3r, w3i);
+                /*two_passes_inner(
+                    pr, pi, k0, k1, k2, k3, w1r, w1i, w2r, w2i, w3r, w3i);*/
+                mixin(two_passes_inner);
             }
         }
     }
