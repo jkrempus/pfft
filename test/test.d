@@ -764,7 +764,7 @@ void precision(F, Transfer transfer, bool isInverse)(int log2n, long flops)
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 
     }
-    writeln(std.math.sqrt(sumSqDiff / sumSqAvg));
+    writeln(cast(double) std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
 void runTest(bool testSpeed, Transfer transfer, bool isInverse)(

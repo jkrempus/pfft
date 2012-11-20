@@ -14,8 +14,9 @@ mixin ProfileMixin!Action;
 //version(DMD) {} else
     version = UseMergedBrPasses;
 
-struct Scalar(_T)
+struct Scalar(_T, A...)
 {
+    enum{ isScalar }
     alias _T vec;
     alias _T T;
     
@@ -198,7 +199,7 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
 }
 
 struct FFT(V, Options)
-{    
+{
     import core.bitop, core.stdc.stdlib;
    
     alias BitReverse!(V, Options) BR;
@@ -206,7 +207,10 @@ struct FFT(V, Options)
     alias V.vec_size vec_size;
     alias V.T T;
     alias V.vec vec;
-    alias FFT!(Scalar!T, Options) SFFT;
+
+    enum isScalar = is(typeof(V.isScalar));
+    static if(!isScalar)
+        alias FFT!(Scalar!(T, V), Options) SFFT;
  
     import cmath = core.stdc.math;
 
@@ -862,8 +866,9 @@ struct FFT(V, Options)
                 fft_pass(pr, pi, pr + N, table + tableI, m2);
                 tableI *= 2;
             }
-            
-            fft_passes_fractional(pr, pi, pr + N, table, tableI);
+           
+            static if(!isScalar) 
+                fft_passes_fractional(pr, pi, pr + N, table, tableI);
 
             return;
         }
@@ -937,10 +942,11 @@ struct FFT(V, Options)
         auto N = st!1 << log2n;
         fft_passes!(true)(v(re), v(im), N / vec_size, 1, 
             twiddle_table_ptr(tables, log2n));
-        
-        fft_passes_fractional(
-            v(re), v(im), v(re) + N / vec_size,
-            twiddle_table_ptr(tables, log2n), 0);
+       
+        static if(!isScalar) 
+            fft_passes_fractional(
+                v(re), v(im), v(re) + N / vec_size,
+                twiddle_table_ptr(tables, log2n), 0);
 
         bit_reverse_small_two!(log2(vec_size) + 1)(
             re, im, log2n, br_table_ptr(tables, log2n));
@@ -1023,7 +1029,10 @@ struct FFT(V, Options)
         if(log2n < 2)
             return cast(RTable) p;
         else if(st!1 << log2n < 4 * vec_size)
-            return SFFT.rfft_table(log2n, p);
+	{
+            static if(!isScalar)
+                return SFFT.rfft_table(log2n, p);
+	}
 
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
 
@@ -1080,8 +1089,9 @@ struct FFT(V, Options)
     static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
-        if(st!1 << log2n < 4 * vec_size)
-            return SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable);       
+        static if(!isScalar)
+            if(st!1 << log2n < 4 * vec_size)
+                return SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable);       
  
         static vec* v(T* a){ return cast(vec*) a; }
 
@@ -1166,15 +1176,16 @@ struct FFT(V, Options)
     {
         static if(is(typeof(V.interleave)))
         {
-            if(n < vec_size)
-                SFFT.interleave_array(even, odd, interleaved, n);
-            else
-                foreach(i; 0 .. n / vec_size)
-                    V.interleave(
-                        (cast(vec*)even)[i], 
-                        (cast(vec*)odd)[i], 
-                        (cast(vec*)interleaved)[i * 2], 
-                        (cast(vec*)interleaved)[i * 2 + 1]);
+            static if(!isScalar)
+                if(n < vec_size)
+                    return SFFT.interleave_array(even, odd, interleaved, n);
+
+            foreach(i; 0 .. n / vec_size)
+                V.interleave(
+                    (cast(vec*)even)[i], 
+                    (cast(vec*)odd)[i], 
+                    (cast(vec*)interleaved)[i * 2], 
+                    (cast(vec*)interleaved)[i * 2 + 1]);
         }
         else
             foreach(i; 0 .. n)
@@ -1188,15 +1199,16 @@ struct FFT(V, Options)
     {
         static if(is(typeof(V.deinterleave)))
         {
-            if(n < vec_size)
-                SFFT.deinterleave_array(even, odd, interleaved, n);
-            else
-                foreach(i; 0 .. n / vec_size)
-                    V.deinterleave(
-                        (cast(vec*)interleaved)[i * 2], 
-                        (cast(vec*)interleaved)[i * 2 + 1], 
-                        (cast(vec*)even)[i], 
-                        (cast(vec*)odd)[i]);
+            static if(!isScalar)
+                if(n < vec_size)
+                    SFFT.deinterleave_array(even, odd, interleaved, n);
+
+            foreach(i; 0 .. n / vec_size)
+                V.deinterleave(
+                    (cast(vec*)interleaved)[i * 2], 
+                    (cast(vec*)interleaved)[i * 2 + 1], 
+                    (cast(vec*)even)[i], 
+                    (cast(vec*)odd)[i]);
         }
         else
             foreach(i; 0 .. n)

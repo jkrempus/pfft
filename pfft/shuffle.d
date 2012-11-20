@@ -293,7 +293,7 @@ struct BitReverse(alias V, Options)
     }
 }
 
-private struct Scalar(TT)
+private struct Scalar(TT, V)
 {
     public:
 
@@ -460,7 +460,7 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
         else if(n < 2 * V.vec_size)
             return 
                 InterleaveImpl!(
-                    Scalar!(V.T), V.vec_size / 2, is_inverse, swap_even_odd)
+                    Scalar!(V.T, V), V.vec_size / 2, is_inverse, swap_even_odd)
                     .interleave_tiny(p, n);
 
         assert(n >= 2 * V.vec_size);
@@ -495,6 +495,6 @@ template Interleave(
             Interleave;
     else
         alias 
-            InterleaveImpl!(Scalar!(V.T), chunk_size, is_inverse, swap_even_odd) 
+            InterleaveImpl!(Scalar!(V.T, V), chunk_size, is_inverse, swap_even_odd) 
             Interleave;
 }
