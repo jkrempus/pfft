@@ -74,18 +74,23 @@ else
 	enum clibPath = "lib/libpfft-c.a";
 }
 
-string libPath(bool clib){ return clib ? clibPath : dlibPath; }
-string cObjs(bool clib){ return clib ? "dummy.o clib.o" : ""; }
-
 version(linux)
     enum isLinux = true;
 else 
     enum isLinux = false;
 
+version(OSX)
+    enum isOSX = true;
+else 
+    enum isOSX = false;
+
 version(ARM)
     enum isARM = true;
 else 
     enum isARM = false;
+
+string libPath(bool clib){ return clib ? clibPath : dlibPath; }
+string cObjs(bool clib){ return clib ? "dummy.o clib.o" : ""; }
 
 string fixSeparators(string s)
 {
@@ -505,7 +510,7 @@ void doit(string[] args)
         types = ["double", "float", "real"];
 
     if(simdOpt == "")
-        simdOpt = (dc != Compiler.DMD && isLinux) ? "sse-avx" : "sse";
+        simdOpt = (dc != Compiler.DMD && !isOSX) ? "sse-avx" : "sse";
 
     auto buildDir = clib ? "generated-c" : "generated";
     if(tests)
