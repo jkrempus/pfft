@@ -288,16 +288,28 @@ void buildLdcObj(
 
     auto optOrDbg = dbg ? ldcDbg : ldcOpt;
 
-    mixin(ex(
-        "%{dcpath} -I.. %{optOrDbg} -singleobj %{flags} "
-             "-output-bc -ofpfft.bc -d-version=%{v} %{src}"));
+    auto llvmVerStr = shell("llvm-config --version");
 
-    if(!dbg) 
-        execute("opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc");
+    if(llvmVerStr[0 .. 3] == "3.3")
+    {
+        mixin(ex(
+            "%{dcpath} -I.. %{optOrDbg} -c -singleobj %{flags} "
+            "-of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
+    }
+    else
+    {
+        mixin(ex(
+            "%{dcpath} -I.. %{optOrDbg} -singleobj %{flags} "
+                 "-output-bc -ofpfft.bc -d-version=%{v} %{src}"));
 
-    mixin(ex(
-        "llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag}",
-        "%{ccpath} pfft.s -c -o%{objname}"));
+        if(!dbg) 
+            execute(
+                "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc");
+
+        mixin(ex(
+            "llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag}",
+            "%{ccpath} pfft.s -c -o%{objname}"));
+    }
 }
  
 void buildLdc(Version v, string[] types, string dcpath, 
