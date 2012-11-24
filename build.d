@@ -307,8 +307,9 @@ void buildLdcObj(
                 "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc");
 
         mixin(ex(
-            "llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag}",
-            "%{ccpath} pfft.s -c -o%{objname}"));
+            `llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag} `
+            `%{isOSX ? "-disable-cfi" : ""}`,
+            "as pfft.s -o%{objname}"));
     }
 }
  
