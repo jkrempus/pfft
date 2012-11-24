@@ -82,7 +82,7 @@ auto interpolate(string s)
     }
     enforce(state == State.text, "Can not interpolate the string");   
  
-    return "format(`"~fm~"`, "~args~")";
+    return "xformat(`"~fm~"`, "~args~")";
 }
 
 

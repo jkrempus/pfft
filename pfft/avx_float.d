@@ -17,70 +17,26 @@ version(GNU)
 
 version(LDC)
 {
-    pragma(shufflevector) 
-        float8 shufflevector(
-            float8, float8, int, int, int, int, int, int, int, int);
-
-    pragma(intrinsic, "llvm.x86.avx.storeu.ps.256")
-        void llvm_storeu_ps_256(void* p, float8 v);
-
-    void __builtin_ia32_storeups256(float* p, float8 v)
-    { 
-        return llvm_storeu_ps_256(p, v); 
-    }
-
-    pragma(intrinsic, "llvm.x86.avx.vinsertf128.ps.256")
-        float8 __builtin_ia32_vinsertf128_ps256(float8 a, float4 b, byte i);
-    
-    pragma(intrinsic, "llvm.x86.avx.vextractf128.ps.256")
-        float4 __builtin_ia32_vextractf128_ps256(float8 a, byte i);
+    import ldc.simd;
+    import ldc.gccbuiltins_x86;
 
     float8 shufps(int m0, int m1, int m2, int m3)(float8 a, float8 b)
     {
-        return shufflevector(
-            a, b, 
+        return shufflevector!(float8, 
             m3, m2, m1 + 8, m0 + 8, 
-            m3 + 4, m2 + 4, m1 + 12, m0 + 12);
+            m3 + 4, m2 + 4, m1 + 12, m0 + 12)(a, b);
     }
     
-    float8 interleave128_lo(float8 a, float8 b)
-    {
-        return shufflevector(a, b, 0, 1, 2, 3, 8, 9, 10, 11);
-    }
-    
-    float8 interleave128_hi(float8 a, float8 b)
-    {
-        return shufflevector(a, b, 4, 5, 6, 7, 12, 13, 14, 15);
-    }
-
-    float8 unpcklps(float8 a, float8 b)
-    {
-        return shufflevector(a, b, 0, 8, 1, 9, 4, 12, 5, 13); 
-    }
-    
-    float8 unpckhps(float8 a, float8 b)
-    {
-        return shufflevector(a, b, 2, 10, 3, 11, 6, 14, 7, 15); 
-    }
+    alias shufflevector!(float8, 0, 1, 2, 3, 8, 9, 10, 11) interleave128_lo;
+    alias shufflevector!(float8, 4, 5, 6, 7, 12, 13, 14, 15) interleave128_hi;
+    alias shufflevector!(float8, 0, 8, 1, 9, 4, 12, 5, 13) unpcklps;
+    alias shufflevector!(float8, 2, 10, 3, 11, 6, 14, 7, 15) unpckhps;
+    alias loadUnaligned!float8 loadups;
     
     float8 reverse128(float8 v)
     {
-        return shufflevector(v, v, 4, 5, 6, 7, 0, 1, 2, 3);
+        return shufflevector!(float8, 4, 5, 6, 7, 0, 1, 2, 3)(v, v);
     }
-    
-    float8 loadups(float* p)
-    {
-        union U
-        {
-            float8 v;
-            float[8] a;
-        }        
-        
-        U u;
-        u.a = *cast(float[8]*) p;
-        return u.v;
-    }
-
 }
 else version(GNU)
 {

@@ -11,35 +11,20 @@ import pfft.fft_impl;
 
 version(LDC)
 {
-    pragma(shufflevector) 
-        double4 shufflevector(
-            double4, double4, int, int, int, int);
+    import ldc.simd;
+    import ldc.gccbuiltins_x86;    
 
-    double4 interleave128_lo(double4 a, double4 b)
-    {
-        return shufflevector(a, b, 0, 1, 4, 5);
-    }
-    
-    double4 interleave128_hi(double4 a, double4 b)
-    {
-        return shufflevector(a, b, 2, 3, 6, 7);
-    }
-    
-    double4 unpcklpd(double4 a, double4 b)
-    {
-        return shufflevector(a, b, 0, 4, 2, 6); 
-    }
-    
-    double4 unpckhpd(double4 a, double4 b)
-    {
-        return shufflevector(a, b, 1, 5, 3, 7); 
-    }
+    alias shufflevector!(double4, 0, 1, 4, 5) interleave128_lo;
+    alias shufflevector!(double4, 2, 3, 6, 7) interleave128_hi;
+    alias shufflevector!(double4, 0, 4, 2, 6) unpcklpd;
+    alias shufflevector!(double4, 1, 5, 3, 7) unpckhpd;
+    alias loadUnaligned!double4 loadups;
+    alias __builtin_ia32_storeupd256 storeupd;
     
     double4 reverse_elements(double4 v)
     {
-        return shufflevector(v, v, 3, 2, 1, 0);
+        return shufflevector!(double4, 3, 2, 1, 0)(v, v);
     }
-    
 }
 else version(GNU)
 {

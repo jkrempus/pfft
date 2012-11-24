@@ -31,7 +31,6 @@ auto parseVersion(string simdOpt)
 }
 
 @property name(SIMD s) { return s.to!string.toLower; }
-@property str(A)(A a){ return a.to!string; }
 
 @property baseSIMD(Version v)
 {
@@ -243,7 +242,7 @@ void buildDmd(Version v, string[] types, string dcpath,
 
     mixin(ex(
         `%{dcpath} %{optOrDbg} -lib -of%{libPath(clib)} -I.. `
-        `-version=%{v.str} %{src} %{flags} %{cObjs(clib)}`)); 
+        `-version=%{v} %{src} %{flags} %{cObjs(clib)}`)); 
 }
 
 string buildAdditionalSIMD(F)(
@@ -291,7 +290,7 @@ void buildLdcObj(
 
     mixin(ex(
         "%{dcpath} -I.. %{optOrDbg} -singleobj %{flags} "
-             "-output-bc -ofpfft.bc -d-version=%{v.str} %{src}"));
+             "-output-bc -ofpfft.bc -d-version=%{v} %{src}"));
 
     if(!dbg) 
         execute("opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc");
@@ -320,7 +319,7 @@ void buildGdcObj(
     auto optOrDbg = dbg ? gdcDbg : gdcOpt; 
 
     mixin(ex(
-        `%{dcpath} %{optOrDbg} -fversion=%{v.str} `
+        `%{dcpath} %{optOrDbg} -fversion=%{v} `
         `%{archFlags} %{flags} %{src} -o %{objname} -c -I..`)); 
 }
  
@@ -345,8 +344,13 @@ void buildGdc(Version v, string[] types, string dcpath,
 
 void buildCObjects(Compiler dc, string[] types, string dcpath, string ccpath)
 {
-    auto buildObj = dc == Compiler.LDC ? &buildLdcObj : &buildGdcObj;    
-    auto typeFlags = join(map!(a => "-version=" ~ capitalize(a))(types), " "); 
+    auto buildObj = dc == Compiler.LDC ? &buildLdcObj : &buildGdcObj;
+    auto versionSyntax =
+        dc == Compiler.DMD ? "-version=" :
+        dc == Compiler.GDC ? "-fversion=" : "-d-version=";
+
+    auto typeFlags = types.map!(a => versionSyntax ~ capitalize(a)).join(" ");
+
     auto src = fixSeparators("../pfft/clib.d");
   
     buildObj(
