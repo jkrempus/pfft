@@ -25,6 +25,8 @@ auto parseVersion(string simdOpt)
         "scalar": Version.Scalar][simdOpt];
 }
 
+T when(T)(bool condition, T r){ return condition ? r : T.init; }
+
 @property name(Version v)
 {
     return v.to!string.toLower.replace("_", "-"); 
@@ -234,7 +236,8 @@ void runBenchmarks(string[] types, Version v)
             auto base = absolutePath("test");
             auto rFlag = isReal ? "-r" : "";
             mixin(ex(
-                `%{base}_%{type} -s -m 1000 direct "%{i}" --impl "%{impl}" %{rFlag}`));
+                `%{base}_%{type} -s -m 1000 direct "%{i}" --impl "%{impl}" `
+                `%{rFlag}`));
         }
     }
 }
@@ -247,12 +250,12 @@ void buildDmd(Version v, string[] types, string dccmd,
 
     mixin(ex(
         `%{dccmd} %{optOrDbg} -lib -of%{libPath(clib)} -I.. `
-        `-version=%{v} %{src} %{cObjs(clib)} -fPIC`)); 
+        `-version=%{v} %{src} %{cObjs(clib)} %{when(clib, "-fPIC")}`)); 
 }
 
 string buildAdditionalSIMD(F)(
     F buildObj, Version v, SIMD simd, string[] types, 
-    string dccmd, string cccmd, bool dbg)
+    string dccmd, string cccmd, bool dbg, bool pic)
 {
     types = types.filter!(
             t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
@@ -261,7 +264,7 @@ string buildAdditionalSIMD(F)(
     auto src = implSources(simd, types);
     auto fname = simd.name ~ ".o";
     
-    buildObj(src, fname, v, simd, dccmd, cccmd, dbg);
+    buildObj(src, fname, v, simd, dccmd, cccmd, dbg, pic);
 
     return fname;
 }
@@ -277,10 +280,10 @@ void buildLib(F0, F1)(
  
     auto implObjs = v.additionalSIMD
         .map!(s => buildAdditionalSIMD(
-                buildObj, v, s, types, dccmd, cccmd, dbg))()
+                buildObj, v, s, types, dccmd, cccmd, dbg, clib))()
         .array().join(" ");
  
-    buildObj(src, "pfft.o", v, v.baseSIMD, dccmd, cccmd, dbg);
+    buildObj(src, "pfft.o", v, v.baseSIMD, dccmd, cccmd, dbg, clib);
 
     mixin(ex(`ar cr %{libPath(clib)} pfft.o %{cObjs(clib)} %{implObjs}`)); 
     
@@ -290,7 +293,7 @@ void buildLib(F0, F1)(
 
 void buildLdcObj(
     string src, string objname, Version v, SIMD simd, 
-    string dccmd, string cccmd, bool dbg)
+    string dccmd, string cccmd, bool dbg, bool pic)
 {
     auto mattrFlag =  
         simd == SIMD.Scalar ? "" :
@@ -300,11 +303,12 @@ void buildLdcObj(
     auto optOrDbg = dbg ? ldcDbg : ldcOpt;
 
     auto llvmVerStr = shell("llvm-config --version");
+    auto picFlag = when(pic, "-relocation-model=pic");
 
     if(["3.2", "3.3"].canFind(llvmVerStr[0 .. 3]))
     {
         mixin(ex(
-            "%{dccmd} -I.. %{optOrDbg} -c -singleobj -relocation-model=pic "
+            `%{dccmd} -I.. %{optOrDbg} -c -singleobj %{picFlag} `
             "of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
     }
     else
@@ -319,7 +323,7 @@ void buildLdcObj(
 
         mixin(ex(
             `llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag} `
-            `%{isOSX ? "-disable-cfi" : ""} -relocation-model=pic`,
+            `%{isOSX ? "-disable-cfi" : ""} %{picFlag}`,
             "as pfft.s -o%{objname}"));
     }
 }
@@ -344,7 +348,7 @@ void buildGdcShared(string dccmd, string objname, string implObjs)
 
 void buildGdcObj(
     string src, string objname, Version v, SIMD simd, 
-    string dccmd, string cccmd, bool dbg)
+    string dccmd, string cccmd, bool dbg, bool pic)
 {
     auto archFlags = [
         SIMD.SSE:    "-msse2", 
@@ -355,7 +359,7 @@ void buildGdcObj(
     auto optOrDbg = dbg ? gdcDbg : gdcOpt; 
 
     mixin(ex(
-        `%{dccmd} %{optOrDbg} -fversion=%{v} -fPIC `
+        `%{dccmd} %{optOrDbg} -fversion=%{v} %{when(pic, "-fPIC")}`
         `%{archFlags} %{src} -o %{objname} -c -I..`)); 
 }
  
@@ -392,7 +396,7 @@ void buildCObjects(Compiler dc, string[] types, string dccmd, string cccmd)
   
     buildObj(
         src, "clib.o", Version.Scalar, SIMD.Scalar, 
-        mixin(itp("%{dccmd} %{typeFlags}")), cccmd, false); 
+        mixin(itp("%{dccmd} %{typeFlags}")), cccmd, false, true); 
 
     mixin(ex(`%{cccmd} ../c/dummy.c -c`)); 
 }
