@@ -46,7 +46,7 @@ T when(T)(bool condition, T r){ return condition ? r : T.init; }
 
 @property additionalSIMD(Version v)
 {
-    return v == Version.SSE_AVX ? [SIMD.AVX] : [];
+    return when(v == Version.SSE_AVX, [SIMD.AVX]);
 }
 
 @property supportedOnHost(Version v)
@@ -96,7 +96,7 @@ else
     enum isARM = false;
 
 string libPath(bool clib){ return clib ? clibPath : dlibPath; }
-string cObjs(bool clib){ return clib ? "dummy.o clib.o" : ""; }
+string cObjs(bool clib){ return when(clib, "dummy.o clib.o"); }
 
 string fixSeparators(string s)
 {
@@ -159,7 +159,7 @@ string sources(Version v, string[] types, string[] additional)
         map!q{"impl_" ~ a}(types).array() ~
         ["fft_impl", "shuffle"] ~
         additional ~ 
-        (v == Version.SSE_AVX ? ["detect_avx"] : []); 
+        when(v == Version.SSE_AVX, ["detect_avx"]); 
 
     return join(map!fileName(m), " "); 
 }
@@ -190,27 +190,24 @@ void buildTests(string[] types, string dccmd, Compiler c, string outDir,
         final switch(c)
         {
             case Compiler.DMD:
-                auto opt = optimized ? dmdOpt : " ";
-                opt ~= dbg ? dmdDbg : ""; 
                 mixin(ex(
-                    `%{dccmd} %{opt} -version=%{clibVersion} `
-                    `-of%{binPath} -version=%{common}`));
+                    `%{dccmd} -version=%{clibVersion} `
+                    `-of%{binPath} -version=%{common} `
+                    `%{when(optimized, dmdOpt)} %{when(dbg, dmdDbg)}`));
                 break;
 
             case Compiler.GDC:
-                auto opt = optimized ? gdcOpt : " ";
-                opt ~= dbg ? gdcDbg : ""; 
                 mixin(ex(
-                    `%{dccmd} %{opt} -fversion=%{clibVersion} `
-                    `-o %{binPath} -fversion=%{common}`));
+                    `%{dccmd} -fversion=%{clibVersion} `
+                    `-o %{binPath} -fversion=%{common} `
+                    `%{when(optimized, gdcOpt)} %{when(dbg, gdcDbg)}`));
                 break;
             
             case Compiler.LDC:
-                auto opt = optimized ? ldcOpt : " ";
-                opt ~= dbg ? ldcDbg : "";
                 mixin(ex(
-                    "%{dccmd} %{opt} -d-version=%{clibVersion} "
-                    "-of%{binPath} -d-version=%{common} -linkonce-templates"));
+                    `%{dccmd} -d-version=%{clibVersion} `
+                    `-of%{binPath} -d-version=%{common} -linkonce-templates `
+                    `%{when(optimized, ldcOpt)} %{when(dbg, ldcDbg)}`));
         }
     }
 }
@@ -234,7 +231,7 @@ void runBenchmarks(string[] types, Version v)
         foreach(i; r)
         {
             auto base = absolutePath("test");
-            auto rFlag = isReal ? "-r" : "";
+            auto rFlag = when(isReal, "-r");
             mixin(ex(
                 `%{base}_%{type} -s -m 1000 direct "%{i}" --impl "%{impl}" `
                 `%{rFlag}`));
@@ -245,7 +242,7 @@ void runBenchmarks(string[] types, Version v)
 void buildDmd(Version v, string[] types, string dccmd, 
     string cccmd, bool clib, bool dbg)
 {
-    auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
+    auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
 
     mixin(ex(
@@ -276,7 +273,7 @@ void buildLib(F0, F1)(
     F0 buildObj, F1 buildShared, Version v, string[] types, string dccmd, 
     string cccmd, bool clib, bool dbg)
 {
-    auto src = sources(v, types, clib ? [] : ["stdapi", "pfft"]);
+    auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
  
     auto implObjs = v.additionalSIMD
         .map!(s => buildAdditionalSIMD(
@@ -323,7 +320,7 @@ void buildLdcObj(
 
         mixin(ex(
             `llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag} `
-            `%{isOSX ? "-disable-cfi" : ""} %{picFlag}`,
+            `%{when(isOSX, "-disable-cfi")} %{picFlag}`,
             "as pfft.s -o%{objname}"));
     }
 }
