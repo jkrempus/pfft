@@ -290,7 +290,7 @@ void buildLdcObj(
 
     auto llvmVerStr = shell("llvm-config --version");
 
-    if(llvmVerStr[0 .. 3] == "3.3")
+    if(["3.2", "3.3"].canFind(llvmVerStr[0 .. 3]))
     {
         mixin(ex(
             "%{dcpath} -I.. %{optOrDbg} -c -singleobj %{flags} "
