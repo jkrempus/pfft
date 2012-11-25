@@ -186,6 +186,8 @@ private template code(string type, string suffix, string Suffix)
     `;
 }
 
+export:
+
 version(Float)
     mixin(code!("float", "f", "F"));
 
