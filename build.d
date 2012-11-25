@@ -340,7 +340,7 @@ void buildGdcShared(string dccmd, string objname, string implObjs)
  
     mixin(ex(
         `%{dccmd} -shared -o %{dynLibPath} %{objname} %{cObjs(true)} `
-        `%{implObjs} %{def}`)); 
+        `%{implObjs} %{def} -nophoboslib`)); 
 }
 
 void buildGdcObj(
@@ -356,7 +356,7 @@ void buildGdcObj(
     auto optOrDbg = dbg ? gdcDbg : gdcOpt; 
 
     mixin(ex(
-        `%{dccmd} %{optOrDbg} -fversion=%{v} %{when(pic, "-fPIC")}`
+        `%{dccmd} %{optOrDbg} -fversion=%{v} %{when(pic, "-fPIC")} `
         `%{archFlags} %{src} -o %{objname} -c -I..`)); 
 }
  
@@ -395,7 +395,7 @@ void buildCObjects(Compiler dc, string[] types, string dccmd, string cccmd)
         src, "clib.o", Version.Scalar, SIMD.Scalar, 
         mixin(itp("%{dccmd} %{typeFlags}")), cccmd, false, true); 
 
-    mixin(ex(`%{cccmd} ../c/dummy.c -c`)); 
+    mixin(ex(`%{cccmd} -fPIC ../c/dummy.c -c`)); 
 }
 
 void copyIncludes(string[] types, bool clib)
