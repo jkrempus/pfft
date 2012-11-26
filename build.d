@@ -4,8 +4,8 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import std.stdio, std.process, std.string, std.array, std.algorithm, 
-       std.conv, std.range, std.getopt, std.file,
+import std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid, 
+       std.conv, std.range, std.getopt, std.file, std.regex, std.exception,
        std.path : absolutePath, dirSeparator;
 
 import interpolate : interpolate;
@@ -96,7 +96,7 @@ else
     enum isARM = false;
 
 string libPath(bool clib){ return clib ? clibPath : dlibPath; }
-string cObjs(bool clib){ return when(clib, "dummy.o clib.o"); }
+string cObjs(bool clib){ return when(clib, "druntime.o clib.o"); }
 
 string fixSeparators(string s)
 {
@@ -171,7 +171,8 @@ enum gdcDbg = "-fdebug -g";
 enum ldcOpt = "-O3 -release";
 enum ldcDbg = "-d-debug -g";
 
-void buildTests(string[] types, string dccmd, Compiler c, string outDir, 
+void buildTests(
+    string[] types, string dccmd, Compiler c, string outDir, 
     bool optimized = true, bool dbg = false)
 {
     auto srcPath = fixSeparators("../test/test.d");
@@ -239,8 +240,9 @@ void runBenchmarks(string[] types, Version v)
     }
 }
 
-void buildDmd(Version v, string[] types, string dccmd, 
-    string cccmd, bool clib, bool dbg)
+void buildDmd(
+    Version v, string[] types, string dccmd, 
+    bool clib, bool dbg)
 {
     auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
@@ -252,7 +254,7 @@ void buildDmd(Version v, string[] types, string dccmd,
 
 string buildAdditionalSIMD(F)(
     F buildObj, Version v, SIMD simd, string[] types, 
-    string dccmd, string cccmd, bool dbg, bool pic)
+    string dccmd, bool dbg, bool pic)
 {
     types = types.filter!(
             t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
@@ -261,7 +263,7 @@ string buildAdditionalSIMD(F)(
     auto src = implSources(simd, types);
     auto fname = simd.name ~ ".o";
     
-    buildObj(src, fname, v, simd, dccmd, cccmd, dbg, pic);
+    buildObj(src, fname, v, simd, dccmd, dbg, pic);
 
     return fname;
 }
@@ -276,16 +278,16 @@ void noShared(string dccmd, string objname, string implObjs)
 
 void buildLib(F0, F1)(
     F0 buildObj, F1 buildShared, Version v, string[] types, string dccmd, 
-    string cccmd, bool clib, bool dbg)
+    bool clib, bool dbg)
 {
     auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
  
     auto implObjs = v.additionalSIMD
         .map!(s => buildAdditionalSIMD(
-                buildObj, v, s, types, dccmd, cccmd, dbg, clib))()
+                buildObj, v, s, types, dccmd, dbg, clib))()
         .array().join(" ");
  
-    buildObj(src, "pfft.o", v, v.baseSIMD, dccmd, cccmd, dbg, clib);
+    buildObj(src, "pfft.o", v, v.baseSIMD, dccmd, dbg, clib);
 
     mixin(ex(`ar cr %{libPath(clib)} pfft.o %{cObjs(clib)} %{implObjs}`)); 
     
@@ -311,7 +313,7 @@ void buildLdcShared(string dccmd, string objname, string implObjs)
 
 void buildLdcObj(
     string src, string objname, Version v, SIMD simd, 
-    string dccmd, string cccmd, bool dbg, bool pic)
+    string dccmd, bool dbg, bool pic)
 {
     auto mattrFlag =  
         simd == SIMD.Scalar ? "" :
@@ -346,10 +348,9 @@ void buildLdcObj(
     }
 }
  
-void buildLdc(Version v, string[] types, string dccmd, 
-    string cccmd, bool clib, bool dbg)
+void buildLdc(Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
-    buildLib(&buildLdcObj, &buildLdcShared, v, types, dccmd, cccmd, clib, dbg); 
+    buildLib(&buildLdcObj, &buildLdcShared, v, types, dccmd, clib, dbg); 
 }
 
 void buildGdcShared(string dccmd, string objname, string implObjs)
@@ -366,7 +367,7 @@ void buildGdcShared(string dccmd, string objname, string implObjs)
 
 void buildGdcObj(
     string src, string objname, Version v, SIMD simd, 
-    string dccmd, string cccmd, bool dbg, bool pic)
+    string dccmd, bool dbg, bool pic)
 {
     auto archFlags = [
         SIMD.SSE:    "-msse2", 
@@ -382,26 +383,44 @@ void buildGdcObj(
 }
  
 void buildGdc(Version v, string[] types, string dccmd, 
-    string cccmd, bool pgo, bool clib, bool dbg)
+    bool pgo, bool clib, bool dbg)
 {
     if(pgo)
     {
         buildLib(&buildGdcObj, &noShared, v, types, 
-            dccmd ~ " -fprofile-generate ", cccmd, false, dbg);
+            dccmd ~ " -fprofile-generate ", false, dbg);
 
         buildTests(types, dccmd ~ " -fprofile-generate -fversion=JustDirect ", 
             Compiler.GDC, ".", false, dbg);
         
         runBenchmarks(types, v);
         buildLib(&buildGdcObj, &buildGdcShared, v, types, 
-            dccmd ~ " -fprofile-use", cccmd, clib, dbg);
+            dccmd ~ " -fprofile-use", clib, dbg);
     }
     else
-        buildLib(&buildGdcObj, &buildGdcShared, v, types, dccmd, cccmd, 
-            clib, dbg);
+        buildLib(&buildGdcObj, &buildGdcShared, v, types, dccmd, clib, dbg);
 }
 
-void buildCObjects(Compiler dc, string[] types, string dccmd, string cccmd)
+string getModuleLocation(string dccmd, string module_)
+{
+        auto dirName = randomUUID().toString();
+        mkdir(dirName);
+        auto prevPath = absolutePath(".");
+        chdir(dirName);
+
+        auto src = mixin(itp("import %{module_};")); 
+        std.file.write("tmp.d", cast(void[]) src);
+        mixin(ex("%{dccmd} -c -o- tmp.d -deps=out.deps"));
+        auto r = match(
+            readText("out.deps"), 
+            module_ ~ ` \(([^)]*)\)`).front[1];
+
+        chdir(prevPath);
+        std.file.rmdirRecurse(dirName);
+        return r;
+}
+
+void buildCObjects(Compiler dc, string[] types, string dccmd)
 {
     auto buildObj = dc == Compiler.LDC ? &buildLdcObj : &buildGdcObj;
     auto versionSyntax =
@@ -411,12 +430,17 @@ void buildCObjects(Compiler dc, string[] types, string dccmd, string cccmd)
     auto typeFlags = types.map!(a => versionSyntax ~ capitalize(a)).join(" ");
 
     auto src = fixSeparators("../pfft/clib.d");
-  
-    buildObj(
-        src, "clib.o", Version.Scalar, SIMD.Scalar, 
-        mixin(itp("%{dccmd} %{typeFlags}")), cccmd, false, true); 
 
-    mixin(ex(`%{cccmd} -fPIC ../c/dummy.c -c`)); 
+    buildObj(
+        "../pfft/clib.d", "clib.o", Version.Scalar, SIMD.Scalar, 
+        mixin(itp("%{dccmd} %{typeFlags}")), false, true); 
+ 
+    string bitopSrc = when(
+        dc == Compiler.LDC, getModuleLocation(dccmd, "core.bitop"));
+
+    buildObj(
+        bitopSrc ~ " ../pfft/druntime_stubs.d", "druntime.o", 
+        Version.Scalar, SIMD.Scalar, dccmd, false, true);
 }
 
 void copyIncludes(string[] types, bool clib)
@@ -480,7 +504,6 @@ Options:
   --dc DC               Specifies D compiler to use. DC must be one of DMD, 
                         GDC and LDC.
   --dc-cmd COMMAND      D compiler command (can include flags)
-  --cc-cmd COMMAND      A C compiler command (used when building with --clib,
                         can include flags).
   --simd SIMD           SIMD instruction set to use. Must be one of sse, avx,
                         neon, sse-avx and scalar. sse-avx builds both sse and
@@ -525,7 +548,6 @@ void doit(string[] args)
     auto simdOpt = "";
     string[] types;
     string dccmd = "";
-    string cccmd = "gcc";
     bool clib;
     bool nopgo;
     bool tests;
@@ -537,7 +559,6 @@ void doit(string[] args)
         "simd", &simdOpt, 
         "type", &types, 
         "dc-cmd", &dccmd, 
-        "cc-cmd", &cccmd,
         "clib", &clib,
         "dc", &dc,
         "tests", &tests,
@@ -602,14 +623,14 @@ void doit(string[] args)
         copyIncludes(types, clib);
 
         if(clib)
-            buildCObjects(dc, types, dccmd, cccmd);
+            buildCObjects(dc, types, dccmd);
         
         if(dc == Compiler.GDC)
-            buildGdc(v, types, dccmd, cccmd, !nopgo, clib, dbg);
+            buildGdc(v, types, dccmd, !nopgo, clib, dbg);
         else if(dc == Compiler.LDC)
-            buildLdc(v, types, dccmd, cccmd, clib, dbg);
+            buildLdc(v, types, dccmd, clib, dbg);
         else
-            buildDmd(v, types, dccmd, cccmd, clib, dbg);
+            buildDmd(v, types, dccmd, clib, dbg);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)

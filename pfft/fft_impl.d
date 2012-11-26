@@ -1292,8 +1292,19 @@ mixin template Instantiate()
                     else
                         return cast(Ret[0]) func(fargs);
                 }
-          
+            
             assert(false);
+            // work around using assert - ugly as fuck
+            /*{
+                alias FFTs[0] F; 
+                mixin("alias F." ~ func_name ~ " func;");
+                ParamTypeTuple!(func).type fargs;
+
+                static if(Ret.length == 0)
+                    return func(fargs);
+                else
+                    return cast(Ret[0]) func(fargs);
+            }*/
         }
     }
 

@@ -1,5 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
+module pfft.druntime_stubs;
+
+import core.stdc.stdlib, core.stdc.stdio;
+
+__gshared:
+extern(C):
 
 void* _Dmodule_ref;
 
@@ -61,5 +65,11 @@ void _D16TypeInfo_Pointer6__vtblZ()
 void _D13TypeInfo_Enum6__vtblZ()
 {
 	fputs("_D13TypeInfo_Enum6__vtblZ should not be called!\n", stderr);
+	abort();
+}
+
+void _d_assert(string file, uint line)
+{
+	fputs("_d_assert should not be called!\n", stderr);
 	abort();
 }
