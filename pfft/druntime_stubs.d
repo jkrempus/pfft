@@ -1,75 +1,40 @@
 module pfft.druntime_stubs;
 
-import core.stdc.stdlib, core.stdc.stdio;
+import core.stdc.stdlib, core.stdc.stdio, core.stdc.string;
 
-__gshared:
 extern(C):
 
-void* _Dmodule_ref;
+__gshared void* _Dmodule_ref;
 
-void _D15TypeInfo_Struct6__vtblZ()
+template stub(string name)
 {
-	fputs("_D15TypeInfo_Struct6__vtblZ should not be called!\n", stderr);
+    enum stub = `
+void `~name~`()
+{
+	fputs("`~name~` should not be called!\n", stderr);
 	abort();
 }
-
-void _D10TypeInfo_g6__initZ()
-{
-	fputs("_D10TypeInfo_g6__initZ should not be called!\n", stderr);
-	abort();
+`;
 }
 
-void _D10TypeInfo_i6__initZ()
-{
-	fputs("_D10TypeInfo_i6__initZ should not be called!\n", stderr);
-	abort();
-}
-
-void _D10TypeInfo_l6__initZ()
-{
-	fputs("_D10TypeInfo_l6__initZ should not be called!\n", stderr);
-	abort();
-}
-
-void _D10TypeInfo_m6__initZ()
-{
-	fputs("_D10TypeInfo_m6__initZ should not be called!\n", stderr);
-	abort();
-}
-
-void _D10TypeInfo_d6__initZ()
-{
-	fputs("_D10TypeInfo_d6__initZ should not be called!\n", stderr);
-	abort();
-}
-
-
-void _D10TypeInfo_k6__initZ()
-{
-	fputs("_D10TypeInfo_k6__initZ should not be called!\n", stderr);
-	abort();
-}
-
-void _D10TypeInfo_v6__initZ()
-{
-	fputs("_D10TypeInfo_v6__initZ should not be called!\n", stderr);
-	abort();
-}
-
-void _D16TypeInfo_Pointer6__vtblZ()
-{
-	fputs("_D16TypeInfo_Pointer6__vtblZ should not be called!\n", stderr);
-	abort();
-}
-
-void _D13TypeInfo_Enum6__vtblZ()
-{
-	fputs("_D13TypeInfo_Enum6__vtblZ should not be called!\n", stderr);
-	abort();
-}
+mixin(
+    stub!"_D15TypeInfo_Struct6__vtblZ" ~
+    stub!"_D10TypeInfo_g6__initZ" ~
+    stub!"_D10TypeInfo_i6__initZ" ~
+    stub!"_D10TypeInfo_l6__initZ" ~
+    stub!"_D10TypeInfo_m6__initZ" ~
+    stub!"_D10TypeInfo_d6__initZ" ~
+    stub!"_D10TypeInfo_k6__initZ" ~
+    stub!"_D10TypeInfo_v6__initZ" ~
+    stub!"_D16TypeInfo_Pointer6__vtblZ" ~
+    stub!"_D13TypeInfo_Enum6__vtblZ");
 
 void _d_assert(string file, uint line)
 {
-	fputs("_d_assert should not be called!\n", stderr);
+    auto cstr = cast(char*) malloc(file.length);
+    memcpy(cstr, file.ptr, file.length);
+    cstr[file.length - 1] = 0; 
+
+	fprintf(stderr, "assert failed on line %d in file %s!\n", line, cstr);
 	abort();
 }

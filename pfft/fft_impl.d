@@ -446,7 +446,7 @@ struct FFT(V, Options)
     {   
         if(log2n == 0)
             return p;
-        
+       
         Table tables = p;
         
         twiddle_table(log2n, cast(Pair *)(twiddle_table_ptr(tables, log2n)));
