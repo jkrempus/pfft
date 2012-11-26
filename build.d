@@ -80,7 +80,7 @@ else
 version(linux)
 {
     enum isLinux = true;
-    enum dynLibPath = "lib/libpfft.so";
+    enum dynLibPath = "lib/libpfft-c.so";
 }
 else 
     enum isLinux = false;
@@ -267,7 +267,12 @@ string buildAdditionalSIMD(F)(
 }
 
 
-void noShared(string dccmd, string objname, string implObjs){}
+void noShared(string dccmd, string objname, string implObjs)
+{
+    stderr.writeln(
+        "Note: when building pfft using DMD, "
+        "the shared library is not built.");
+}
 
 void buildLib(F0, F1)(
     F0 buildObj, F1 buildShared, Version v, string[] types, string dccmd, 
@@ -288,6 +293,22 @@ void buildLib(F0, F1)(
         buildShared(dccmd, "pfft.o", implObjs);
 }
 
+void buildLdcShared(string dccmd, string objname, string implObjs)
+{
+    version(Windows)
+    {
+        stderr.writeln(
+            "Note: when building pfft using LDC on Windows, "
+            "the shared library is not built.");
+        
+        return;
+    }
+ 
+    mixin(ex(
+        `%{dccmd} -shared -of%{dynLibPath} %{objname} %{cObjs(true)} `
+        `%{implObjs} -nodefaultlib`)); 
+}
+
 void buildLdcObj(
     string src, string objname, Version v, SIMD simd, 
     string dccmd, string cccmd, bool dbg, bool pic)
@@ -306,7 +327,7 @@ void buildLdcObj(
     {
         mixin(ex(
             `%{dccmd} -I.. %{optOrDbg} -c -singleobj %{picFlag} `
-            "of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
+            "-of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
     }
     else
     {
@@ -328,7 +349,7 @@ void buildLdcObj(
 void buildLdc(Version v, string[] types, string dccmd, 
     string cccmd, bool clib, bool dbg)
 {
-    buildLib(&buildLdcObj, &noShared, v, types, dccmd, cccmd, clib, dbg); 
+    buildLib(&buildLdcObj, &buildLdcShared, v, types, dccmd, cccmd, clib, dbg); 
 }
 
 void buildGdcShared(string dccmd, string objname, string implObjs)
@@ -515,8 +536,8 @@ void doit(string[] args)
     getopt(args, 
         "simd", &simdOpt, 
         "type", &types, 
-        "dc-path", &dccmd, 
-        "cc-path", &cccmd,
+        "dc-cmd", &dccmd, 
+        "cc-cmd", &cccmd,
         "clib", &clib,
         "dc", &dc,
         "tests", &tests,

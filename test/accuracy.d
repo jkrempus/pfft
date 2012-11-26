@@ -82,24 +82,24 @@ void all()
     version(linux)
     {
         auto flags = 
-            f("--dc GDMD", ["avx", "sse-avx", "sse", "scalar"]) ~
+            f("--dc GDC", ["avx", "sse-avx", "sse", "scalar"]) ~
             f("--dc LDC",  ["avx", "sse", "scalar"]) ~
             f("--dc DMD",  ["sse", "scalar"]) ~
-            f(`--dc DMD --dflags "-m32"`,  ["scalar"]) ~
-            f(`--dc GDMD --dflags "-m32"`, ["avx", "sse-avx", "sse", "scalar"]);
+            f(`--dc DMD --dc-cmd "dmd -m32"`,  ["scalar"]) ~
+            f(`--dc GDC --dc-cmd "gdc -m32"`, ["avx", "sse-avx", "sse", "scalar"]);
     }
     else version(OSX)
     {
         auto flags = 
-            f(`--dc DMD --dflags="-m32"`,  ["sse", "scalar"]) ~
+            f(`--dc DMD --dc-cmd="dmd -m32"`,  ["sse", "scalar"]) ~
             f("--dc DMD",  ["sse", "scalar"]);
     }
     else version(Windows)
     {
         auto flags = 
-            f("--dc GDMD --no-pgo", ["sse", "scalar"]) ~
+            f("--dc GDC --no-pgo", ["sse", "scalar"]) ~
             f("--dc DMD",  ["scalar"]) ~
-            f(`--dc GDMD --no-pgo --dflags "-m32"`, ["sse", "scalar"]);
+            f(`--dc GDC --no-pgo --dc-cmd "gdc -m32"`, ["sse", "scalar"]);
     }
     else
         static assert("Not supported on this platform.");
