@@ -25,7 +25,7 @@ auto parseVersion(string simdOpt)
         "scalar": Version.Scalar][simdOpt];
 }
 
-T when(T)(bool condition, T r){ return condition ? r : T.init; }
+T when(T)(bool condition, lazy T r){ return condition ? r : T.init; }
 
 @property name(Version v)
 {
