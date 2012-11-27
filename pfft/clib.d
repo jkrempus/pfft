@@ -8,8 +8,11 @@ module pfft.clib;
 import core.stdc.stdlib, core.bitop;
 
 version(Posix)
-    import core.sys.posix.stdlib; 
-    
+    import core.sys.posix.stdlib, core.sys.posix.unistd;
+
+T max(T)(T a, T b){ return a > b ? a : b; } 
+T min(T)(T a, T b){ return a < b ? a : b; } 
+
 static if(is(typeof(posix_memalign)))
 {
     auto allocate_aligned(size_t alignment, size_t size)
@@ -20,6 +23,13 @@ static if(is(typeof(posix_memalign)))
     }
 
     alias free free_aligned;
+
+    size_t alignment(alias F)(size_t n)
+    {
+        size_t page_size = sysconf(_SC_PAGESIZE);
+
+        return min(max(n, F.alignment(n)), page_size);  
+    }
 }
 else
 {
@@ -36,7 +46,28 @@ else
     void free_aligned(void* p)
     {
         free(*cast(void**)(p - (void*).sizeof)); 
-    } 
+    }
+
+    size_t alignment(alias F)(size_t n)
+    {
+        static if(is(typeof(sysconf)))
+            size_t page_size = sysconf(_SC_PAGESIZE);
+        else
+            // just take a guees in this case
+            enum page_size = 4096;
+
+        enum cache_line = 64;       
+
+            return page_size;
+ 
+        if(n < 5 * page_size)
+            // align to cache line at most to avoid wasting memory 
+            return min(max(n, F.alignment(n)), cache_line);
+        else
+            // aligne to page size, the increase of memory size isn't that
+            // signifficant in this case and this can improve performance
+            return page_size;
+    }
 }
 
 private void assert_power2(size_t n)
@@ -80,7 +111,7 @@ private template code(string type, string suffix, string Suffix)
             auto log2n = bsf(n);
 
             if(mem is null)
-                mem = allocate_aligned(impl_`~type~`.alignment((cast(size_t) 1) << log2n), 
+                mem = allocate_aligned(alignment!(impl_`~type~`)((cast(size_t) 1) << log2n), 
                     impl_`~type~`.table_size_bytes(log2n));
 
             return PfftTable`~Suffix~`(impl_`~type~`.fft_table(bsf(n), mem), log2n);
@@ -130,7 +161,7 @@ private template code(string type, string suffix, string Suffix)
             auto itable_size = impl_`~type~`.itable_size_bytes(log2n);
 
             auto sz = table_size + rtable_size + itable_size;
-            auto al = impl_`~type~`.alignment(sz);
+            auto al = alignment!(impl_`~type~`)(n);
 
             if(mem is null)
                 mem = allocate_aligned(al, sz);
@@ -174,7 +205,7 @@ private template code(string type, string suffix, string Suffix)
         {
             assert_power2(n);
 
-            auto p = allocate_aligned(impl_`~type~`.alignment(n), `~type~`.sizeof * n);
+            auto p = allocate_aligned(alignment!(impl_`~type~`)(n), `~type~`.sizeof * n);
 
             return cast(`~type~`*) p;
         }

@@ -160,13 +160,20 @@ extern(C) void pfft_irfft_f(float* data, PfftRTableF table);
 
 /**
 Returns appropriate alignment for use with functions in this module for a 
-memory block of size nbytes.
+memory block of size nbytes. This function returns the minimal alignment 
+that is needed for other functions to work correctly. Aligning memory 
+to a number of two that is greater than what this function returns 
+(for example aligning large arrays to page size) may improve performance 
+in some cases.
  */
 extern(C) size_t pfft_alignment_f(size_t nbytes);
 
 /**
 Returns a pointer to an array of size nelements, aligned apropriately for 
-use with functions in this module.
+use with functions in this module. The memory returned by this function
+is sometimes (it depends on nelements) aligned to a number of two that 
+is greater than what $(D pfft_alignment_f) returns in order to improve 
+performance. 
  */
 extern(C) float* pfft_allocate_f(size_t nelements);
 

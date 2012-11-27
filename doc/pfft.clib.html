@@ -205,7 +205,11 @@ make sure that the address <span class="funcparam">data</span> is a multiple of 
 <span class="currsymbol">pfft_alignment_f</span>(size_t <span class="funcparam">nbytes</span>);
 </span></dt>
 <dd>Returns appropriate alignment for use with functions in this module for a
-memory block of size <span class="funcparam">nbytes</span>.<br><br>
+memory block of size <span class="funcparam">nbytes</span>. This function returns the minimal alignment
+that is needed for other functions to work correctly. Aligning memory
+to a number of two that is greater than what this function returns
+(for example aligning large arrays to page size) may improve performance
+in some cases.<br><br>
 
 </dd>
 
@@ -213,7 +217,10 @@ memory block of size <span class="funcparam">nbytes</span>.<br><br>
 <span class="currsymbol">pfft_allocate_f</span>(size_t <span class="funcparam">nelements</span>);
 </span></dt>
 <dd>Returns a pointer to an array of size <span class="funcparam">nelements</span>, aligned apropriately for
-use with functions in this module.<br><br>
+use with functions in this module. The memory returned by this function
+is sometimes (it depends on <span class="funcparam">nelements</span>) aligned to a number of two that
+is greater than what <code>pfft_alignment_f</code> returns in order to improve
+performance.<br><br>
 
 </dd>
 
@@ -231,7 +238,7 @@ use with functions in this module.<br><br>
 <!--    <div id="docfooter">
             Page was generated with
             <a href="https://github.com/eldar/candydoc"><img src="candydoc/img/logo.png" style="vertical-align:middle; position:relative; top:-1px"></a>
-            on Thu Jul 19 07:35:44 2012
+            on Tue Nov 27 23:34:56 2012
 
         </td>-->
 <span id="packages" class="emptytag">

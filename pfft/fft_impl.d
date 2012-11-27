@@ -14,6 +14,8 @@ mixin ProfileMixin!Action;
 //version(DMD) {} else
     version = UseMergedBrPasses;
 
+T max(T)(T a, T b){ return a > b ? a : b; }
+
 struct Scalar(_T, A...)
 {
     enum{ isScalar }
@@ -802,8 +804,6 @@ struct FFT(V, Options)
             }
     }
   
-    // bug_killer below is a dummy parameter which apparently causes the DMD 
-    // stack alignment bug to go away. 
     static void fft_passes_strided(int l, int chunk_size)(
         vec * pr, vec * pi, size_t N , 
         ref T * table, ref size_t tableI, void* tmp_buffer, 
@@ -1241,19 +1241,9 @@ struct FFT(V, Options)
 
     static size_t alignment(size_t n)
     {
-        static if(is(typeof(Options.prefered_alignment)) && 
-            Options.prefered_alignment > vec.sizeof)
-        {
-            enum a = Options.prefered_alignment;
-        } 
-        else
-            enum a = vec.sizeof; 
-        
-        auto bytes = T.sizeof << bsr(n);
-        
-        bytes = bytes < a ? bytes : a;
-        return bytes > (void*).sizeof && (bytes & (bytes - 1)) == 0 ? 
-            bytes : (void*).sizeof;
+        enum pow2tsize = cast(size_t)1 << bsr(T.sizeof);
+        enum pow2vecsize = cast(size_t)1 << bsr(vec.sizeof);
+        return max(max(pow2tsize << n, (void*).sizeof), pow2vecsize);
     }
 }
 
