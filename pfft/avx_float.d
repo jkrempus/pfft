@@ -290,7 +290,6 @@ struct Options
     enum log2_optimal_n = 8;
     enum passes_per_recursive_call = 4;
     enum log2_recursive_passes_chunk_size = 4;
-    enum prefered_alignment = 4 * (1 << 10);
 }
 
 version(SSE_AVX)

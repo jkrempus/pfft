@@ -14,7 +14,6 @@ struct Options
     enum log2_optimal_n = 11;
     enum passes_per_recursive_call = 6;
     enum log2_recursive_passes_chunk_size = 6;
-    enum { fast_init }
 }
 
 alias Scalar!float Vector;
