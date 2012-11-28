@@ -12,7 +12,7 @@ import pfft.profile;
 mixin ProfileMixin!Action;
 
 //version(DMD) {} else
-    version = UseMergedBrPasses;
+    enum UseBrTwoPasses = true;
 
 T max(T)(T a, T b){ return a > b ? a : b; }
 T min(T)(T a, T b){ return a < b ? a : b; }
@@ -361,7 +361,7 @@ struct FFT(V, Options)
             }
         }
 
-        version(UseMergedBrPasses) 
+        static if(UseBrTwoPasses) 
             for(
                 int s = log2n - n_bit_reversed_passes(log2n); 
                 s + 1 < log2n; 
@@ -577,11 +577,16 @@ struct FFT(V, Options)
     static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride)
     {
+        version(DigitalMars)
+            // prevent inlining of this function to avoid stack alignment
+            // bug with latest DMD 2.061 from git
+            asm{ nop; }
+
         table += start_stride + start_stride;
         vec* re_end = re + N;
         size_t m2 = start_stride;
         
-        version(UseMergedBrPasses)
+        static if(UseBrTwoPasses)
             for(; m2 < N / 2; m2 <<= 2)
             {
                 fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
