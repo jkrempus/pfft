@@ -260,16 +260,7 @@ struct FFT(V, Options)
         }
     }
 
-    static int log2()(int a)
-    {
-        int r = 0;
-        while(a)
-        {
-            a >>= 1;
-            r++;
-        }
-        return r - 1;
-    }
+    alias bsr log2;
 
     static int n_bit_reversed_passes(int log2n)
     {
@@ -577,10 +568,10 @@ struct FFT(V, Options)
     static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride)
     {
-        version(DigitalMars)
+        //version(DigitalMars)
             // prevent inlining of this function to avoid stack alignment
             // bug with latest DMD 2.061 from git
-            asm{ nop; }
+            //asm{ nop; }
 
         table += start_stride + start_stride;
         vec* re_end = re + N;
