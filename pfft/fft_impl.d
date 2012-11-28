@@ -15,6 +15,7 @@ mixin ProfileMixin!Action;
     version = UseMergedBrPasses;
 
 T max(T)(T a, T b){ return a > b ? a : b; }
+T min(T)(T a, T b){ return a < b ? a : b; }
 
 struct Scalar(_T, A...)
 {
@@ -1243,7 +1244,7 @@ struct FFT(V, Options)
     {
         enum pow2tsize = cast(size_t)1 << bsr(T.sizeof);
         enum pow2vecsize = cast(size_t)1 << bsr(vec.sizeof);
-        return max(max(pow2tsize << n, (void*).sizeof), pow2vecsize);
+        return max(min(pow2vecsize, pow2tsize << bsr(n)), (void*).sizeof);
     }
 }
 

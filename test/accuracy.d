@@ -74,7 +74,7 @@ void build(string flags)
     chdir(dir); 
 }
 
-void all()
+void all(string commonFlags, bool skipDmd = false)
 {
     auto f = (string prepend, string[] simd) =>
         simd.map!(a => fm("%s --simd %s", prepend, a))().array();
@@ -106,7 +106,10 @@ void all()
     
     foreach(e; flags)
     {
-        build(e);
+        if(skipDmd && e.canFind("DMD"))
+            continue;
+
+        build(e ~ " " ~ commonFlags);
         scope(failure)
             writefln(
                 "Error when running tests for executables built with %s", e);
@@ -123,7 +126,10 @@ void main(string[] args)
     getopt(args, "v", &verbose, "flags", &flags);
 
     if(args[1 .. $] == ["all"])
-        all();
+    {
+        all("");
+        all("--debug", true);
+    }
     else
         test(flags);
 }

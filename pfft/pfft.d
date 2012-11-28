@@ -42,8 +42,8 @@ void main(string[] args)
 
     auto f = new F(n);
 
-    auto re = F.allocate(n);
-    auto im = F.allocate(n);
+    auto re = F.Array(n);
+    auto im = F.Array(n);
 
     foreach(i, _; re)
         readf("%s %s\n", &re[i], &im[i]);
@@ -61,7 +61,33 @@ final class Fft(T)
 
     int log2n;
     impl.Table table;
+
+/**
+A struct that wraps an array of T. The reason behind this struct is
+to ensure that the array will always be aligned properly for use with 
+other functions in this class. The memory layout of this struct is 
+identical to T[].
+ */
+    struct Array
+    {
+        private T[] _data;
+
+        ///
+        @property data(){ return _data; }
+        /// 
+        alias data this;
     
+        @disable this(); 
+
+        ///
+        auto this(size_t n)
+        {
+            auto p = cast(T*) GC.malloc(n * T.sizeof);
+            assert(((impl.alignment(n) - 1) & cast(size_t) p) == 0);
+            _data = p[0 .. n];
+        }
+    }
+
 /**
 The Fft constructor. The parameter is the size of data sets that $(D fft) and
 $(D ifft) will operate on. I will refer to this number as n in the rest of the 
@@ -80,15 +106,11 @@ constructor.
 Calculates discrete fourier transform. $(D_PARAM re) should contain the real
 part of the data and $(D_PARAM im) the imaginary part of the data. The method
 operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
-Both arrays must be properly aligned - to obtain a properly aligned array you can
-use $(D allocate).
  */  
-    void fft(T[] re, T[] im)
+    void fft(Array re, Array im)
     {
         assert(re.length == im.length); 
         assert(re.length == (st!1 << log2n));
-        assert(((impl.alignment(re.length) - 1) & cast(size_t) re.ptr) == 0);
-        assert(((impl.alignment(im.length) - 1) & cast(size_t) im.ptr) == 0);
         
         impl.fft(re.ptr, im.ptr, log2n, table);
     }
@@ -97,29 +119,16 @@ use $(D allocate).
 Calculates inverse discrete fourier transform scaled by n. The arguments have
 the same role as they do in $(D fft).
  */  
-    void ifft(T[] re, T[] im)
+    void ifft(Array re, Array im)
     {
         fft(im, re); 
     }
 
 /**
-Allocates an array that is aligned properly for use with $(D fft), $(D ifft) and
-$(D scale) methods.
+Scales an array data by factor k.
  */
-    static T[] allocate(size_t n)
+    static void scale(Array data, T k)
     {
-        auto r = cast(T*) GC.malloc(n * T.sizeof);
-        assert(((impl.alignment(n) - 1) & cast(size_t) r) == 0);
-        return r[0 .. n];
-    }
-
-/**
-Scales an array data by factor k. The array must be properly aligned. To obtain
-a properly aligned array, use $(D allocate).
- */
-    static void scale(T[] data, T k)
-    {
-        assert(((impl.alignment(data.length) - 1) & cast(size_t) data.ptr) == 0);
         impl.scale(data.ptr, data.length, k);
     }
 
@@ -147,7 +156,7 @@ void main(string[] args)
 
     auto f = new F(n);
 
-    auto data = F.allocate(n);
+    auto data = F.Array(n);
 
     foreach(ref e; data)
         readf("%s\n", &e);
@@ -167,6 +176,9 @@ final class Rfft(T)
     Fft!T _complex;
     impl.RTable rtable;
     impl.ITable itable;
+
+/// An alias for Fft!T.Array
+    alias Fft!(T).Array Array;
 
 /**
 The Rfft constructor. The parameter is the size of data sets that $(D rfft) will 
@@ -203,13 +215,11 @@ calculated from the relation $(I DFT(f)[i] = DFT(f)[n - i]*) that holds
 because the input sequence is real. 
 
 
-The length of the array must be equal to n and the array must be properly 
-aligned. To obtain a properly aligned array you can use $(D allocate).
+The length of the array must be equal to n.
  */  
-    void rfft(T[] data)
+    void rfft(Array data)
     {
         assert(data.length == (st!1 << log2n));
-        assert(((impl.alignment(data.length) - 1) & cast(size_t) data.ptr) == 0);
         
         impl.deinterleave(data.ptr, log2n, itable);
         impl.rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
@@ -225,20 +235,15 @@ can be calculated from $(I DFT(f)[i] = DFT(f)[n - i]*). When the method
 completes, the array contains the real part of the inverse discrete fourier 
 transform. The imaginary part is known to be equal to 0.
 
-The length of the array must be equal to n and the array must be properly 
-aligned. To obtain a properly aligned array you can use $(D allocate).
+The length of the array must be equal to n.
  */
-    void irfft(T[] data)
+    void irfft(Array data)
     {
         assert(data.length == (st!1 << log2n));
-        assert(((impl.alignment(data.length) - 1) & cast(size_t) data.ptr) == 0);
      
         impl.irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
         impl.interleave(data.ptr, log2n, itable);
     }
-
-/// An alias for Fft!T.allocate
-    alias Fft!(T).allocate allocate;
 
 /// An alias for Fft!T.scale
     alias Fft!(T).scale scale;

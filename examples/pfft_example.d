@@ -24,8 +24,8 @@ void main(string[] args)
 
     auto f = new F(n);
 
-    auto re = F.allocate(n);
-    auto im = F.allocate(n);
+    auto re = F.Array(n);
+    auto im = F.Array(n);
 
     foreach(i, _; re)
         readf("%s %s\n", &re[i], &im[i]);

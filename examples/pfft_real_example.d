@@ -23,7 +23,7 @@ void main(string[] args)
 
     auto f = new F(n);
 
-    auto data = F.allocate(n);
+    auto data = F.Array(n);
 
     foreach(ref e; data)
         readf("%s\n", &e);

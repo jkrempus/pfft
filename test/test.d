@@ -337,8 +337,8 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
    
     alias Fft!T F; 
     F f;
-    T[] _re;
-    T[] _im;
+    F.Array _re;
+    F.Array _im;
     int log2n;
     
     this(int log2n)
@@ -346,8 +346,8 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
         this.log2n = log2n;
         size_t n = 1U << log2n; 
         f = new F(n);
-        _re = F.allocate(n);
-        _im = F.allocate(n);
+        _re = F.Array(n);
+        _im = F.Array(n);
         _re[] = 0;
         _im[] = 0;
     }
@@ -370,14 +370,14 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
     alias Rfft!(T) F;
     int log2n;
     F f;
-    T[] data;
+    F.Array data;
     
     this(int log2n)
     {
         this.log2n = log2n;
         size_t n = 1U << log2n; 
         f = new F(n);
-        data = F.allocate(n);
+        data = F.Array(n);
         data[] = 0;
     }
     
