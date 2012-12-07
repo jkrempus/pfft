@@ -62,6 +62,14 @@ void test(string common = "")
     }
 }
 
+void initBuild()
+{
+    auto dir = getcwd();
+    chdir("..");
+    vshell("dmd build", 2, 2);
+    chdir(dir); 
+}
+
 void build(string flags)
 {
     scope(failure)
@@ -69,8 +77,8 @@ void build(string flags)
 
     auto dir = getcwd();
     chdir("..");
-    vshell(fm("rdmd build.d %s", flags), 2, 2);
-    vshell(fm("rdmd build.d --tests %s", flags), 2, 2);
+    vshell(fm("build %s", flags), 2, 2);
+    vshell(fm("build --tests %s", flags), 2, 2);
     chdir(dir); 
 }
 
@@ -86,7 +94,8 @@ void all(string commonFlags, bool skipDmd = false)
             f("--dc LDC",  ["avx", "sse", "scalar"]) ~
             f("--dc DMD",  ["sse", "scalar"]) ~
             f(`--dc DMD --dc-cmd "dmd -m32"`,  ["scalar"]) ~
-            f(`--dc GDC --dc-cmd "gdc -m32"`, ["avx", "sse-avx", "sse", "scalar"]);
+            f(`--dc GDC --dc-cmd "gdc -m32"`, 
+	    	["avx", "sse-avx", "sse", "scalar"]);
     }
     else version(OSX)
     {
@@ -103,7 +112,9 @@ void all(string commonFlags, bool skipDmd = false)
     }
     else
         static assert("Not supported on this platform.");
-    
+   
+    initBuild();
+
     foreach(e; flags)
     {
         if(skipDmd && e.canFind("DMD"))
