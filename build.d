@@ -378,10 +378,10 @@ void buildLdcObj(
 
     auto optOrDbg = dbg ? ldcDbg : ldcOpt;
 
-    auto llvmVerStr = shell("llvm-config --version");
+    auto llvmVerStr = match(shell("ldc2 -version"), r"LLVM (\d\.\d)").front[1];
     auto picFlag = when(pic, "-relocation-model=pic");
 
-    if(["3.2", "3.3"].canFind(llvmVerStr[0 .. 3]))
+    if(["3.2", "3.3"].canFind(llvmVerStr))
     {
         mixin(ex(
             `%{dccmd} -I.. %{optOrDbg} -c -singleobj %{picFlag} `
@@ -390,7 +390,7 @@ void buildLdcObj(
     else
     {
         mixin(ex(
-            "%{dccmd} -I.. %{optOrDbg} -singleobj"
+            "%{dccmd} -I.. %{optOrDbg} -singleobj "
                  "-output-bc -ofpfft.bc -d-version=%{v} %{src}"));
 
         if(!dbg) 
@@ -659,7 +659,7 @@ void doit(string[] args)
     {
         Version v = parseVersion(simdOpt);
 
-        if(!v.supportedOnHost && !nopgo)
+        if(dc == Compiler.GDC && !nopgo && !v.supportedOnHost)
         {
             nopgo = true;
             stderr.writefln(
