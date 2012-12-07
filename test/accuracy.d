@@ -77,8 +77,9 @@ void build(string flags)
 
     auto dir = getcwd();
     chdir("..");
-    vshell(fm("build %s", flags), 2, 2);
-    vshell(fm("build --tests %s", flags), 2, 2);
+    auto path = absolutePath("build");
+    vshell(fm("%s %s", path, flags), 2, 2);
+    vshell(fm("%s --tests %s", path, flags), 2, 2);
     chdir(dir); 
 }
 
