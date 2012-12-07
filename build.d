@@ -8,7 +8,63 @@ import std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid,
        std.conv, std.range, std.getopt, std.file, std.regex, std.exception,
        std.path : absolutePath, dirSeparator;
 
-import interpolate : interpolate;
+auto interpolate(string s)
+{
+    auto fm = "";
+    auto args = "";
+    
+    enum State{ text, percent, format, arg }
+    
+    State state = State.text;
+    foreach(dchar c; s)
+    final switch(state)
+    {
+        case State.text:
+            fm ~= c; 
+            if(c == '%')
+                state = State.percent;
+            break;
+
+        case State.percent:
+            if(c == '%')
+            {
+                fm ~= '%';
+                state = State.text;
+            }
+            else if(c == '{')
+            {
+                fm ~= "s";
+                state = State.arg;
+            }
+            else
+            {
+                fm ~= c;
+                state = State.format;
+            }
+            break;
+
+        case State.format:
+            if(c == '{')
+                state = State.arg;
+            else
+                fm ~= c;
+            break;
+ 
+        case State.arg:
+            if(c == '}')
+            {
+                args ~= ", ";
+                state = State.text;
+            }
+            else
+                args ~= c;
+            break;
+    }
+    enforce(state == State.text, "Can not interpolate the string");   
+ 
+    return "xformat(`"~fm~"`, "~args~")";
+}
+
 alias interpolate itp;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
