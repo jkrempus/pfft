@@ -10,8 +10,8 @@ import core.stdc.stdlib, core.bitop;
 version(Posix)
     import core.sys.posix.stdlib, core.sys.posix.unistd;
 
-T max(T)(T a, T b){ return a > b ? a : b; } 
-T min(T)(T a, T b){ return a < b ? a : b; } 
+size_t max(size_t a, size_t b){ return a > b ? a : b; } 
+size_t min(size_t a, size_t b){ return a < b ? a : b; } 
 
 static if(is(typeof(posix_memalign)))
 {
