@@ -688,11 +688,11 @@ void doit(string[] args)
         else
             buildDmd(v, types, dccmd, clib, dbg);
 
-        foreach(e; dirEntries(".", SpanMode.shallow, false))
+        /*foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 remove(e.name);
         if(clib)
-            deleteDOutput();
+            deleteDOutput();*/
     }
 }
 

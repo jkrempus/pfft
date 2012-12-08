@@ -1,8 +1,12 @@
 module pfft.druntime_stubs;
 
-import core.stdc.stdlib, core.stdc.stdio, core.stdc.string;
+version(Windows)
+    version(GNU)
+        version = MinGW;
 
 extern(C):
+
+void abort();
 
 __gshared void* _Dmodule_ref;
 
@@ -11,8 +15,16 @@ template stub(string name)
     enum stub = `
 void `~name~`()
 {
+    version(MinGW)
+    {
+    	// TODO
+    }
+    else
+    {
+        import core.stdio;
 	fputs("`~name~` should not be called!\n", stderr);
-	abort();
+    }
+    abort();
 }
 `;
 }
@@ -31,10 +43,19 @@ mixin(
 
 void _d_assert(string file, uint line)
 {
-    auto cstr = cast(char*) malloc(file.length);
-    memcpy(cstr, file.ptr, file.length);
-    cstr[file.length - 1] = 0; 
+    version(MinGW)
+    {
+    	// TODO
+    }
+    else
+    {
+        import core.stdc.stdlib, core.stdc.stdio, core.stdc.string;
+
+        auto cstr = cast(char*) malloc(file.length);
+        memcpy(cstr, file.ptr, file.length);
+        cstr[file.length - 1] = 0; 
 
 	fprintf(stderr, "assert failed on line %d in file %s!\n", line, cstr);
-	abort();
+    }
+    abort();
 }
