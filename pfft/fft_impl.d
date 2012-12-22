@@ -1169,62 +1169,21 @@ struct FFT(V, Options)
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
-    static void interleave_array()(T* even, T* odd, T* interleaved, size_t n)
-    {
-        static if(is(typeof(V.interleave)))
-        {
-            static if(!isScalar)
-                if(n < vec_size)
-                    return SFFT.interleave_array(even, odd, interleaved, n);
-
-            foreach(i; 0 .. n / vec_size)
-                V.interleave(
-                    (cast(vec*)even)[i], 
-                    (cast(vec*)odd)[i], 
-                    (cast(vec*)interleaved)[i * 2], 
-                    (cast(vec*)interleaved)[i * 2 + 1]);
-        }
-        else
-            foreach(i; 0 .. n)
-            {
-                interleaved[i * 2] = even[i];
-                interleaved[i * 2 + 1] = odd[i];
-            }
-    }
-    
-    static void deinterleave_array()(T* even, T* odd, T* interleaved, size_t n)
-    {
-        static if(is(typeof(V.deinterleave)))
-        {
-            static if(!isScalar)
-                if(n < vec_size)
-                    SFFT.deinterleave_array(even, odd, interleaved, n);
-
-            foreach(i; 0 .. n / vec_size)
-                V.deinterleave(
-                    (cast(vec*)interleaved)[i * 2], 
-                    (cast(vec*)interleaved)[i * 2 + 1], 
-                    (cast(vec*)even)[i], 
-                    (cast(vec*)odd)[i]);
-        }
-        else
-            foreach(i; 0 .. n)
-            {
-                even[i] = interleaved[i * 2];
-                odd[i] = interleaved[i * 2 + 1];
-            }
-    }
-
     alias bool* ITable;
-    
-    alias Interleave!(V, 8, false).itable_size_bytes itable_size_bytes;
-    alias Interleave!(V, 8, false).interleave_table interleave_table;
-    alias Interleave!(V, 8, false).interleave interleave;
-    alias Interleave!(V, 8, true).interleave deinterleave;
+   
+    enum interleaveChunkSize = 8;
 
-    alias Interleave!(V, 8, false, true).interleave interleave_swap;
-    alias Interleave!(V, 8, true, true).interleave deinterleave_swap;
-    
+    alias Interleave!(V, interleaveChunkSize, false).itable_size_bytes itable_size_bytes;
+    alias Interleave!(V, interleaveChunkSize, false).interleave_table interleave_table;
+    alias Interleave!(V, interleaveChunkSize, false).interleave interleave;
+    alias Interleave!(V, interleaveChunkSize, true).interleave deinterleave;
+
+    alias Interleave!(V, interleaveChunkSize, false, true).interleave interleave_swap;
+    alias Interleave!(V, interleaveChunkSize, true, true).interleave deinterleave_swap;
+  
+    alias Interleave!(V, interleaveChunkSize, false).interleaved_copy interleave_array;
+    alias Interleave!(V, interleaveChunkSize, true).interleaved_copy deinterleave_array;
+
     static void scale(T* data, size_t n, T factor)
     {
         auto k  = V.scalar_to_vector(factor);
@@ -1281,17 +1240,6 @@ mixin template Instantiate()
                 }
             
             assert(false);
-            // work around using assert - ugly as fuck
-            /*{
-                alias FFTs[0] F; 
-                mixin("alias F." ~ func_name ~ " func;");
-                ParamTypeTuple!(func).type fargs;
-
-                static if(Ret.length == 0)
-                    return func(fargs);
-                else
-                    return cast(Ret[0]) func(fargs);
-            }*/
         }
     }
 

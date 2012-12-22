@@ -5,7 +5,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 import std.stdio, std.process, std.string, std.range, std.algorithm, std.conv,
-    std.file, std.format;
+    std.file, std.format, std.getopt, std.path : buildPath;
 import plot2kill.all;
 
 alias format fm;
@@ -15,9 +15,9 @@ struct Test
     double[string] cache;
     string filename;
 
-    this(string prefix)
+    this(typeof(null) param)
     {
-        filename = prefix ~ "cache";
+        filename = "cache";
         try load(); catch(FileException e) {}
     }
 
@@ -42,9 +42,7 @@ struct Test
         if(p)
             return *p;
 
-        writeln(command);
-        auto output = shell(command);
-        write(output);
+        auto output = vshell(command, 2, 2);
         auto r = to!double(strip(output));
         cache[command]  = r;
         save();
@@ -52,6 +50,31 @@ struct Test
     }
 
 }
+
+shared verbose = 1;
+
+auto vshell(string cmd, int vcmd, int vout)
+{
+    if(verbose >= vcmd) 
+        writeln(cmd); 
+   
+    auto r = shell(cmd);
+    if(verbose >= vout)
+        write(r);
+
+    return r; 
+}
+
+auto vchdir(string to, int vcmd)
+{
+    if(verbose >= vcmd)
+        writefln("changing directory to %s", to);
+
+    chdir(to); 
+}
+
+enum fftwAvxDir = "/opt/fftw/lib";
+enum fftwSseDir = "/opt/fftw-sse/lib";
 
 enum implNames = [
     "pfft"          : "pfft.pfft",
@@ -72,15 +95,46 @@ enum colors = [
 
 void main(string[] args)
 {
-    auto cmd = (string ver, string type, string compiler) =>
-        fm("./test_%s_%s%s%s", type, ver, compiler == "" ? "" : "_", compiler);
+    getopt(args, "v", &verbose);
 
-    auto prefix = args[1];
+    auto projectRoot = buildPath(getcwd(), args[0], "..");
+    auto prefix = buildPath(getcwd(), args[1]) ~ "/";
+    if(!exists(prefix))
+        mkdir(prefix);
+
+    vchdir(prefix, 1);
+
+    auto cmd(string ver, string type, string compiler)
+    {
+        auto dir = "executables";
+        if(!exists(dir))
+            mkdir(dir);
+
+        compiler = compiler == "" ? "gdc" : compiler;
+
+        auto exe = fm("%s/test_%s_%s_%s", dir, type, ver, compiler);
+
+        if(!exists(exe))
+        {
+            auto fftwDir = ver.canFind("avx") ? fftwAvxDir : fftwSseDir;
+
+            vchdir(projectRoot, 1);
+            auto dc = toUpper(compiler);
+            vshell(fm(
+                "./build.d --dc %s --type %s --simd %s;"
+                "./build.d --dc %s --type %s --tests --fftw %s",
+                dc, type, ver, dc, type, fftwDir), 1, 1);
+            vchdir(prefix, 1);
+            vshell(fm("cp %s/test/test_%s %s", projectRoot, type, exe), 1, 1); 
+        }
+
+        return exe;
+    }
 
     auto log2nRange = iota(1, 23);
     auto xTickLabels = log2nRange.map!(to!string)().array();
 
-    auto test = Test(prefix);
+    auto test = Test(null);
 
     void makePlot(
         string fileName, string flags, string type, 
@@ -112,24 +166,24 @@ void main(string[] args)
             .yLabel("speed(GFLOPS)")
             .xTickLabels(log2nRange, xTickLabels.array())
             .legendLocation(LegendLocation.right)
-            .saveToFile(prefix ~ fileName, 640, 360);
+            .saveToFile(fileName, 640, 360);
     }
 
-    auto versions = ["sse_avx", "sse"];
+    auto versions = ["sse-avx", "sse"];
 
     makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-double.png", "-s", "double", ["pfft", "fftw"], versions);
-    makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
+    /*makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-real-double.png", "-s -r", "double", ["pfft", "fftw"], versions);
     
     makePlot("pfft-std-phobos-float-scalar.png", "-s", "float", ["pfft", "std", "phobos"], ["scalar"]);
     makePlot("pfft-std-phobos-float-sse.png", "-s", "float", ["pfft", "std", "phobos"], ["sse"]);
-    makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["sse_avx"]);
+    makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["sse-avx"]);
     
-    makePlot("pfft-float-sse-gdmd-ldc-dmd.png", "-s", "float", ["pfft"], ["sse"], ["gdmd", "ldc", "dmd"]);
+    makePlot("pfft-float-sse-gdmd-ldc-dmd.png", "-s", "float", ["pfft"], ["sse"], ["gdmd", "ldc", "dmd"]);*/
     
     /*makePlot("fftw-float.png", "-s", "float", ["fftw"], versions);
     makePlot("fftw-double.png", "-s", "double", ["fftw"], versions);
     makePlot("fftw-float.png", "-s -r", "float", ["fftw"], versions);
-    makePlot("fftw-float.png", "-s -r", "double", ["fftw"], versions);*/
+    makePlot("fftw-double.png", "-s -r", "double", ["fftw"], versions);*/
 }

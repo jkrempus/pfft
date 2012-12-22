@@ -229,7 +229,7 @@ enum ldcDbg = "-d-debug -g";
 
 void buildTests(
     string[] types, string dccmd, Compiler c, string outDir, 
-    bool optimized = true, bool dbg = false, bool fftw = false)
+    bool optimized = true, bool dbg = false, string fftw = null)
 {
     auto srcPath = fixSeparators("../test/test.d");
 
@@ -249,30 +249,33 @@ void buildTests(
         final switch(c)
         {
             case Compiler.DMD:
-                auto fftwFlags = `-version=BenchFftw -L-lfftw3` ~ fftwSuffix;
+                auto fftwFlags = mixin(itp(
+                    `-version=BenchFftw -L-L%{fftw} -L-lfftw3%{fftwSuffix}`));
                 mixin(ex(
                     `%{dccmd} -version=%{clibVersion} `
                     `-of%{binPath} -version=%{common} `
                     `%{when(optimized, dmdOpt)} %{when(dbg, dmdDbg)} `
-                    `%{when(fftw, fftwFlags)}`));
+                    `%{when(!!fftw, fftwFlags)}`));
                 break;
 
             case Compiler.GDC:
-                auto fftwFlags = `-fversion=BenchFftw -lfftw3` ~ fftwSuffix;
+                auto fftwFlags = mixin(itp(
+                    `-fversion=BenchFftw -L%{fftw} -lfftw3%{fftwSuffix}`));
                 mixin(ex(
                     `%{dccmd} -fversion=%{clibVersion} `
                     `-o %{binPath} -fversion=%{common} `
                     `%{when(optimized, gdcOpt)} %{when(dbg, gdcDbg)} `
-                    `%{when(fftw, fftwFlags)}`));
+                    `%{when(!!fftw, fftwFlags)}`));
                 break;
             
             case Compiler.LDC:
-                auto fftwFlags = `-d-version=BenchFftw -L-lfftw3` ~ fftwSuffix;
+                auto fftwFlags = mixin(itp(
+                    `-d-version=BenchFftw -L-L%{fftw} -L-lfftw3%{fftwSuffix}`));
                 mixin(ex(
                     `%{dccmd} -d-version=%{clibVersion} `
                     `-of%{binPath} -d-version=%{common} -linkonce-templates `
                     `%{when(optimized, ldcOpt)} %{when(dbg, ldcDbg)} `
-                    `%{when(fftw, fftwFlags)}`));
+                    `%{when(!!fftw, fftwFlags)}`));
         }
     }
 }
@@ -594,9 +597,8 @@ Options:
                         compiling with GDC. This flag is ignored when building
                         tests.
   --debug               Turns on debug flags and turns off optimization flags.
-  --fftw                Enable support for testing FFTW. FFTW library files
-                        need to be somewhere where the linker can find them
-                        for this to work and the generated executables will
+  --fftw PATH           Enable support for testing FFTW. PATH must be the path
+                        to FFTW libraries. The generated executables will
                         be covered by the GPL.
   -v, --verbose         Be verbose.
   -h, --help            Print this message to stdout.
@@ -621,7 +623,7 @@ void doit(string[] args)
     bool tests;
     bool help;
     bool dbg;
-    bool fftw;
+    string fftw = null;
     Compiler dc = Compiler.GDC;
 
     getopt(args, 
@@ -651,8 +653,7 @@ void doit(string[] args)
 
     if(fftw)
         stderr.writeln(
-            "Building with FFTW support enabled - make sure that the linker "
-            "can find the FFTW library files. Note that the generated "
+            "Building with FFTW support enabled - the generated "
             "executable will be covered by the GPL (see FFTW's license).");
 
     types = array(uniq(sort(types)));
@@ -708,11 +709,11 @@ void doit(string[] args)
         else
             buildDmd(v, types, dccmd, clib, dbg);
 
-        /*foreach(e; dirEntries(".", SpanMode.shallow, false))
+        foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 remove(e.name);
         if(clib)
-            deleteDOutput();*/
+            deleteDOutput();
     }
 }
 

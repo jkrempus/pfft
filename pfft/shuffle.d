@@ -462,13 +462,11 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
                 InterleaveImpl!(
                     Scalar!(V.T, V), V.vec_size / 2, is_inverse, swap_even_odd)
                     .interleave_tiny(p, n);
-
-        assert(n >= 2 * V.vec_size);
        
         auto vp = cast(V.vec*) p;
         auto vn = n / V.vec_size;
  
-        if(n < 4 * V.vec_size * chunk_size)
+        if(vn < 4 * chunk_size)
             interleave_tiny(vp, vn);
         else
         {
@@ -484,6 +482,33 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
                 interleave_chunk_elements(vp, n_chunks);
             }
         }  
+    }
+    
+    static void interleaved_copy()
+    (V.T* even, V.T* odd, V.T* interleaved, size_t n)
+    if(!swap_even_odd)
+    {
+        if(n < 1)
+            return;
+
+        static if(V.vec_size != 1)
+            if(n < V.vec_size)
+                return 
+                    InterleaveImpl!(Scalar!(V.T, V), chunk_size, 
+                        is_inverse, swap_even_odd)
+                    .interleaved_copy(even, odd, interleaved, n);
+
+        auto ve = cast(V.vec*) even;
+        auto vo = cast(V.vec*) odd;
+        auto vi = cast(V.vec*) interleaved;
+        auto vn = n / V.vec_size;
+        
+        static if(is_inverse)
+            foreach(i; 0 .. vn)
+                V.deinterleave(vi[i * 2], vi[i * 2 + 1], ve[i], vo[i]);
+        else
+            foreach(i; 0 .. vn)
+                V.interleave(ve[i], vo[i], vi[i * 2], vi[i * 2 + 1]);
     }
 }
 
