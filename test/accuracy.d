@@ -122,21 +122,23 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
 
     foreach(e; flags)
     {
-        if(skipDmd && e.canFind("DMD"))
+        auto flagStr = e ~ " " ~ commonFlags;
+
+        if(skipDmd && flagStr.canFind("DMD"))
             continue;
 
-	version(Windows)
-            if(skipMinGW && e.canFind("GDC"))
-	    	continue;
+        version(Windows)
+            if(skipMinGW && flagStr.canFind("GDC"))
+                continue;
 
-        build(e ~ " " ~ commonFlags);
+        build(flagStr);
         scope(failure)
             writefln(
-                "Error when running tests for executables built with %s", e);
-                
+                "Error when running tests for executables built with %s", flagStr);
+
         test();
         if(verbose)
-		writefln("Successfully ran tests for build flags %s.", e);
+            writefln("Successfully ran tests for build flags %s.", flagStr);
     }
 }
 
@@ -148,7 +150,7 @@ void main(string[] args)
     if(args[1 .. $] == ["all"])
     {
         all("");
-        all("--debug", true);
+        all("--debug");
     }
     else
         test(flags);
