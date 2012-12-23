@@ -223,7 +223,13 @@ string sources(Version v, string[] types, string[] additional)
 enum dmdOpt = "-O -inline -release";
 enum dmdDbg = "-debug -g";
 enum gdcOpt = "-O3 -finline-functions -frelease";
-enum gdcDbg = "-fdebug -g";
+
+//on MinGW we must use at least -O2 to avoid the stack alignment bug
+version(Windows)
+    enum gdcDbg = "-fdebug -g -O2";
+else
+    enum gdcDbg = "-fdebug -g";
+
 enum ldcOpt = "-O3 -release";
 enum ldcDbg = "-d-debug -g";
 
