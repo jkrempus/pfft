@@ -225,7 +225,13 @@ enum dmdOpt = "-O -inline -release";
 // pfft.sse_double.Vector.bit_reverse_swap
 enum dmdDbg = "-debug -g -inline";
 enum gdcOpt = "-O3 -finline-functions -frelease";
-enum gdcDbg = "-fdebug -g";
+
+//on MinGW we must use at least -O2 to avoid the stack alignment bug
+version(Windows)
+    enum gdcDbg = "-fdebug -g -O2";
+else
+    enum gdcDbg = "-fdebug -g";
+
 enum ldcOpt = "-O3 -release";
 enum ldcDbg = "-d-debug -g";
 

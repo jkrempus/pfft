@@ -17,6 +17,10 @@ mixin ProfileMixin!Action;
 T max(T)(T a, T b){ return a > b ? a : b; }
 T min(T)(T a, T b){ return a < b ? a : b; }
 
+version(GNU)
+    version(Windows)
+        version = MinGW;  
+
 struct Scalar(_T, A...)
 {
     enum{ isScalar }
@@ -1170,8 +1174,11 @@ struct FFT(V, Options)
     }
 
     alias bool* ITable;
-   
-    enum interleaveChunkSize = 8;
+  
+    version(MinGW)
+        enum interleaveChunkSize = 4;
+    else
+        enum interleaveChunkSize = 8;
 
     alias Interleave!(V, interleaveChunkSize, false).itable_size_bytes itable_size_bytes;
     alias Interleave!(V, interleaveChunkSize, false).interleave_table interleave_table;

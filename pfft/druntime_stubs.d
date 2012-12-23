@@ -7,6 +7,7 @@ version(Windows)
 extern(C):
 
 void abort();
+int puts(const char*);
 
 __gshared void* _Dmodule_ref;
 
@@ -15,9 +16,10 @@ template stub(string name)
     enum stub = `
 void `~name~`()
 {
+    enum message = "`~name~` should not be called!\n";
     version(MinGW)
     {
-    	// TODO
+        puts(message);
     }
     else
     {

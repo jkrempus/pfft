@@ -12,10 +12,10 @@ alias format fm;
 
 @property p(string[] a)
 {
-    version(OSX)   // Avoid a bug on OSX.
-        return a;
-    else
+    version(linux)
         return taskPool.parallel(a);
+    else
+        return a;
 }
 
 shared verbose = 1;
@@ -83,7 +83,7 @@ void build(string flags)
     chdir(dir); 
 }
 
-void all(string commonFlags, bool skipDmd = false)
+void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
 {
     auto f = (string prepend, string[] simd) =>
         simd.map!(a => fm("%s --simd %s", prepend, a))().array();
@@ -124,6 +124,10 @@ void all(string commonFlags, bool skipDmd = false)
     {
         if(skipDmd && e.canFind("DMD"))
             continue;
+
+	version(Windows)
+            if(skipMinGW && e.canFind("GDC"))
+	    	continue;
 
         build(e ~ " " ~ commonFlags);
         scope(failure)
