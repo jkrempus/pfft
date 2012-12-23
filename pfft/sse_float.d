@@ -65,8 +65,7 @@ struct Vector
             return shufps!(0, 1, 2, 3)(v, v);
         }
     }
-    
-    version(DigitalMars)
+    else version(DigitalMars)
     {
         static vec scalar_to_vector()(float a)
         {
@@ -90,9 +89,24 @@ struct Vector
                 return *cast(vec*)& q;
             }
         }
+
+        static if(is(typeof(XMM.SHUFPS)))
+            private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+            {
+                return __simd(XMM.SHUFPS, a, b, shuf_mask!(m0, m1, m2, m3));
+            }
+
+        private static unpcklps(float4 a, float4 b)
+        {
+            return __simd(XMM.UNPCKLPS, a, b);
+        }
+
+        private static unpckhps(float4 a, float4 b)
+        {
+            return __simd(XMM.UNPCKHPS, a, b);
+        }
     }
-    
-    version(LDC)
+    else version(LDC)
     {    
         static vec scalar_to_vector()(float a)
         {
@@ -115,7 +129,7 @@ struct Vector
         }
     }
     
-    static if(is(typeof(shufps)))
+    static if(is(typeof(shufps!(0, 0, 0, 0))))
     {
         static void complex_array_to_real_imag_vec(int len)(
             float * arr, ref vec rr, ref vec ri)

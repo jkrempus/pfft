@@ -97,7 +97,7 @@ void main(string[] args)
 {
     getopt(args, "v", &verbose);
 
-    auto projectRoot = buildPath(getcwd(), args[0], "..");
+    auto projectRoot = buildPath(getcwd(), ".."); //buildPath(getcwd(), args[0], "..");
     auto prefix = buildPath(getcwd(), args[1]) ~ "/";
     if(!exists(prefix))
         mkdir(prefix);
@@ -173,10 +173,10 @@ void main(string[] args)
 
     makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-double.png", "-s", "double", ["pfft", "fftw"], versions);
-    /*makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
+    makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
     makePlot("pfft-fftw-real-double.png", "-s -r", "double", ["pfft", "fftw"], versions);
     
-    makePlot("pfft-std-phobos-float-scalar.png", "-s", "float", ["pfft", "std", "phobos"], ["scalar"]);
+    /*makePlot("pfft-std-phobos-float-scalar.png", "-s", "float", ["pfft", "std", "phobos"], ["scalar"]);
     makePlot("pfft-std-phobos-float-sse.png", "-s", "float", ["pfft", "std", "phobos"], ["sse"]);
     makePlot("pfft-std-phobos-float-avx.png", "-s", "float", ["pfft", "std", "phobos"], ["sse-avx"]);
     

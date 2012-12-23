@@ -221,7 +221,9 @@ string sources(Version v, string[] types, string[] additional)
 }
 
 enum dmdOpt = "-O -inline -release";
-enum dmdDbg = "-debug -g";
+// if I remove -inline below, wrong code is generated for 
+// pfft.sse_double.Vector.bit_reverse_swap
+enum dmdDbg = "-debug -g -inline";
 enum gdcOpt = "-O3 -finline-functions -frelease";
 enum gdcDbg = "-fdebug -g";
 enum ldcOpt = "-O3 -release";
