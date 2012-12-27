@@ -457,7 +457,13 @@ void buildGdcObj(
 
     mixin(ex(
         `%{dccmd} %{optOrDbg} -fversion=%{v} %{when(pic, "-fPIC")} `
-        `%{archFlags} %{src} -o %{objname} -c -I..`)); 
+        `%{archFlags} %{src} -o %{isOSX ? "tmp.s" : objname} `
+        `-%{isOSX ? "S" : "c"} -I..`));
+
+    static if(isOSX)
+        // use clang as an assembler on OSX so that we can
+        // use AVX
+        mixin(ex(`clang -c tmp.s -o %{objname}`));
 }
  
 void buildGdc(Version v, string[] types, string dccmd, 
