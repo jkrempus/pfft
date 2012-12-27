@@ -13,6 +13,15 @@ version(Posix)
 size_t max(size_t a, size_t b){ return a > b ? a : b; } 
 size_t min(size_t a, size_t b){ return a < b ? a : b; } 
 
+size_t pagesize()
+{
+    static if(is(typeof(sysconf)) && is(typeof(_SC_PAGESIZE)))
+        return sysconf(_SC_PAGESIZE);
+    else
+        // just take a guees in this case
+        return 4096;
+}
+
 static if(is(typeof(posix_memalign)))
 {
     auto allocate_aligned(size_t alignment, size_t size)
@@ -26,9 +35,7 @@ static if(is(typeof(posix_memalign)))
 
     size_t alignment(alias F)(size_t n)
     {
-        size_t page_size = sysconf(_SC_PAGESIZE);
-
-        return min(max(n, F.alignment(n)), page_size);  
+        return min(max(n, F.alignment(n)), pagesize());  
     }
 }
 else
@@ -50,7 +57,7 @@ else
 
     size_t alignment(alias F)(size_t n)
     {
-        static if(is(typeof(sysconf)))
+        static if(is(typeof(sysconf)) && is(typeof(_SC_PAGESIZE)))
             size_t page_size = sysconf(_SC_PAGESIZE);
         else
             // just take a guees in this case
@@ -58,7 +65,7 @@ else
 
         enum cache_line = 64;       
 
-            return page_size;
+            return pagesize(); // TODO: fix this
  
         if(n < 5 * page_size)
             // align to cache line at most to avoid wasting memory 
@@ -66,7 +73,7 @@ else
         else
             // aligne to page size, the increase of memory size isn't that
             // signifficant in this case and this can improve performance
-            return page_size;
+            return pagesize();
     }
 }
 

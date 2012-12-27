@@ -120,17 +120,17 @@ bool verbose;
 
 version(Windows)
 {
-	enum isWindows = true;
-	enum dlibPath = "lib\\pfft.lib";
-	enum clibPath = "lib\\pfft-c.lib";
+    enum isWindows = true;
+    enum dlibPath = "lib\\pfft.lib";
+    enum clibPath = "lib\\pfft-c.lib";
     enum dynLibPath = "lib\\pfft-c.dll";
     enum defPath = "lib\\pfft-c.def";
 }
 else
 {
-	enum isWindows = false;
-	enum dlibPath = "lib/libpfft.a";
-	enum clibPath = "lib/libpfft-c.a";
+    enum isWindows = false;
+    enum dlibPath = "lib/libpfft.a";
+    enum clibPath = "lib/libpfft-c.a";
 }
 
 version(linux)
@@ -142,7 +142,10 @@ else
     enum isLinux = false;
 
 version(OSX)
+{
     enum isOSX = true;
+    enum dynLibPath = "lib/libpfft-c.dylib";
+}
 else 
     enum isOSX = false;
 
@@ -391,7 +394,7 @@ void buildLdcObj(
 
     auto optOrDbg = dbg ? ldcDbg : ldcOpt;
 
-    auto llvmVerStr = match(shell("ldc2 -version"), r"LLVM (\d\.\d)").front[1];
+    auto llvmVerStr = match(shell(dccmd ~ " -version"), r"LLVM (\d\.\d)").front[1];
     auto picFlag = when(pic, "-relocation-model=pic");
 
     if(["3.2", "3.3"].canFind(llvmVerStr))
@@ -670,7 +673,7 @@ void doit(string[] args)
         types = ["double", "float", "real"];
 
     if(simdOpt == "")
-        simdOpt = (dc != Compiler.DMD && !isOSX) ? "sse-avx" : "sse";
+        simdOpt = (dc != Compiler.DMD) ? "sse-avx" : "sse";
 
     auto buildDir = clib ? "generated-c" : "generated";
     if(tests)
