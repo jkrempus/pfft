@@ -104,8 +104,8 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
     else version(OSX)
     {
         auto flags = 
-            f(`--dc DMD --dc-cmd="dmd -m32"`,  ["scalar"]) ~
-            f("--dc DMD",  ["sse", "scalar"]);
+            f("--dc DMD",  ["sse", "scalar"]) ~
+            f("--dc LDC",  avx ~ ["sse-avx", "sse", "scalar"]);
     }
     else version(Windows)
     {

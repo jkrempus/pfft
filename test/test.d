@@ -810,7 +810,6 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
             if(impl == "c")
                 return f!(CApi!(transfer, isInverse), transfer, isInverse)(
                     log2n, flops);
-    
     }
     
     version(BenchFftw)
@@ -895,7 +894,7 @@ Implementations:
   fftw-measure      Same as the above, but using FFTW_MEASURE flag instead
                     of FFTW_PATIENT.
 
-"direct" and "c" implementations can be tested even if the D compiler used to
+'direct' and 'c' implementations can be tested even if the D compiler used to
 build the library and this program does not come with a working GC, but then
 you need to build this program with version NoGC.
 
