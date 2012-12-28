@@ -266,7 +266,7 @@ void buildTests(
                     `%{dccmd} -version=%{clibVersion} `
                     `-of%{binPath} -version=%{common} `
                     `%{when(optimized, dmdOpt)} %{when(dbg, dmdDbg)} `
-                    `%{when(!!fftw, fftwFlags)}`));
+                    `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-L-ldl")}`));
                 break;
 
             case Compiler.GDC:
@@ -276,7 +276,7 @@ void buildTests(
                     `%{dccmd} -fversion=%{clibVersion} `
                     `-o %{binPath} -fversion=%{common} `
                     `%{when(optimized, gdcOpt)} %{when(dbg, gdcDbg)} `
-                    `%{when(!!fftw, fftwFlags)}`));
+                    `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-ldl")}`));
                 break;
             
             case Compiler.LDC:
@@ -286,7 +286,7 @@ void buildTests(
                     `%{dccmd} -d-version=%{clibVersion} `
                     `-of%{binPath} -d-version=%{common} -linkonce-templates `
                     `%{when(optimized, ldcOpt)} %{when(dbg, ldcDbg)} `
-                    `%{when(!!fftw, fftwFlags)}`));
+                    `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-L-ldl")}`));
         }
     }
 }

@@ -5,7 +5,7 @@
 
 import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
     std.random, std.numeric, std.math, std.algorithm, std.range,
-    std.exception, std.typetuple, std.traits, std.string : toUpper;
+    std.exception, std.typetuple, std.traits, std.string : toUpper, toStringz;
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -16,9 +16,9 @@ auto gc_aligned_array(A)(size_t n)
     version(NoGC)
     {
         import pfft.clib;
-	enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
+        enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
         
-	return (cast(A*)mixin("pfft_allocate_" ~ suffix)(A.sizeof*n))[0..n];
+        return (cast(A*)mixin("pfft_allocate_" ~ suffix)(A.sizeof*n))[0..n];
     }
     else
     {
@@ -266,75 +266,136 @@ if(transfer == Transfer.rfft)
     mixin realSplitElementAccess!();
 }
 
-struct CApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
+struct PfftC(bool isDynamic)
 {
-    enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
-
     import pfft.clib;
+   
+    enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
+    
+    mixin("alias PfftTable" ~ toUpper(suffix) ~ " Table;");
+    mixin("alias PfftRTable" ~ toUpper(suffix) ~ " RTable;");
+   
+    static if(isDynamic)
+    {
+        static T* function(size_t) allocate;
+        static Table function(size_t, void*) table;
+        static RTable function(size_t, void*) rtable;
+        static void function(Table) table_free;
+        static void function(RTable) rtable_free;
+        static void function(T*) free;
+        static void function(T*, T*, Table) fft; 
+        static void function(T*, RTable) rfft; 
+        static void function(T*, T*, Table) ifft; 
+        static void function(T*, RTable) irfft; 
+
+        static void load(string[] args)
+        {
+            import std.path;
+            import core.sys.posix.dlfcn;
+
+            auto lib = buildPath(
+                absolutePath(dirName(args[0])), 
+                "..", "generated-c", "lib", "libpfft-c.so");
+
+            auto dl = dlopen(toStringz(lib), RTLD_NOW);
+            if(dl)
+            {
+                
+                allocate = cast(typeof(allocate)) dlsym(dl, toStringz("pfft_allocate_"~suffix));
+                table = cast(typeof(table)) dlsym(dl, toStringz("pfft_table_"~suffix));
+                rtable = cast(typeof(rtable)) dlsym(dl, toStringz("pfft_rtable_"~suffix));
+                table_free = cast(typeof(table_free)) dlsym(dl, toStringz("pfft_table_free_"~suffix));
+                rtable_free = cast(typeof(rtable_free)) dlsym(dl, toStringz("pfft_rtable_free_"~suffix));
+                free = cast(typeof(free)) dlsym(dl, toStringz("pfft_free_"~suffix));
+                fft = cast(typeof(fft)) dlsym(dl, toStringz("pfft_fft_"~suffix));
+                rfft = cast(typeof(rfft)) dlsym(dl, toStringz("pfft_rfft_"~suffix));
+                ifft = cast(typeof(ifft)) dlsym(dl, toStringz("pfft_ifft_"~suffix));
+                irfft = cast(typeof(irfft)) dlsym(dl, toStringz("pfft_irfft_"~suffix));
+            }
+        }
+    }
+    else
+    {
+        mixin("alias pfft_allocate_"~suffix~" allocate;");
+        mixin("alias pfft_table_"~suffix~" table;");
+        mixin("alias pfft_rtable_"~suffix~" rtable;");
+        mixin("alias pfft_table_free_"~suffix~" table_free;");
+        mixin("alias pfft_rtable_free_"~suffix~" rtable_free;");
+        mixin("alias pfft_free_"~suffix~" free;");
+        mixin("alias pfft_fft_"~suffix~" fft;");
+        mixin("alias pfft_rfft_"~suffix~" rfft;");
+        mixin("alias pfft_ifft_"~suffix~" ifft;"); 
+        mixin("alias pfft_irfft_"~suffix~" irfft;"); 
+    }
+}
+
+struct CApi(Transfer transfer, bool isInverse, bool isDynamic) 
+if(transfer == Transfer.fft)
+{
+    alias PfftC!isDynamic Impl;
 
     T* _re;
     T* _im;
-    mixin("PfftTable" ~ toUpper(suffix) ~ " table;");
+    Impl.Table table;
     int log2n;
     
     this(int _log2n)
     {
         log2n = _log2n;
-        _re = mixin("pfft_allocate_"~suffix)(1 << log2n);
-        _im = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        _re = Impl.allocate(1 << log2n);
+        _im = Impl.allocate(1 << log2n);
         _re[0 .. 1 << log2n] = 0;
         _im[0 .. 1 << log2n] = 0;
-        table = mixin("pfft_table_"~suffix)(1 << log2n, null); 
+        table = Impl.table(1 << log2n, null); 
     }
 
     ~this()
     {
-        mixin("pfft_table_free_"~suffix)(table);
-        mixin("pfft_free_"~suffix)(_re);
-        mixin("pfft_free_"~suffix)(_im);
+        Impl.table_free(table);
+        Impl.free(_re);
+        Impl.free(_im);
     }
     
     void compute()
     {
         static if(isInverse)
-            mixin("pfft_ifft_"~suffix)(_re, _im, table);
+            Impl.ifft(_re, _im, table);
         else 
-            mixin("pfft_fft_"~suffix)(_re, _im, table);
+            Impl.fft(_re, _im, table);
     }
     
     mixin splitElementAccess!();
 }
 
-struct CApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
+struct CApi(Transfer transfer, bool isInverse, bool isDynamic) 
+if(transfer == Transfer.rfft)
 {
-    enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
-    
-    import pfft.clib;
+    alias PfftC!isDynamic Impl;
    
     int log2n;
-    mixin("PfftRTable" ~ toUpper(suffix) ~ " table;");
+    Impl.RTable table;
     T* data;
     
     this(int log2n)
     {
         this.log2n = log2n;
-        data = mixin("pfft_allocate_"~suffix)(1 << log2n);
+        data = Impl.allocate(1 << log2n);
         data[0 .. 1 << log2n] = 0;
-        table = mixin("pfft_rtable_"~suffix)(1 << log2n, null); 
+        table = Impl.rtable(1 << log2n, null); 
     }
     
     ~this()
     {
-        mixin("pfft_rtable_free_"~suffix)(table);
-        mixin("pfft_free_"~suffix)(data);
+        Impl.rtable_free(table);
+        Impl.free(data);
     }
     
     void compute()
     {
         static if(isInverse)
-            mixin("pfft_irfft_"~suffix)(data, table);
+            Impl.irfft(data, table);
         else 
-            mixin("pfft_rfft_"~suffix)(data, table);
+            Impl.rfft(data, table);
     }
     
     mixin realSplitElementAccess!();
@@ -796,20 +857,29 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
         if(impl == "simple")
             return f!(SimpleFft!(T, transfer, isInverse), transfer, isInverse)(
                     log2n, flops);
+        
         if(impl == "std")
             return f!(StdApi!(false, transfer, isInverse), transfer, isInverse)(
                     log2n, flops);
+        
         if(impl == "phobos")
             return f!(StdApi!(true, transfer, isInverse), transfer, isInverse)(
                     log2n, flops);
+        
         if(impl == "pfft")
             return f!(PfftApi!(transfer, isInverse), transfer, isInverse)(
                     log2n, flops);
         
         version(BenchClib)
+        {
             if(impl == "c")
-                return f!(CApi!(transfer, isInverse), transfer, isInverse)(
+                return f!(CApi!(transfer, isInverse, false), transfer, isInverse)(
                     log2n, flops);
+            
+            if(impl == "c-dynamic")
+                return f!(CApi!(transfer, isInverse, true), transfer, isInverse)(
+                    log2n, flops);
+        }
     }
     
     version(BenchFftw)
@@ -888,15 +958,18 @@ Implementations:
   std               An interface to pfft that mimics the API of 
                     std.numeric.Fft.(module pfft.stdapi).
   c                 An interface to pfft usable from c.
+  c-dynamic         An interface to pfft usable from c, dynamically loaded
+                    from a shared library. For this to work, there must be 
+                    a shared pfft library in generated-c/lib.
   phobos            Phobos implementation of fft (std.numeric.Fft).
   fftw              FFTW implementation. This one is only available
                     if the test program was compiled with -version=BenchFftw.
   fftw-measure      Same as the above, but using FFTW_MEASURE flag instead
                     of FFTW_PATIENT.
 
-'direct' and 'c' implementations can be tested even if the D compiler used to
-build the library and this program does not come with a working GC, but then
-you need to build this program with version NoGC.
+'direct', 'c' and 'c-dynamic' implementations can be tested even if the D 
+compiler used to build the library and this program does not come with a 
+working GC, but then you need to build this program with version NoGC.
 
 Options:
   -s                Test speed instead of precision.
@@ -913,6 +986,8 @@ Options:
  
 void main(string[] args)
 {
+    PfftC!(true).load(args);
+
     try
     {
         bool s;

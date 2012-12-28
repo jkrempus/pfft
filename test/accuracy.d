@@ -33,7 +33,7 @@ auto vshell(string cmd, int vcmd, int vout)
 }
 
 
-void test(string common = "", bool justClib = false)
+void test(string common = "", string api = "")
 {
     auto toleratedError = [
         "float" : 1e-6,
@@ -41,7 +41,7 @@ void test(string common = "", bool justClib = false)
         "real"  : 2e-18];
 
     foreach(flags;  ["", "-r", "-i", "-i -r"].p)
-    foreach(impl;   (justClib ? ["c"] : ["pfft", "c", "std"]).p)
+    foreach(impl;   (api == "" ? ["pfft", "c", "std"] : [api]).p)
     foreach(type;   ["float", "double", "real"])
     foreach(log2n;  iota(1, 21))
     {
@@ -144,12 +144,12 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
 
 void main(string[] args)
 {
-    bool justClib;
+    string api = "";
     string flags = "";
     getopt(args,
         "v", &verbose, 
         "flags", &flags,
-        "just-clib", &justClib);
+        "api", &api);
 
     if(args[1 .. $] == ["all"])
     {
@@ -157,5 +157,5 @@ void main(string[] args)
         all("--debug");
     }
     else
-        test(flags, justClib);
+        test(flags, api);
 }

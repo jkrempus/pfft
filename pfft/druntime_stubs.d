@@ -23,7 +23,7 @@ void `~name~`()
     }
     else
     {
-        import core.stdio;
+        import core.stdc.stdio;
 	fputs("`~name~` should not be called!\n", stderr);
     }
     abort();
