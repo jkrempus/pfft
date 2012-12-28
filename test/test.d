@@ -10,11 +10,21 @@ import std.stdio, std.conv, std.datetime, std.complex, std.getopt,
 template st(alias a){ enum st = cast(size_t) a; }
 
 enum Transfer { fft, rfft /*, fst*/ }
-
+    
 auto gc_aligned_array(A)(size_t n)
 {
-    import core.memory;
-    return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
+    version(NoGC)
+    {
+        import pfft.clib;
+	enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
+        
+	return (cast(A*)mixin("pfft_allocate_" ~ suffix)(A.sizeof*n))[0..n];
+    }
+    else
+    {
+        import core.memory;
+        return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
+    }
 }
 
 bool isIn(A, B...)(A a, B b)
@@ -870,7 +880,6 @@ and for real transforms it is:
 
 Nop = 2.5 * N * log2(N)
 
-
 Implementations:
   simple            A simple Cooley Tukey implementation that is used 
                     internally for testing the precision of other 
@@ -885,6 +894,10 @@ Implementations:
                     if the test program was compiled with -version=BenchFftw.
   fftw-measure      Same as the above, but using FFTW_MEASURE flag instead
                     of FFTW_PATIENT.
+
+"direct" and "c" implementations can be tested even if the D compiler used to
+build the library and this program does not come with a working GC, but then
+you need to build this program with version NoGC.
 
 Options:
   -s                Test speed instead of precision.

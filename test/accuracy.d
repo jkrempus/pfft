@@ -33,7 +33,7 @@ auto vshell(string cmd, int vcmd, int vout)
 }
 
 
-void test(string common = "")
+void test(string common = "", bool justClib = false)
 {
     auto toleratedError = [
         "float" : 1e-6,
@@ -41,7 +41,7 @@ void test(string common = "")
         "real"  : 2e-18];
 
     foreach(flags;  ["", "-r", "-i", "-i -r"].p)
-    foreach(impl;   ["pfft", "c", "std"].p)
+    foreach(impl;   (justClib ? ["c"] : ["pfft", "c", "std"]).p)
     foreach(type;   ["float", "double", "real"])
     foreach(log2n;  iota(1, 21))
     {
@@ -104,7 +104,7 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
     else version(OSX)
     {
         auto flags = 
-            f(`--dc DMD --dc-cmd="dmd -m32"`,  ["sse", "scalar"]) ~
+            f(`--dc DMD --dc-cmd="dmd -m32"`,  ["scalar"]) ~
             f("--dc DMD",  ["sse", "scalar"]);
     }
     else version(Windows)
@@ -144,8 +144,12 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
 
 void main(string[] args)
 {
+    bool justClib;
     string flags = "";
-    getopt(args, "v", &verbose, "flags", &flags);
+    getopt(args,
+        "v", &verbose, 
+        "flags", &flags,
+        "just-clib", &justClib);
 
     if(args[1 .. $] == ["all"])
     {
@@ -153,5 +157,5 @@ void main(string[] args)
         all("--debug");
     }
     else
-        test(flags);
+        test(flags, justClib);
 }
