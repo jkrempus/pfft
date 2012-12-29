@@ -318,18 +318,6 @@ void runBenchmarks(string[] types, Version v)
     }
 }
 
-void buildDmd(
-    Version v, string[] types, string dccmd, 
-    bool clib, bool dbg)
-{
-    auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
-    auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
-
-    mixin(ex(
-        `%{dccmd} %{optOrDbg} -lib -of%{libPath(clib)} -I.. `
-        `-version=%{v} %{src} %{cObjs(clib)} %{when(clib, "-fPIC")}`)); 
-}
-
 string buildAdditionalSIMD(F)(
     F buildObj, Version v, SIMD simd, string[] types, 
     string dccmd, bool dbg, bool pic)
@@ -355,8 +343,8 @@ void noShared(string dccmd, string objname, string implObjs)
 }
 
 void buildLib(F0, F1)(
-    F0 buildObj, F1 buildShared, Version v, string[] types, string dccmd, 
-    bool clib, bool dbg)
+    F0 buildObj, F1 buildShared, Compiler dc, Version v, string[] types,
+    string dccmd, bool clib, bool dbg)
 {
     auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
  
@@ -367,10 +355,38 @@ void buildLib(F0, F1)(
  
     buildObj(src, "pfft.o", v, v.baseSIMD, dccmd, dbg, clib);
 
-    mixin(ex(`ar cr %{libPath(clib)} pfft.o %{cObjs(clib)} %{implObjs}`)); 
+    if(dc == Compiler.GDC)
+        mixin(ex(`ar cr %{libPath(clib)} pfft.o %{cObjs(clib)} %{implObjs}`));
+    else
+        mixin(ex(
+            `%{dccmd} -lib -of%{libPath(clib)} `
+            `pfft.o %{cObjs(clib)} %{implObjs}`)); 
     
     if(clib)
         buildShared(dccmd, "pfft.o", implObjs);
+}
+
+void buildDmdObj(
+    string src, string objname, Version v, SIMD simd, 
+    string dccmd, bool dbg, bool pic)
+{
+    auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
+    
+    mixin(ex(
+        `%{dccmd} -I.. %{optOrDbg} -c %{when(pic, "-fPIC")} `
+        "-of%{objname} -version=%{v} %{src}"));
+}
+
+void buildDmdShared(string dccmd, string objname, string implObjs)
+{
+    stderr.writeln(
+        "Note: when building pfft with DMD the shared library is not built.");
+} 
+
+void buildDmd(Version v, string[] types, string dccmd, bool clib, bool dbg)
+{
+    buildLib(&buildDmdObj, &buildDmdShared, Compiler.DMD, 
+        v, types, dccmd, clib, dbg); 
 }
 
 void buildLdcShared(string dccmd, string objname, string implObjs)
@@ -428,7 +444,8 @@ void buildLdcObj(
  
 void buildLdc(Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
-    buildLib(&buildLdcObj, &buildLdcShared, v, types, dccmd, clib, dbg); 
+    buildLib(&buildLdcObj, &buildLdcShared, Compiler.LDC, 
+        v, types, dccmd, clib, dbg); 
 }
 
 void buildGdcShared(string dccmd, string objname, string implObjs)
@@ -471,18 +488,18 @@ void buildGdc(Version v, string[] types, string dccmd,
 {
     if(pgo)
     {
-        buildLib(&buildGdcObj, &noShared, v, types, 
+        buildLib(&buildGdcObj, &noShared, Compiler.GDC, v, types, 
             dccmd ~ " -fprofile-generate ", false, dbg);
 
         buildTests(types, dccmd ~ " -fprofile-generate -fversion=JustDirect ", 
             Compiler.GDC, ".", false, dbg);
         
         runBenchmarks(types, v);
-        buildLib(&buildGdcObj, &buildGdcShared, v, types, 
+        buildLib(&buildGdcObj, &buildGdcShared, Compiler.GDC, v, types, 
             dccmd ~ " -fprofile-use", clib, dbg);
     }
     else
-        buildLib(&buildGdcObj, &buildGdcShared, v, types, dccmd, clib, dbg);
+        buildLib(&buildGdcObj, &buildGdcShared, Compiler.GDC, v, types, dccmd, clib, dbg);
 }
 
 string getModuleLocation(string dccmd, string module_)
@@ -506,7 +523,11 @@ string getModuleLocation(string dccmd, string module_)
 
 void buildCObjects(Compiler dc, string[] types, string dccmd)
 {
-    auto buildObj = dc == Compiler.LDC ? &buildLdcObj : &buildGdcObj;
+    auto buildObj = 
+        dc == Compiler.LDC ? &buildLdcObj : 
+        dc == Compiler.GDC ? &buildGdcObj : &buildDmdObj;
+
+
     auto versionSyntax =
         dc == Compiler.DMD ? "-version=" :
         dc == Compiler.GDC ? "-fversion=" : "-d-version=";
@@ -602,7 +623,7 @@ Options:
                         TYPE must be one of float, double and real. There can
                         be more than one --type flag. Omitting this flag is 
                         equivalent to --type float --type double --type real.
-  --clib                Build a C library.
+  --clib                Build a C library. This doesn't currently work with DMD.
   --tests               Build tests. Executables will be saved to ./test. 
                         Can not be used with --clib or when cross compiling.
                         You must build the D library for selected types before 
@@ -663,10 +684,10 @@ void doit(string[] args)
     }
   
     if(tests && clib)
-        invalidCmd("Can not build tests for the c library.");
+        invalidCmd("--tests and --clib can not be used together.");
 
-    if(isWindows && dc == Compiler.DMD && clib)
-        invalidCmd("Can not build the C library using DMD on Windows.");
+    if(dc == Compiler.DMD && clib)
+        invalidCmd("Can not build the C library using DMD");
 
     if(fftw)
         stderr.writeln(
@@ -726,11 +747,11 @@ void doit(string[] args)
         else
             buildDmd(v, types, dccmd, clib, dbg);
 
-        foreach(e; dirEntries(".", SpanMode.shallow, false))
+        /*foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 remove(e.name);
         if(clib)
-            deleteDOutput();
+            deleteDOutput();*/
     }
 }
 
