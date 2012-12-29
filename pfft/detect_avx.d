@@ -2,6 +2,10 @@ module pfft.detect_avx;
 
 private __gshared int avx_state;
 
+version(X86)
+    version(D_PIC)
+        version = PreserveEBX;
+
 private void set_avx_state()
 {
     enum xcr0_avx_shift = 2;            // AVX enabled by OS
@@ -11,27 +15,52 @@ private void set_avx_state()
 
     int r = void;
     version(GNU)
-        asm
-        {
-            "mov $1, %%eax
-            cpuid
-            mov $0, %%eax
-            and $0x14000000, %%ecx
-            cmp $0x14000000, %%ecx
-            jne exit_label%=
-            xor %%ecx, %%ecx
-            xgetbv
-            shr $2, %%eax
-            and $1, %%eax
-        exit_label%=: 
-            mov %%eax, %0"
-            : "=r" r
-            :
-            : "eax", "ebx", "ecx", "edx" ;
-        }
+    {
+        version(PreserveEBX)
+            asm
+            {
+                "mov %%ebx, %1
+                mov $1, %%eax
+                cpuid
+                mov $0, %%eax
+                and $0x14000000, %%ecx
+                cmp $0x14000000, %%ecx
+                jne exit_label%=
+                xor %%ecx, %%ecx
+                xgetbv
+                shr $2, %%eax
+                and $1, %%eax
+            exit_label%=: 
+                mov %%eax, %0
+                mov %1, %%ebx"
+                : "=r" r
+                : "r" 0
+                : "eax", "ecx", "edx" ;
+            }
+        else
+            asm
+            {
+                "mov $1, %%eax
+                cpuid
+                mov $0, %%eax
+                and $0x14000000, %%ecx
+                cmp $0x14000000, %%ecx
+                jne exit_label%=
+                xor %%ecx, %%ecx
+                xgetbv
+                shr $2, %%eax
+                and $1, %%eax
+            exit_label%=: 
+                mov %%eax, %0"
+                : "=r" r
+                : "r" 0
+                : "eax", "ebx", "ecx", "edx" ;
+            }
+    }
     else
         asm
         {
+            push EBX;
             mov EAX, 1;
             cpuid;
             mov EAX, 0;
@@ -44,6 +73,7 @@ private void set_avx_state()
             and EAX, 1;
         exit_label:
             mov r, EAX;
+            pop EBX;
         }
     
     avx_state = r | 2;  
