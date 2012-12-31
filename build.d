@@ -701,6 +701,11 @@ void doit(string[] args)
             Compiler.DMD : "dmd", 
             Compiler.GDC : "gdc", 
             Compiler.LDC : "ldc2"][dc];
+
+    if(dc == Compiler.LDC)
+        // By default, ldc2 will generate code that can use all the features 
+        // of the host processor. That's usually not what we want.
+        dccmd = dccmd ~ " -mcpu=generic";
    
     if(types == [])
         types = ["double", "float", "real"];
@@ -717,6 +722,10 @@ void doit(string[] args)
     else
     {
         Version v = parseVersion(simdOpt);
+
+        if(!isLinux)
+            // PGO currently only works on Linux.
+            nopgo = true;
 
         if(dc == Compiler.GDC && !nopgo && !v.supportedOnHost)
         {
