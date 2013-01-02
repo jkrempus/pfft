@@ -240,7 +240,8 @@ enum ldcDbg = "-d-debug -g";
 
 void buildTests(
     string[] types, string dccmd, Compiler c, string outDir, 
-    bool optimized = true, bool dbg = false, string fftw = null)
+    bool optimized = true, bool dbg = false, string fftw = null,
+    bool dynamic = false)
 {
     auto srcPath = fixSeparators("../test/test.d");
 
@@ -252,8 +253,13 @@ void buildTests(
         auto binPath = fixSeparators(outDir ~ "/test_" ~ type);
         auto ver = capitalize(type);
 
-        auto common = mixin(itp(
-            "%{ver} -Iinclude %{srcPath} %{clibSrc} %{dlibPath}"));
+        auto versyn =
+            c == Compiler.DMD ? "-version=" :
+            c == Compiler.GDC ? "-fversion=" : "-d-version=";
+
+        auto common = dynamic ? 
+            mixin(itp("%{versyn}%{ver} %{versyn}DynamicC %{srcPath}")) :
+            mixin(itp("%{versyn}%{ver} -Iinclude %{srcPath} %{clibSrc} %{dlibPath}"));
 
         auto fftwSuffix = ["float" : "f", "double" : "", "real" : "l"][type]; 
 
@@ -264,7 +270,7 @@ void buildTests(
                     `-version=BenchFftw -L-L%{fftw} -L-lfftw3%{fftwSuffix}`));
                 mixin(ex(
                     `%{dccmd} -version=%{clibVersion} `
-                    `-of%{binPath} -version=%{common} `
+                    `-of%{binPath} %{common} `
                     `%{when(optimized, dmdOpt)} %{when(dbg, dmdDbg)} `
                     `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-L-ldl")}`));
                 break;
@@ -274,7 +280,7 @@ void buildTests(
                     `-fversion=BenchFftw -L%{fftw} -lfftw3%{fftwSuffix}`));
                 mixin(ex(
                     `%{dccmd} -fversion=%{clibVersion} `
-                    `-o %{binPath} -fversion=%{common} `
+                    `-o %{binPath} %{common} `
                     `%{when(optimized, gdcOpt)} %{when(dbg, gdcDbg)} `
                     `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-ldl")}`));
                 break;
@@ -284,7 +290,7 @@ void buildTests(
                     `-d-version=BenchFftw -L-L%{fftw} -L-lfftw3%{fftwSuffix}`));
                 mixin(ex(
                     `%{dccmd} -d-version=%{clibVersion} `
-                    `-of%{binPath} -d-version=%{common} -linkonce-templates `
+                    `-of%{binPath} %{common} -linkonce-templates `
                     `%{when(optimized, ldcOpt)} %{when(dbg, ldcDbg)} `
                     `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-L-ldl")}`));
         }
@@ -659,6 +665,7 @@ void doit(string[] args)
     bool clib;
     bool nopgo;
     bool tests;
+    bool dynamic;
     bool help;
     bool dbg;
     string fftw = null;
@@ -671,11 +678,14 @@ void doit(string[] args)
         "clib", &clib,
         "dc", &dc,
         "tests", &tests,
+        "dynamic-tests", &dynamic,
         "no-pgo", &nopgo,
         "fftw", &fftw,
         "h|help", &help,
         "v|verbose", &verbose,
         "debug", &dbg);
+
+    tests = tests || dynamic;
 
     if(help)
     {
@@ -717,7 +727,7 @@ void doit(string[] args)
     if(tests)
     {
         chdir(buildDir);
-        buildTests(types, dccmd, dc, "../test", !dbg, dbg, fftw);
+        buildTests(types, dccmd, dc, "../test", !dbg, dbg, fftw, dynamic);
     }
     else
     {

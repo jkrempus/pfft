@@ -26,9 +26,9 @@ static if(is(typeof(posix_memalign)))
 {
     auto allocate_aligned(size_t alignment, size_t size)
     {
-	    void* ptr;
-	    posix_memalign(&ptr, alignment, size);
-	    return ptr;
+        void* ptr;
+        posix_memalign(&ptr, alignment, size);
+        return ptr;
     }
 
     alias free free_aligned;
@@ -98,20 +98,20 @@ private template code(string type, string suffix, string Suffix)
         import impl_`~type~` = pfft.impl_`~type~`;
 
         /// A documentation comment. 
-        struct PfftTable`~Suffix~`
+        align(1) struct PfftTable`~Suffix~`
         {
             impl_`~type~`.Table p;
             size_t log2n;
         }
 
-        extern(C) size_t pfft_table_size_bytes_`~suffix~`(size_t n)
+        size_t pfft_table_size_bytes_`~suffix~`(size_t n)
         {
             assert_power2(n);
 
             return impl_`~type~`.table_size_bytes(bsf(n));
         }
 
-        extern(C) auto pfft_table_`~suffix~`(size_t n, void* mem)
+        auto pfft_table_`~suffix~`(size_t n, void* mem)
         {
             assert_power2(n);
 
@@ -124,22 +124,22 @@ private template code(string type, string suffix, string Suffix)
             return PfftTable`~Suffix~`(impl_`~type~`.fft_table(bsf(n), mem), log2n);
         }
 
-        extern(C) void pfft_table_free_`~suffix~`(PfftTable`~Suffix~` table)
+        void pfft_table_free_`~suffix~`(PfftTable`~Suffix~` table)
         {
             free_aligned(table.p);
         }
 
-        extern(C) void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
+        void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
         {
             impl_`~type~`.fft(re, im, cast(uint) table.log2n, table.p);
         }
 
-        extern(C) void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
+        void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
         {
             impl_`~type~`.fft(im, re, cast(uint) table.log2n, table.p);
         }
 
-        struct PfftRTable`~Suffix~`
+        align(1) struct PfftRTable`~Suffix~`
         {
             impl_`~type~`.RTable rtable;
             impl_`~type~`.Table table;
@@ -147,7 +147,7 @@ private template code(string type, string suffix, string Suffix)
             size_t log2n;
         }
 
-        extern(C) size_t pfft_rtable_size_bytes_`~suffix~`(size_t n)
+        size_t pfft_rtable_size_bytes_`~suffix~`(size_t n)
         {
             assert_power2(n);
 
@@ -157,7 +157,7 @@ private template code(string type, string suffix, string Suffix)
                 impl_`~type~`.rtable_size_bytes(bsf(n));
         }
 
-        extern(C) auto pfft_rtable_`~suffix~`(size_t n, void* mem)
+        auto pfft_rtable_`~suffix~`(size_t n, void* mem)
         {
             assert_power2(n);
 
@@ -180,12 +180,12 @@ private template code(string type, string suffix, string Suffix)
                 log2n);
         }
 
-        extern(C) void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~` table)
+        void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~` table)
         {
             free_aligned(table.rtable);
         }
 
-        extern(C) void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
+        void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
         {
             impl_`~type~`.deinterleave(data, cast(uint) table.log2n, table.itable);
             impl_`~type~`.rfft(
@@ -193,7 +193,7 @@ private template code(string type, string suffix, string Suffix)
                 cast(uint) table.log2n, table.table, table.rtable); 
         }
 
-        extern(C) void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
+        void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
         {
             impl_`~type~`.irfft(
                 data, data + ((cast(size_t) 1) << (table.log2n - 1)),
@@ -201,14 +201,14 @@ private template code(string type, string suffix, string Suffix)
             impl_`~type~`.interleave(data, cast(uint) table.log2n, table.itable);
         }
 
-        extern(C) size_t pfft_alignment_`~suffix~`(size_t n)
+        size_t pfft_alignment_`~suffix~`(size_t n)
         {
             assert_power2(n);
 
             return impl_`~type~`.alignment(n);
         }
 
-        extern(C) `~type~`* pfft_allocate_`~suffix~`(size_t n)
+        `~type~`* pfft_allocate_`~suffix~`(size_t n)
         {
             assert_power2(n);
 
@@ -217,7 +217,7 @@ private template code(string type, string suffix, string Suffix)
             return cast(`~type~`*) p;
         }
 
-        extern(C) void pfft_free_`~suffix~`(`~type~`* p)
+        void pfft_free_`~suffix~`(`~type~`* p)
         {
             free_aligned(p);
         }
@@ -225,6 +225,7 @@ private template code(string type, string suffix, string Suffix)
 }
 
 export:
+extern(C):
 
 version(Float)
     mixin(code!("float", "f", "F"));
