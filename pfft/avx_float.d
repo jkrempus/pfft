@@ -97,8 +97,10 @@ version(GNU_OR_LDC)
     alias __builtin_ia32_storeups256 storeups;
 }
 
-template VectorTemplate()
+struct Vector
 {
+    static:
+
     alias float8 vec;
     alias float T;
     
@@ -282,8 +284,6 @@ template VectorTemplate()
         }
     }
 }
-
-alias VectorTemplate!() Vector;
 
 struct Options
 {

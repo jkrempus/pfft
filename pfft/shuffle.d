@@ -141,8 +141,10 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
-template BitReverse(alias V, Options)
+struct BitReverse(alias V, alias Options)
 {
+    static:
+
     alias V.T T;
     alias V.vec vec;
     
@@ -294,8 +296,9 @@ template BitReverse(alias V, Options)
     }
 }
 
-private template Scalar(TT, alias V)
+private struct Scalar(TT, alias V)
 {
+    static:
     public:
 
     alias TT T;
@@ -322,9 +325,12 @@ template hasInterleaving(alias V)
         is(typeof(V.deinterleave));
 }
 
-template InterleaveImpl
+struct InterleaveImpl
 (alias V, int chunk_size, bool is_inverse, bool swap_even_odd) 
 {
+    static:
+    public:
+
     size_t itable_size_bytes()(int log2n)
     {
         return (bool.sizeof << log2n) / V.vec_size / chunk_size; 

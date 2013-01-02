@@ -26,6 +26,8 @@ version(LDC)
 
 struct Vector
 {
+    static:
+
     alias double2 vec;
     alias double T;
     
@@ -36,41 +38,41 @@ struct Vector
     {
         import gcc.builtins;
         
-        static vec scalar_to_vector(T a)
+        vec scalar_to_vector(T a)
         {
             return a;
         }
         
-        static void interleave( 
+        void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = __builtin_ia32_unpcklpd(a0, a1);
             r1 = __builtin_ia32_unpckhpd(a0, a1);
         }
         
-        static vec unaligned_load(T* p)
+        vec unaligned_load(T* p)
         {
             return __builtin_ia32_loadupd(p);
         }
 
-        static void unaligned_store(T* p, vec v)
+        void unaligned_store(T* p, vec v)
         {
             return __builtin_ia32_storeupd(p, v);
         }
 
-        static vec reverse(vec v)
+        vec reverse(vec v)
         {
             return __builtin_ia32_shufpd(v, v, 0x1);
         }
     }
     else version(LDC)
     {
-        static vec scalar_to_vector(T a)
+        vec scalar_to_vector(T a)
         {
             return a;
         }
         
-        static void interleave( 
+        void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = shufflevector!(vec, 0, 2)(a0, a1);
@@ -80,14 +82,14 @@ struct Vector
         alias loadUnaligned!vec unaligned_load;
         alias __builtin_ia32_storeupd unaligned_store;
 
-        static vec reverse(vec v)
+        vec reverse(vec v)
         {
             return shufflevector!(vec, 1, 0)(v, v);
         }
     }
     else 
     {
-        static vec scalar_to_vector(T a)
+        vec scalar_to_vector(T a)
         {
             version(linux_x86_64)
                 asm
@@ -108,7 +110,7 @@ struct Vector
             }
         }
         
-        static void interleave( 
+        void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = __simd(XMM.UNPCKLPD, a0, a1);
@@ -116,12 +118,12 @@ struct Vector
         }
     }
         
-    private static vec * v(T * a)
+    private vec * v(T * a)
     {
         return cast(vec*)a;
     }
             
-    static void complex_array_to_real_imag_vec(int len)(
+    void complex_array_to_real_imag_vec(int len)(
         T * arr, ref vec rr, ref vec ri)
     {
             interleave(v(arr)[0], v(arr)[1], rr, ri);
@@ -129,7 +131,7 @@ struct Vector
 
     alias interleave deinterleave;
 
-    static void  transpose(int elements_per_vector)(
+    void  transpose(int elements_per_vector)(
             vec a0,  vec a1, ref vec r0, ref vec r1)
     {
         static if(elements_per_vector == 2)
@@ -138,7 +140,7 @@ struct Vector
             static assert(0);
     }
     
-    static void bit_reverse_swap(T * p0, T * p1, size_t m)
+    void bit_reverse_swap(T * p0, T * p1, size_t m)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
@@ -186,7 +188,7 @@ struct Vector
         v(p0 + m * 3)[0] = b1;
     }
 
-    static void bit_reverse(T * p, size_t m)
+    void bit_reverse(T * p, size_t m)
     {
         vec a0, a1, a2, a3;
         a0 = v(p + m * 0)[0];

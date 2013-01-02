@@ -18,7 +18,6 @@ version(X86_64)
     version(linux)
         version = linux_x86_64;
 
-
 version(LDC)
 {
     import ldc.simd;
@@ -27,6 +26,8 @@ version(LDC)
         
 struct Vector 
 {
+    static:
+
     alias float4 vec;
     alias float T;
     
@@ -37,12 +38,12 @@ struct Vector
     {
         import gcc.builtins;
                 
-        static vec scalar_to_vector()(T a)
+        vec scalar_to_vector()(T a)
         {
             return a;
         }  
 
-        private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+        private vec shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
         {
             return __builtin_ia32_shufps(a, b, shuf_mask!(m0, m1, m2, m3));
         }
@@ -50,24 +51,24 @@ struct Vector
         alias __builtin_ia32_unpcklps unpcklps;
         alias __builtin_ia32_unpckhps unpckhps;
               
-        static vec unaligned_load(T* p)
+        vec unaligned_load(T* p)
         {
             return __builtin_ia32_loadups(p);
         }
 
-        static void unaligned_store(T* p, vec v)
+        void unaligned_store(T* p, vec v)
         {
             return __builtin_ia32_storeups(p, v);
         }
 
-        static vec reverse(vec v)
+        vec reverse(vec v)
         {
             return shufps!(0, 1, 2, 3)(v, v);
         }
     }
     else version(DigitalMars)
     {
-        static vec scalar_to_vector()(float a)
+        vec scalar_to_vector()(float a)
         {
             version(linux_x86_64)
                 asm
@@ -78,7 +79,7 @@ struct Vector
                 }
             else
             {
-                static struct quad
+                struct quad
                 {
                     align(16) float a;
                     float b;
@@ -91,29 +92,29 @@ struct Vector
         }
 
         static if(is(typeof(XMM.SHUFPS)))
-            private static shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
+            private vec shufps(int m0, int m1, int m2, int m3)(float4 a, float4 b)
             {
                 return __simd(XMM.SHUFPS, a, b, shuf_mask!(m0, m1, m2, m3));
             }
 
-        private static unpcklps(float4 a, float4 b)
+        private vec unpcklps(float4 a, float4 b)
         {
             return __simd(XMM.UNPCKLPS, a, b);
         }
 
-        private static unpckhps(float4 a, float4 b)
+        private vec unpckhps(float4 a, float4 b)
         {
             return __simd(XMM.UNPCKHPS, a, b);
         }
     }
     else version(LDC)
     {    
-        static vec scalar_to_vector()(float a)
+        vec scalar_to_vector()(float a)
         {
             return a;
         }
 
-        static auto shufps(int m0, int m1, int m2, int m3)(vec a, vec b)
+        auto shufps(int m0, int m1, int m2, int m3)(vec a, vec b)
         {
             return shufflevector!(vec, m3, m2, m1 + 4, m0 + 4)(a, b);
         }
@@ -123,7 +124,7 @@ struct Vector
         alias loadUnaligned!vec unaligned_load;
         alias __builtin_ia32_storeups unaligned_store;
         
-        static vec reverse(vec v)
+        vec reverse(vec v)
         {
             return shufps!(0, 1, 2, 3)(v, v);
         }
@@ -131,7 +132,7 @@ struct Vector
     
     static if(is(typeof(shufps!(0, 0, 0, 0))))
     {
-        static void complex_array_to_real_imag_vec(int len)(
+        void complex_array_to_real_imag_vec(int len)(
             float * arr, ref vec rr, ref vec ri)
         {
             static if(len==2)
@@ -149,7 +150,7 @@ struct Vector
             }
         }
 
-        static void transpose(int elements_per_vector)(
+        void transpose(int elements_per_vector)(
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             if(elements_per_vector==4)
@@ -166,26 +167,26 @@ struct Vector
             }
         }
         
-        static void interleave( 
+        void interleave( 
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = unpcklps(a0,a1);
             r1 = unpckhps(a0,a1);
         }
         
-        static void deinterleave(
+        void deinterleave(
             vec a0,  vec a1, ref vec r0, ref vec r1)
         {
             r0 = shufps!(2,0,2,0)(a0,a1);
             r1 = shufps!(3,1,3,1)(a0,a1);
         }
         
-        private static float4 * v()(float * a)
+        private float4 * v()(float * a)
         {
             return cast(float4*)a;
         }
         
-        private static void br16()(
+        private void br16()(
             float4 a0, float4 a1, float4 a2, float4 a3, 
             ref float4 r0, ref float4 r1, ref float4 r2, ref float4 r3)
         {
@@ -199,7 +200,7 @@ struct Vector
             r3 = shufps!(3,1,3,1)(b2, b3);
         }
         
-        static void bit_reverse_swap()(float * p0, float * p1, size_t m)
+        void bit_reverse_swap()(float * p0, float * p1, size_t m)
         {
             float4 b0 = *v(p1 + 0 * m); 
             float4 b1 = *v(p1 + 1 * m); 
@@ -213,7 +214,7 @@ struct Vector
                  *v(p0 + 0 * m), *v(p0 + 1 * m), *v(p0 + 2 * m), *v(p0 + 3 * m));
         }
 
-        static void bit_reverse()(float * p, size_t m)
+        void bit_reverse()(float * p, size_t m)
         {
             br16(*v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m), 
                  *v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m));
@@ -221,7 +222,7 @@ struct Vector
     }
     else
     {        
-        static void bit_reverse()(T * p0, size_t m)
+        void bit_reverse()(T * p0, size_t m)
         {
             version(linux_x86_64)
                 asm
@@ -258,7 +259,7 @@ struct Vector
                 Scalar!T.bit_reverse(p0, m);
         }
 
-        static void bit_reverse_swap()(T * p0, T * p1, size_t m)
+        void bit_reverse_swap()(T * p0, T * p1, size_t m)
         {
             version(linux_x86_64)
                 asm

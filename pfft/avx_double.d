@@ -60,15 +60,17 @@ else version(GNU)
 
 struct Vector 
 {
+    static:
+
     alias double4 vec;
     alias double T;
     
     enum vec_size = 4;
     enum log2_bitreverse_chunk_size = 2;
     
-    static auto v(T* p){ return cast(vec*) p; }
+    auto v(T* p){ return cast(vec*) p; }
 
-    static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
+    void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
     {
         static if (n == 4)
             deinterleave(v(arr)[0], v(arr)[1], rr, ri);
@@ -82,7 +84,7 @@ struct Vector
             static assert(0);
     }
       
-    static void transpose(int elements_per_vector)(vec a0, vec a1, ref vec r0, ref vec r1)
+    void transpose(int elements_per_vector)(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         static if(elements_per_vector == 4)
         {
@@ -98,7 +100,7 @@ struct Vector
             static assert(0);
     }
 
-    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         vec b0, b1;
 
@@ -107,7 +109,7 @@ struct Vector
         transpose!2(b0, b1, r0, r1);
     }
     
-    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         vec b0, b1;
 
@@ -117,7 +119,7 @@ struct Vector
     }
 
 
-    static void bit_reverse_swap(double * p0, double * p1, size_t m)
+    void bit_reverse_swap(double * p0, double * p1, size_t m)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
@@ -162,7 +164,7 @@ struct Vector
         *v(p0 + 3 * m) = b3;
     }
 
-    static void bit_reverse(double * p, size_t m)
+    void bit_reverse(double * p, size_t m)
     {
         vec a0, a1, a2, a3, b0, b1, b2, b3;
 
@@ -182,7 +184,7 @@ struct Vector
         *v(p + 3 * m) = interleave128_hi(b2, b3);
     }    
 
-    static vec scalar_to_vector(T a)
+    vec scalar_to_vector(T a)
     {
         return a;
     }
@@ -192,12 +194,12 @@ struct Vector
         is(typeof(storeupd)) &&
         is(typeof(reverse_elements)))
     {
-        static vec unaligned_load(T* p)
+        vec unaligned_load(T* p)
         {
             return loadupd(p);
         }
 
-        static void unaligned_store(T* p, vec v)
+        void unaligned_store(T* p, vec v)
         {
             storeupd(p, v);
         }

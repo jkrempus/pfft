@@ -23,8 +23,10 @@ version(GNU)
     version(Windows)
         version = MinGW;  
 
-template Scalar(_T, A...)
+struct Scalar(_T, A...)
 {
+    static:
+
     enum{ isScalar }
     alias _T vec;
     alias _T T;
@@ -207,8 +209,10 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
         pi[i] = ai[reverse_bits!(i, log2n)];
 }
 
-template FFT(alias V, Options)
+struct FFT(alias V, alias Options)
 {
+    static:
+
     import core.bitop, core.stdc.stdlib;
    
     alias BitReverse!(V, Options) BR;
