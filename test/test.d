@@ -306,10 +306,17 @@ template PfftC()
         {
             import std.path;
             import core.sys.posix.dlfcn;
+            
+            version(linux)
+                auto libname = "libpfft-c.so";
+            else version(OSX)
+                auto libname = "libpfft-c.dylib";
+            else version(Windows)
+                auto libname = "pfft.dll";
 
             auto lib = buildPath(
                 absolutePath(dirName(args[0])), 
-                "..", "generated-c", "lib", "libpfft-c.dylib");
+                "..", "generated-c", "lib", libname);
 
             auto dl = dlopen(toStringz(lib), RTLD_NOW);
             if(dl)
