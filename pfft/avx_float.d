@@ -97,7 +97,7 @@ version(GNU_OR_LDC)
     alias __builtin_ia32_storeups256 storeups;
 }
 
-struct Vector 
+template VectorTemplate()
 {
     alias float8 vec;
     alias float T;
@@ -106,10 +106,10 @@ struct Vector
   
     enum log2_bitreverse_chunk_size = 3;
  
-    static auto v(T* p){ return cast(float4*) p; }
-    static auto v8(T* p){ return cast(float8*) p; }
+    auto v(T* p){ return cast(float4*) p; }
+    auto v8(T* p){ return cast(float8*) p; }
     
-    static void _deinterleave2(vec a0, vec a1, ref vec r0, ref vec r1)
+    void _deinterleave2(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         r0 = interleave128_lo(a0, a1);
         r1 = interleave128_hi(a0, a1);
@@ -123,7 +123,7 @@ struct Vector
         is(typeof(unpcklps)) &&
         is(typeof(unpckhps)))
     {
-        static void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
+        void complex_array_to_real_imag_vec(int n)(T* arr, ref vec rr, ref vec ri)
         {
             static if(n == 8)
             {
@@ -146,21 +146,21 @@ struct Vector
                 static assert(0);
         }
 
-        static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
+        void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
         {
             vec a0_tmp = unpcklps(a0, a1);
             a1 =         unpckhps(a0, a1);
             _deinterleave2(a0_tmp, a1, r0, r1);
         }
 
-        static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+        void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
         {
             _deinterleave2(a0, a1, a0, a1); 
             r0 = shufps!(2,0,2,0)(a0, a1);
             r1 = shufps!(3,1,3,1)(a0, a1);
         }
 
-        static void transpose(int elements_per_vector)(
+        void transpose(int elements_per_vector)(
                 vec a0, vec a1, ref vec r0, ref vec r1)
         {
             static if(elements_per_vector == 8)
@@ -185,7 +185,7 @@ struct Vector
         }
     }
 
-    private static void br16_two(ref vec a0, ref vec a1, ref vec a2, ref vec a3)
+    private  void br16_two(ref vec a0, ref vec a1, ref vec a2, ref vec a3)
     {
         vec b0 = shufps!(1, 0, 1, 0)(a0, a2);
         vec b1 = shufps!(1, 0, 1, 0)(a1, a3);
@@ -198,7 +198,7 @@ struct Vector
         a3 = shufps!(3, 1, 3, 1)(b2, b3);
     }
 
-    private static void br64(
+    private void br64(
         ref vec a0, ref vec a1, ref vec a2, ref vec a3,
         ref vec a4, ref vec a5, ref vec a6, ref vec a7)
     {
@@ -221,7 +221,7 @@ struct Vector
             alias RepeatType!(T, n - 1, T, R) RepeatType;
     }
         
-    static void bit_reverse_swap(T* p0, T* p1, size_t m)
+    void bit_reverse_swap(T* p0, T* p1, size_t m)
     {
         RepeatType!(vec, 8) a, b;    
 
@@ -242,7 +242,7 @@ struct Vector
             *v8(p0 + i * m) = b[i];
     }
 
-    static void bit_reverse(T* p0, size_t m)
+    void bit_reverse(T* p0, size_t m)
     {
         RepeatType!(vec, 8) a;    
 
@@ -255,7 +255,7 @@ struct Vector
             *v8(p0 + i * m) = a[i];
     }
 
-    static vec scalar_to_vector(T a)
+    vec scalar_to_vector(T a)
     {
         return a;
     }
@@ -265,23 +265,25 @@ struct Vector
         is(typeof(storeups)) &&
         is(typeof(reverse128)))
     {
-        static vec unaligned_load(T* p)
+        vec unaligned_load(T* p)
         {
             return loadups(p);
         }
 
-        static void unaligned_store(T* p, vec v)
+        void unaligned_store(T* p, vec v)
         {
             storeups(p, v);
         }
 
-        static vec reverse(vec v)
+        vec reverse(vec v)
         {
             v = shufps!(0, 1, 2, 3)(v, v);
             return reverse128(v);
         }
     }
 }
+
+alias VectorTemplate!() Vector;
 
 struct Options
 {

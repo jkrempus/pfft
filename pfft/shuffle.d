@@ -141,19 +141,19 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
-struct BitReverse(alias V, Options)
+template BitReverse(alias V, Options)
 {
     alias V.T T;
     alias V.vec vec;
     
-    static size_t br_table_size()(int log2n)
+    size_t br_table_size()(int log2n)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
  
         return log2n < log2l * 2 ? 0 : (1 << (log2n - 2 * log2l)) + 2 * log2l;
     }
     
-    static void init_br_table()(uint* table, int log2n)
+    void init_br_table()(uint* table, int log2n)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
 
@@ -174,7 +174,7 @@ struct BitReverse(alias V, Options)
             }
     }
        
-    static void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+    void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
         
@@ -191,7 +191,7 @@ struct BitReverse(alias V, Options)
             V.bit_reverse_swap( p + table[0], p + table[1], m);
     }
 
-    private static auto highest_power_2(int a, int maxpower)
+    private auto highest_power_2(int a, int maxpower)
     {
         while(a % maxpower)
             maxpower /= 2;
@@ -199,7 +199,7 @@ struct BitReverse(alias V, Options)
         return maxpower;     
     }
 
-    static void swap_some(int n, TT)(TT* a, TT* b)
+    void swap_some(int n, TT)(TT* a, TT* b)
     {
         RepeatType!(TT, 2 * n) tmp;
         
@@ -214,7 +214,7 @@ struct BitReverse(alias V, Options)
             a[i] = tmp[i + n];
     }
 
-    static void swap_array(int len, TT)(TT *  a, TT *  b)
+    void swap_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert(len*TT.sizeof % vec.sizeof == 0);
         
@@ -224,7 +224,7 @@ struct BitReverse(alias V, Options)
             swap_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    static void copy_some(int n, TT)(TT* dst, TT* src)
+    void copy_some(int n, TT)(TT* dst, TT* src)
     {
         RepeatType!(TT, n) a;
         
@@ -234,7 +234,7 @@ struct BitReverse(alias V, Options)
             dst[i] = a[i];
     }
     
-    static void copy_array(int len, TT)(TT *  a, TT *  b)
+    void copy_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert((len * TT.sizeof % vec.sizeof == 0));
         
@@ -244,8 +244,9 @@ struct BitReverse(alias V, Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    static void strided_copy(size_t chunk_size, TT)(
-        TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
+    void strided_copy
+    (size_t chunk_size, TT)
+    (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
     {
         for(
             TT* s = src, d = dst; 
@@ -256,8 +257,8 @@ struct BitReverse(alias V, Options)
         }
     } 
 
-    static void bit_reverse_large()(
-        T* p, int log2n, uint * table, void* tmp_buffer)
+    void bit_reverse_large()
+    (T* p, int log2n, uint * table, void* tmp_buffer)
     {
         enum log2l = Options.log2_bitreverse_large_chunk_size;
         enum l = 1<<log2l;
@@ -293,7 +294,7 @@ struct BitReverse(alias V, Options)
     }
 }
 
-private struct Scalar(TT, V)
+private template Scalar(TT, alias V)
 {
     public:
 
@@ -301,34 +302,35 @@ private struct Scalar(TT, V)
     alias TT vec;
     enum vec_size = 1;
     
-    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         r0 = a0;
         r1 = a1; 
     }
     
-    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         r0 = a0;
         r1 = a1; 
     }
 }
 
-template hasInterleaving(V)
+template hasInterleaving(alias V)
 {
     enum hasInterleaving =  
         is(typeof(V.interleave)) && 
         is(typeof(V.deinterleave));
 }
 
-struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd) 
+template InterleaveImpl
+(alias V, int chunk_size, bool is_inverse, bool swap_even_odd) 
 {
-    static size_t itable_size_bytes()(int log2n)
+    size_t itable_size_bytes()(int log2n)
     {
         return (bool.sizeof << log2n) / V.vec_size / chunk_size; 
     }
 
-    static bool* interleave_table()(int log2n, void* p)
+    bool* interleave_table()(int log2n, void* p)
     {
         auto n = st!1 << log2n;
         auto is_cycle_minimum = cast(bool*) p;
@@ -361,8 +363,7 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
         return is_cycle_minimum;
     }
 
-    static void interleave_chunks()(
-        V.vec* a, size_t n_chunks, bool* is_cycle_minimum)
+    void interleave_chunks()(V.vec* a, size_t n_chunks, bool* is_cycle_minimum)
     {
         alias RepeatType!(V.vec, chunk_size) RT;
         alias ints_up_to!chunk_size indices;        
@@ -409,7 +410,7 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
         }
     }
 
-    static void interleave_static_size(int n)(V.vec* p)
+    void interleave_static_size(int n)(V.vec* p)
     {
         RepeatType!(V.vec, 2 * n) tmp;
 
@@ -430,7 +431,7 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
 
     }
 
-    static void interleave_tiny()(V.vec* p, size_t len)
+    void interleave_tiny()(V.vec* p, size_t len)
     {
         switch(len)
         {
@@ -445,13 +446,13 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
         }
     }
 
-    static void interleave_chunk_elements()(V.vec* a, size_t n_chunks)
+    void interleave_chunk_elements()(V.vec* a, size_t n_chunks)
     {
         for(auto p = a; p < a + n_chunks * chunk_size; p += 2 * chunk_size)
             interleave_static_size!chunk_size(p);
     }
 
-    static void interleave()(V.T* p, int log2n, bool* table)
+    void interleave()(V.T* p, int log2n, bool* table)
     {
         auto n = st!1 << log2n;
 
@@ -484,7 +485,7 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
         }  
     }
     
-    static void interleaved_copy()
+    void interleaved_copy()
     (V.T* even, V.T* odd, V.T* interleaved, size_t n)
     if(!swap_even_odd)
     {
@@ -513,7 +514,7 @@ struct InterleaveImpl(V, int chunk_size, bool is_inverse, bool swap_even_odd)
 }
 
 template Interleave(
-    V, int chunk_size, bool is_inverse, bool swap_even_odd = false)
+    alias V, int chunk_size, bool is_inverse, bool swap_even_odd = false)
 {
     static if(hasInterleaving!V)
         alias InterleaveImpl!(V, chunk_size, is_inverse, swap_even_odd) 

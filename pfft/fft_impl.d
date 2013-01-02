@@ -23,7 +23,7 @@ version(GNU)
     version(Windows)
         version = MinGW;  
 
-struct Scalar(_T, A...)
+template Scalar(_T, A...)
 {
     enum{ isScalar }
     alias _T vec;
@@ -32,12 +32,12 @@ struct Scalar(_T, A...)
     enum vec_size = 1;
     enum log2_bitreverse_chunk_size = 2;
     
-    static vec scalar_to_vector(T a)
+    vec scalar_to_vector(T a)
     {
         return a;
     }
    
-    private static void load4br(T* p, size_t m, ref T a0, ref T a1, ref T a2, ref T a3)
+    private void load4br(T* p, size_t m, ref T a0, ref T a1, ref T a2, ref T a3)
     {
         a0 = p[0];
         a1 = p[m];
@@ -45,7 +45,7 @@ struct Scalar(_T, A...)
         a3 = p[m + 1];
     } 
  
-    private static void store4(T* p, size_t m, T a0, T a1, T a2, T a3)
+    private void store4(T* p, size_t m, T a0, T a1, T a2, T a3)
     {
         p[0] = a0;
         p[1] = a1;
@@ -53,7 +53,7 @@ struct Scalar(_T, A...)
         p[m + 1] = a3;
     }
  
-    static void bit_reverse_swap(T * p0, T * p1, size_t m)
+    void bit_reverse_swap(T * p0, T * p1, size_t m)
     {
         RepeatType!(T, 4) a, b;
        
@@ -81,7 +81,7 @@ struct Scalar(_T, A...)
         store4(p1 + i1, s, b);
     }
 
-    static void bit_reverse(T * p,  size_t m)
+    void bit_reverse(T * p,  size_t m)
     {
         //bit_reverse_static_size!4(p, m);
         T a0, a1, a2, b0, b1, b2;       
@@ -115,9 +115,9 @@ struct Scalar(_T, A...)
         p[3 + 2 * m] = b2;
     }
 
-    static T unaligned_load(T* p){ return *p; }
-    static void unaligned_store(T* p, T a){ *p = a; }
-    static T reverse(T a){ return a; }           
+    T unaligned_load(T* p){ return *p; }
+    void unaligned_store(T* p, T a){ *p = a; }
+    T reverse(T a){ return a; }           
 }
 
 version(DisableLarge)
@@ -207,7 +207,7 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
         pi[i] = ai[reverse_bits!(i, log2n)];
 }
 
-struct FFT(V, Options)
+template FFT(alias V, Options)
 {
     import core.bitop, core.stdc.stdlib;
    
@@ -248,7 +248,7 @@ struct FFT(V, Options)
 
     alias Tuple!(T,T) Pair;
    
-    static void complex_array_to_vector()(Pair * pairs, size_t n)
+    void complex_array_to_vector()(Pair * pairs, size_t n)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
@@ -268,7 +268,7 @@ struct FFT(V, Options)
 
     alias bsr log2;
 
-    static int n_bit_reversed_passes(int log2n)
+    int n_bit_reversed_passes(int log2n)
     {
         enum log2vs = log2(vec_size);
         // assert(log2n >= 2 * log2vs);
@@ -277,7 +277,7 @@ struct FFT(V, Options)
             log2vs + 1 : log2vs;
     }
  
-    static void sines_cosines_refine(bool computeEven)(
+    void sines_cosines_refine(bool computeEven)(
         Pair* src, Pair* dest, size_t n_from, T dphi)
     {
         T cdphi = _cos(dphi);
@@ -297,7 +297,7 @@ struct FFT(V, Options)
         }
     }
 
-    static void sines_cosines(bool phi0_is_last)(
+    void sines_cosines(bool phi0_is_last)(
         Pair* r, size_t n, T phi0, T deltaphi, bool bit_reversed)
     {
         r[n - 1][0] = _cos(phi0);
@@ -310,7 +310,7 @@ struct FFT(V, Options)
         }
     } 
 
-    static void twiddle_table()(int log2n, Pair * r)
+    void twiddle_table()(int log2n, Pair * r)
     {
         if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size))
         {
@@ -394,7 +394,7 @@ struct FFT(V, Options)
 
     alias void* Table;
 
-    static size_t twiddle_table_size_bytes(int log2n)
+    size_t twiddle_table_size_bytes(int log2n)
     {
         auto compact = log2n >= Options.large_limit || 
             log2n < 2 * log2(vec_size);
@@ -402,12 +402,12 @@ struct FFT(V, Options)
         return Pair.sizeof << (compact ? log2n - 1 : log2n); 
     }
  
-    static T* twiddle_table_ptr(void* p, int log2n)
+    T* twiddle_table_ptr(void* p, int log2n)
     { 
         return cast(T*)p;
     }
     
-    static size_t tmp_buffer_size_bytes(int log2n)
+    size_t tmp_buffer_size_bytes(int log2n)
     {
         enum rec = vec.sizeof << (
             Options.log2_recursive_passes_chunk_size + 
@@ -421,19 +421,19 @@ struct FFT(V, Options)
             rec > br ? rec : br;
     }
 
-    static void* tmp_buffer_ptr(void* p, int log2n)
+    void* tmp_buffer_ptr(void* p, int log2n)
     {
         return p + twiddle_table_size_bytes(log2n);
     }
  
-    static uint* br_table_ptr(void* p, int log2n)
+    uint* br_table_ptr(void* p, int log2n)
     {
         return cast(uint*)(
             p + twiddle_table_size_bytes(log2n) + 
             tmp_buffer_size_bytes(log2n));
     }
     
-    static size_t table_size_bytes()(uint log2n)
+    size_t table_size_bytes()(uint log2n)
     {
         uint log2nbr = log2n < Options.large_limit ? 
             log2n : 2 * Options.log2_bitreverse_large_chunk_size;
@@ -444,7 +444,7 @@ struct FFT(V, Options)
             BR.br_table_size(log2nbr) * uint.sizeof;
     }
     
-    static Table fft_table()(int log2n, void * p)
+    Table fft_table()(int log2n, void * p)
     {   
         if(log2n == 0)
             return p;
@@ -527,7 +527,7 @@ struct FFT(V, Options)
         pi[k3] = i3;
     };
  
-    static void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
+    void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend; pr += m, pi += m)
@@ -548,7 +548,7 @@ struct FFT(V, Options)
         }
     }
  
-    static void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
+    void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
@@ -573,7 +573,7 @@ struct FFT(V, Options)
         }
     }
 
-    static void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
+    void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride)
     {
         //version(DigitalMars)
@@ -599,7 +599,7 @@ struct FFT(V, Options)
         }
     }
     
-    static void first_fft_passes()(vec* pr, vec* pi, size_t n)
+    void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
 
@@ -631,7 +631,7 @@ struct FFT(V, Options)
         }
     }
         
-    static void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend ; pr += m, pi += m)
@@ -653,8 +653,7 @@ struct FFT(V, Options)
         }
     }
 
-    static void fft_two_passes(Tab...)(
-        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+    void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
         // sometimes gives an incorrect result (for example when building with 
@@ -713,7 +712,7 @@ struct FFT(V, Options)
         }
     }
 
-    static void fft_passes(bool compact_table)(
+    void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, T* table)
     {
         vec * pend = re + N;
@@ -767,9 +766,8 @@ struct FFT(V, Options)
         profStop(Action.passes_last);
     }
     
-    static static void fft_passes_fractional()(
-        vec * pr, vec * pi, vec * pend, 
-        T * table, size_t tableI)
+    void fft_passes_fractional()
+    (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
         {
@@ -813,10 +811,10 @@ struct FFT(V, Options)
             }
     }
   
-    static void fft_passes_strided(int l, int chunk_size)(
-        vec * pr, vec * pi, size_t N , 
-        ref T * table, ref size_t tableI, void* tmp_buffer, 
-        size_t stride, int nPasses)
+    void fft_passes_strided
+    (int l, int chunk_size)
+    (vec * pr, vec * pi, size_t N , ref T * table, ref size_t tableI, 
+        void* tmp_buffer, size_t stride, int nPasses)
     {
         auto rbuf = cast(vec*) tmp_buffer;
         auto ibuf = rbuf + l * chunk_size;
@@ -855,9 +853,8 @@ struct FFT(V, Options)
         BR.strided_copy!(chunk_size)(pi, ibuf, stride, chunk_size, l);
     }
 
-    static void fft_passes_recursive()(
-        vec * pr, vec *  pi, size_t N , 
-        T * table, size_t tableI, void* tmp_buffer)
+    void fft_passes_recursive()
+    (vec * pr, vec *  pi, size_t N, T * table, size_t tableI, void* tmp_buffer)
     {
         if(N <= (1<<Options.log2_optimal_n))
         {
@@ -917,8 +914,9 @@ struct FFT(V, Options)
         }
     }
   
-    static void bit_reverse_small_two(int minLog2n)(
-        T* re, T* im, int log2n, uint* brTable)
+    void bit_reverse_small_two
+    (int minLog2n)
+    (T* re, T* im, int log2n, uint* brTable)
     {
         enum l = V.log2_bitreverse_chunk_size;
         
@@ -944,9 +942,9 @@ struct FFT(V, Options)
         }   
     }
 
-    static auto v(T* p){ return cast(vec*) p; }
+    auto v(T* p){ return cast(vec*) p; }
 
-    static void fft_tiny()(T * re, T * im, int log2n, Table tables)
+    void fft_tiny()(T * re, T * im, int log2n, Table tables)
     {
         // assert(log2n > log2(vec_size));
         
@@ -963,7 +961,7 @@ struct FFT(V, Options)
             re, im, log2n, br_table_ptr(tables, log2n));
     }
 
-    static void fft_small()(T * re, T * im, int log2n, Table tables)
+    void fft_small()(T * re, T * im, int log2n, Table tables)
     {
         // assert(log2n >= 2*log2(vec_size));
 
@@ -991,8 +989,7 @@ struct FFT(V, Options)
         profStop(Action.br_passes);
     }
 
-    static void fft_large()(
-        T * re, T * im, int log2n, Table tables)
+    void fft_large()(T * re, T * im, int log2n, Table tables)
     {
         size_t N = (1<<log2n);
         auto tmp_buf = tmp_buffer_ptr(tables, log2n);
@@ -1005,7 +1002,7 @@ struct FFT(V, Options)
         BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf);
     }
 
-    static void fft()(T * re, T * im, int log2n, Table tables)
+    void fft()(T * re, T * im, int log2n, Table tables)
     {
         foreach(i; ints_up_to!(log2(vec_size) + 1))
             if(i == log2n)
@@ -1022,7 +1019,7 @@ struct FFT(V, Options)
   
     alias T* RTable;
  
-    static auto rtable_size_bytes()(int log2n)
+    auto rtable_size_bytes()(int log2n)
     {
         return T.sizeof << (log2n - 1);
     }
@@ -1035,7 +1032,7 @@ struct FFT(V, Options)
         V.unaligned_store(&a, v);
     }));
 
-    static RTable rfft_table()(int log2n, void *p) if(supports_real)
+    RTable rfft_table()(int log2n, void *p) if(supports_real)
     {
         if(log2n < 2)
             return cast(RTable) p;
@@ -1055,12 +1052,12 @@ struct FFT(V, Options)
         return cast(RTable) r.ptr;
     }
 
-    static auto rfft_table()(int log2n, void *p) if(!supports_real)
+    auto rfft_table()(int log2n, void *p) if(!supports_real)
     {
         return SFFT.rfft_table(log2n, p);
     }
 
-    static void rfft()(
+    void rfft()(
         T* rr, T* ri, int log2n, Table table, RTable rtable) 
     {
         if(log2n == 0)
@@ -1077,7 +1074,7 @@ struct FFT(V, Options)
         rfft_last_pass!false(rr, ri, log2n, rtable);
     }
 
-    static void irfft()(
+    void irfft()(
         T* rr, T* ri, int log2n, Table table, RTable rtable) 
     {
         if(log2n == 0)
@@ -1097,7 +1094,7 @@ struct FFT(V, Options)
         fft(ri, rr, log2n - 1, table);
     }
 
-    static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
         static if(!isScalar)
@@ -1177,7 +1174,7 @@ struct FFT(V, Options)
         }
     }
     
-    static void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(!supports_real)
     {
         SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
@@ -1212,7 +1209,7 @@ struct FFT(V, Options)
             e = e * factor;
     }
 
-    static size_t alignment(size_t n)
+    size_t alignment(size_t n)
     {
         enum pow2tsize = cast(size_t)1 << bsr(T.sizeof);
         enum pow2vecsize = cast(size_t)1 << bsr(vec.sizeof);
