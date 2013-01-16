@@ -224,9 +224,7 @@ string sources(Version v, string[] types, string[] additional)
 }
 
 enum dmdOpt = "-O -inline -release";
-// if I remove -inline below, wrong code is generated for 
-// pfft.sse_double.Vector.bit_reverse_swap
-enum dmdDbg = "-debug -g -inline";
+enum dmdDbg = "-debug -g";
 enum gdcOpt = "-O3 -finline-functions -frelease";
 
 //on MinGW we must use at least -O2 to avoid the stack alignment bug
@@ -766,11 +764,11 @@ void doit(string[] args)
         else
             buildDmd(v, types, dccmd, clib, dbg);
 
-        /*foreach(e; dirEntries(".", SpanMode.shallow, false))
+        foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 remove(e.name);
         if(clib)
-            deleteDOutput();*/
+            deleteDOutput();
     }
 }
 

@@ -7,36 +7,54 @@ template ProfileMixin(E)
         import std.stdio, std.traits;
         import core.time;
 
+        version(none)
+        {
+            // TODO: use actuall frequency
+            float seconds(ulong ticks){ return  ticks / 3.7e9; }
+
+            ulong time()
+            {
+                ulong a, d;
+                asm { "rdtsc" : "=a" a, "=d" d; }
+                return (d << 32) | a;
+            }
+        }
+        else
+        {
+            float seconds(ulong ticks){ return TickDuration(ticks).nsecs * 1e-9; }
+            
+            ulong time()
+            {
+                return TickDuration.currSystemTick.length;
+            }
+        }
+
         static assert(EnumMembers!(E).length == E.max + 1 && E.min == 0);
 
-        ulong[E.max + 1] profTimes;
+        shared ulong[E.max + 1] profTimes;
 
         static ~this()
         {
             foreach(e; EnumMembers!E)
-                writefln("%s\t%sms", e, profTimes[e] * 1e-6); 
+                stderr.writefln("%-15s %sms", 
+                    e, seconds(profTimes[e]) * 1e3); 
         }
 
         void profStart(E e)
         {
-            synchronized
-                profTimes[e] -= TickDuration.currSystemTick.nsecs;
+            profTimes[e] -= time();
         }
 
         void profStop(E e)
         {
-            synchronized
-                profTimes[e] += TickDuration.currSystemTick.nsecs; 
+            profTimes[e] += time(); 
         }
-    
+
         void profStopStart(E e1, E e2)
         {
-            synchronized
-            {
-                auto t = TickDuration.currSystemTick.nsecs;
-                profTimes[e1] += t;
-                profTimes[e2] -= t;
-            }
+            auto t = time();
+            profTimes[e1] += t;
+            profTimes[e2] -= t;
         }
     } 
     else
