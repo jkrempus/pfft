@@ -632,6 +632,8 @@ Options:
                         Can not be used with --clib or when cross compiling.
                         You must build the D library for selected types before 
                         building tests.
+  --dynamic-tests       Buildt tests for the dynamic c library. Executables 
+                        will be saved to ./test.
   --no-pgo              Disable profile guided optimization. This flag can
                         only be used with GDC. Using this flag will result
                         in slightly worse performance, but the build will be 

@@ -288,19 +288,19 @@ template PfftC()
         
     static if(dynamicC)
     {
-        struct Table { void* _0; void* _1; }
-        struct RTable { void* _0; void* _1; void* _2; void* _3; }
+        struct Table {}
+        struct RTable {}
 
         T* function(size_t) allocate;
-        Table function(size_t, void*) table;
-        RTable function(size_t, void*) rtable;
-        void function(Table) table_free;
-        void function(RTable) rtable_free;
+        Table* function(size_t, void*) table;
+        RTable* function(size_t, void*) rtable;
+        void function(Table*) table_free;
+        void function(RTable*) rtable_free;
         void function(T*) free;
-        void function(T*, T*, Table) fft; 
-        void function(T*, RTable) rfft; 
-        void function(T*, T*, Table) ifft; 
-        void function(T*, RTable) irfft; 
+        void function(T*, T*, Table*) fft; 
+        void function(T*, RTable*) rfft; 
+        void function(T*, T*, Table*) ifft; 
+        void function(T*, RTable*) irfft; 
 
         void load(string[] args)
         {
@@ -363,7 +363,7 @@ if(transfer == Transfer.fft)
 
     T* _re;
     T* _im;
-    Impl.Table table;
+    Impl.Table* table;
     int log2n;
     
     this(int _log2n)
@@ -400,7 +400,7 @@ if(transfer == Transfer.rfft)
     alias PfftC!() Impl;
    
     int log2n;
-    Impl.RTable table;
+    Impl.RTable* table;
     T* data;
     
     this(int log2n)

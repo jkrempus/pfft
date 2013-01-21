@@ -91,6 +91,11 @@ private void assert_power2(size_t n)
     }
 }
 
+size_t ptrsize_align(size_t n)
+{
+    return (n + (void*).sizeof) & ~((void*).sizeof - 1);
+}
+
 private template code(string type, string suffix, string Suffix)
 {
     enum code = 
@@ -108,7 +113,9 @@ private template code(string type, string suffix, string Suffix)
         {
             assert_power2(n);
 
-            return impl_`~type~`.table_size_bytes(bsf(n));
+            return 
+                ptrsize_align(impl_`~type~`.table_size_bytes(bsf(n))) +
+                PfftTable`~Suffix~`.sizeof;
         }
 
         auto pfft_table_`~suffix~`(size_t n, void* mem)
@@ -118,23 +125,30 @@ private template code(string type, string suffix, string Suffix)
             auto log2n = bsf(n);
 
             if(mem is null)
-                mem = allocate_aligned(alignment!(impl_`~type~`)((cast(size_t) 1) << log2n), 
-                    impl_`~type~`.table_size_bytes(log2n));
+                mem = allocate_aligned(
+                    alignment!(impl_`~type~`)(n), 
+                    pfft_table_size_bytes_`~suffix~`(n));
 
-            return PfftTable`~Suffix~`(impl_`~type~`.fft_table(bsf(n), mem), log2n);
+            auto table = cast(PfftTable`~Suffix~`*)(
+                mem + ptrsize_align(impl_`~type~`.table_size_bytes(log2n)));
+
+            table.p = impl_`~type~`.fft_table(bsf(n), mem);
+            table.log2n = log2n;
+
+            return table;
         }
 
-        void pfft_table_free_`~suffix~`(PfftTable`~Suffix~` table)
+        void pfft_table_free_`~suffix~`(PfftTable`~Suffix~`* table)
         {
             free_aligned(table.p);
         }
 
-        void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
+        void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
         {
             impl_`~type~`.fft(re, im, cast(uint) table.log2n, table.p);
         }
 
-        void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~` table)
+        void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
         {
             impl_`~type~`.fft(im, re, cast(uint) table.log2n, table.p);
         }
@@ -152,9 +166,10 @@ private template code(string type, string suffix, string Suffix)
             assert_power2(n);
 
             return 
-                impl_`~type~`.itable_size_bytes(bsf(n)) +
+                ptrsize_align(impl_`~type~`.itable_size_bytes(bsf(n)) +
                 impl_`~type~`.table_size_bytes(bsf(n) - 1) +
-                impl_`~type~`.rtable_size_bytes(bsf(n));
+                impl_`~type~`.rtable_size_bytes(bsf(n))) + 
+                PfftRTable`~Suffix~`.sizeof;
         }
 
         auto pfft_rtable_`~suffix~`(size_t n, void* mem)
@@ -167,25 +182,28 @@ private template code(string type, string suffix, string Suffix)
             auto table_size = impl_`~type~`.table_size_bytes(log2n - 1);
             auto itable_size = impl_`~type~`.itable_size_bytes(log2n);
 
-            auto sz = table_size + rtable_size + itable_size;
+            auto sz = ptrsize_align(table_size + rtable_size + itable_size);
             auto al = alignment!(impl_`~type~`)(n);
 
             if(mem is null)
-                mem = allocate_aligned(al, sz);
+                mem = allocate_aligned(al, sz + PfftRTable`~Suffix~`.sizeof);
 
-            return PfftRTable`~Suffix~`(
-                impl_`~type~`.rfft_table(log2n, mem), 
-                impl_`~type~`.fft_table(log2n - 1, mem + rtable_size), 
-                impl_`~type~`.interleave_table(log2n, mem + rtable_size + table_size), 
-                log2n);
+            auto table = cast(PfftRTable`~Suffix~`*)(mem + sz);
+
+            table.rtable = impl_`~type~`.rfft_table(log2n, mem);
+            table.table = impl_`~type~`.fft_table(log2n - 1, mem + rtable_size);
+            table.itable = impl_`~type~`.interleave_table(log2n, mem + rtable_size + table_size);
+            table.log2n = log2n;
+
+            return table;
         }
 
-        void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~` table)
+        void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~`* table)
         {
             free_aligned(table.rtable);
         }
 
-        void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
+        void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
         {
             impl_`~type~`.deinterleave(data, cast(uint) table.log2n, table.itable);
             impl_`~type~`.rfft(
@@ -193,7 +211,7 @@ private template code(string type, string suffix, string Suffix)
                 cast(uint) table.log2n, table.table, table.rtable); 
         }
 
-        void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~` table)
+        void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
         {
             impl_`~type~`.irfft(
                 data, data + ((cast(size_t) 1) << (table.log2n - 1)),
