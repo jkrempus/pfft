@@ -124,7 +124,7 @@ version(Windows)
     enum dlibPath = "lib\\pfft.lib";
     enum clibPath = "lib\\pfft-c.lib";
     enum dynLibPath = "lib\\pfft-c.dll";
-    enum defPath = "lib\\pfft-c.def";
+    enum defPath = "lib\\pfft-c-msvc.def";
 }
 else
 {
