@@ -155,7 +155,11 @@ else
     enum isARM = false;
 
 string libPath(bool clib){ return clib ? clibPath : dlibPath; }
-string cObjs(bool clib){ return when(clib, "druntime.o clib.o"); }
+string cObjs(Compiler c, bool clib)
+{ 
+    return when(clib, c == (Compiler.DMD && isWindows) ? 
+        "druntime.obj clib.obj" : "druntime.o clib.o"); 
+}
 
 string fixSeparators(string s)
 {
@@ -331,11 +335,8 @@ string buildAdditionalSIMD(F)(
         .array(); 
 
     auto src = implSources(simd, types);
-    auto fname = simd.name ~ ".o";
     
-    buildObj(src, fname, v, simd, dccmd, dbg, pic);
-
-    return fname;
+    return buildObj(src, simd.name, v, simd, dccmd, dbg, pic);
 }
 
 
@@ -354,31 +355,35 @@ void buildLib(F0, F1)(
  
     auto implObjs = v.additionalSIMD
         .map!(s => buildAdditionalSIMD(
-                buildObj, v, s, types, dccmd, dbg, clib))()
+            buildObj, v, s, types, dccmd, dbg, clib))()
         .array().join(" ");
  
-    buildObj(src, "pfft.o", v, v.baseSIMD, dccmd, dbg, clib);
+    auto pfftObj = buildObj(src, "pfft", v, v.baseSIMD, dccmd, dbg, clib);
 
     if(dc == Compiler.GDC)
-        mixin(ex(`ar cr %{libPath(clib)} pfft.o %{cObjs(clib)} %{implObjs}`));
+        mixin(ex(`ar cr %{libPath(clib)} %{pfftObj} %{cObjs(dc, clib)} %{implObjs}`));
     else
         mixin(ex(
             `%{dccmd} -lib -of%{libPath(clib)} `
-            `pfft.o %{cObjs(clib)} %{implObjs}`)); 
+            `%{pfftObj} %{cObjs(dc, clib)} %{implObjs}`)); 
     
     if(clib)
-        buildShared(dccmd, "pfft.o", implObjs);
+        buildShared(dccmd, pfftObj, implObjs);
 }
 
-void buildDmdObj(
+string buildDmdObj(
     string src, string objname, Version v, SIMD simd, 
     string dccmd, bool dbg, bool pic)
 {
+    objname ~= isWindows ? ".obj" : ".o";
+
     auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
     
     mixin(ex(
         `%{dccmd} -I.. %{optOrDbg} -c %{when(pic, "-fPIC")} `
         "-of%{objname} -version=%{v} %{src}"));
+
+    return objname;
 }
 
 void buildDmdShared(string dccmd, string objname, string implObjs)
@@ -405,45 +410,29 @@ void buildLdcShared(string dccmd, string objname, string implObjs)
     }
  
     mixin(ex(
-        `%{dccmd} -shared -of%{dynLibPath} %{objname} %{cObjs(true)} `
+        `%{dccmd} -shared -of%{dynLibPath} %{objname} %{cObjs(Compiler.LDC, true)} `
         `%{implObjs} -nodefaultlib`)); 
 }
 
-void buildLdcObj(
+string buildLdcObj(
     string src, string objname, Version v, SIMD simd, 
     string dccmd, bool dbg, bool pic)
 {
+    objname ~= ".o";
+
     auto mattrFlag =  
         simd == SIMD.Scalar ? "" :
         simd == SIMD.SSE ? "-mattr=+sse2" :
         ("-mattr=+" ~ simd.name);
 
     auto optOrDbg = dbg ? ldcDbg : ldcOpt;
-
-    auto llvmVerStr = match(shell(dccmd ~ " -version"), r"LLVM (\d\.\d)").front[1];
     auto picFlag = when(pic, "-relocation-model=pic");
 
-    if(["3.2", "3.3"].canFind(llvmVerStr))
-    {
-        mixin(ex(
-            `%{dccmd} -I.. %{optOrDbg} -c -singleobj %{picFlag} `
-            "-of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
-    }
-    else
-    {
-        mixin(ex(
-            "%{dccmd} -I.. %{optOrDbg} -singleobj "
-                 "-output-bc -ofpfft.bc -d-version=%{v} %{src}"));
+    mixin(ex(
+        `%{dccmd} -I.. %{optOrDbg} -c -singleobj %{picFlag} `
+        "-of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
 
-        if(!dbg) 
-            execute(
-                "opt -O3 -std-link-opts -std-compile-opts pfft.bc -o pfft.bc");
-
-        mixin(ex(
-            `llc pfft.bc -o pfft.s -O=%{dbg ? 0 : 3} %{mattrFlag} `
-            `%{when(isOSX, "-disable-cfi")} %{picFlag}`,
-            "as pfft.s -o%{objname}"));
-    }
+    return objname;
 }
  
 void buildLdc(Version v, string[] types, string dccmd, bool clib, bool dbg)
@@ -460,14 +449,16 @@ void buildGdcShared(string dccmd, string objname, string implObjs)
         auto def = "";    
  
     mixin(ex(
-        `%{dccmd} -shared -o %{dynLibPath} %{objname} %{cObjs(true)} `
-        `%{implObjs} %{def} -nophoboslib`)); 
+        `%{dccmd} -shared -o %{dynLibPath} %{objname} `
+        `%{cObjs(Compiler.GDC, true)} %{implObjs} %{def} -nophoboslib`)); 
 }
 
-void buildGdcObj(
+string buildGdcObj(
     string src, string objname, Version v, SIMD simd, 
     string dccmd, bool dbg, bool pic)
 {
+    objname ~= ".o";
+
     auto archFlags = [
         SIMD.SSE:    "-msse2", 
         SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a9",
@@ -485,6 +476,8 @@ void buildGdcObj(
         // use clang as an assembler on OSX so that we can
         // use AVX
         mixin(ex(`clang -c tmp.s -o %{objname}`));
+
+    return objname;
 }
  
 void buildGdc(Version v, string[] types, string dccmd, 
@@ -531,7 +524,6 @@ void buildCObjects(Compiler dc, string[] types, string dccmd)
         dc == Compiler.LDC ? &buildLdcObj : 
         dc == Compiler.GDC ? &buildGdcObj : &buildDmdObj;
 
-
     auto versionSyntax =
         dc == Compiler.DMD ? "-version=" :
         dc == Compiler.GDC ? "-fversion=" : "-d-version=";
@@ -541,14 +533,14 @@ void buildCObjects(Compiler dc, string[] types, string dccmd)
     auto src = fixSeparators("../pfft/clib.d");
 
     buildObj(
-        "../pfft/clib.d", "clib.o", Version.Scalar, SIMD.Scalar, 
+        "../pfft/clib.d", "clib", Version.Scalar, SIMD.Scalar, 
         mixin(itp("%{dccmd} %{typeFlags}")), false, true); 
  
     string bitopSrc = when(
         dc == Compiler.LDC, getModuleLocation(dccmd, "core.bitop"));
 
     buildObj(
-        bitopSrc ~ " ../pfft/druntime_stubs.d", "druntime.o", 
+        bitopSrc ~ " ../pfft/druntime_stubs.d", "druntime", 
         Version.Scalar, SIMD.Scalar, dccmd, false, true);
 }
 

@@ -329,7 +329,7 @@ template PfftC()
             else version(OSX)
                 auto libname = "libpfft-c.dylib";
             else version(Windows)
-                auto libname = "pfft.dll";
+                auto libname = "pfft-c.dll";
 
             auto lib = buildPath(
                 absolutePath(dirName(args[0])), 
