@@ -1,5 +1,6 @@
 module pfft.profile;
 
+
 template ProfileMixin(E)
 {
     version(Profile)
@@ -7,7 +8,7 @@ template ProfileMixin(E)
         import std.stdio, std.traits;
         import core.time;
 
-        version(none)
+        version(X86_64)
         {
             // TODO: use actuall frequency
             float seconds(ulong ticks){ return  ticks / 3.7e9; }
@@ -15,7 +16,16 @@ template ProfileMixin(E)
             ulong time()
             {
                 ulong a, d;
-                asm { "rdtsc" : "=a" a, "=d" d; }
+                version(GNU)
+                    asm { "rdtsc" : "=a" a, "=d" d; }
+                else
+                    asm
+                    {
+                        rdtsc;
+                        mov a, RAX;
+                        mov d, RDX;
+                    }
+
                 return (d << 32) | a;
             }
         }
