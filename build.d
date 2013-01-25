@@ -8,68 +8,10 @@ import std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid,
        std.conv, std.range, std.getopt, std.file, std.regex, std.exception,
        std.path : absolutePath, dirSeparator;
 
-auto interpolate(string s)
-{
-    auto fm = "";
-    auto args = "";
-    
-    enum State{ text, percent, format, arg }
-    
-    State state = State.text;
-    foreach(dchar c; s)
-    final switch(state)
-    {
-        case State.text:
-            fm ~= c; 
-            if(c == '%')
-                state = State.percent;
-            break;
-
-        case State.percent:
-            if(c == '%')
-            {
-                fm ~= '%';
-                state = State.text;
-            }
-            else if(c == '{')
-            {
-                fm ~= "s";
-                state = State.arg;
-            }
-            else
-            {
-                fm ~= c;
-                state = State.format;
-            }
-            break;
-
-        case State.format:
-            if(c == '{')
-                state = State.arg;
-            else
-                fm ~= c;
-            break;
- 
-        case State.arg:
-            if(c == '}')
-            {
-                args ~= ", ";
-                state = State.text;
-            }
-            else
-                args ~= c;
-            break;
-    }
-    enforce(state == State.text, "Can not interpolate the string");   
- 
-    return "xformat(`"~fm~"`, "~args~")";
-}
-
-alias interpolate itp;
+import buildutils;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
-enum Compiler{ DMD, GDC, LDC}
 
 auto parseVersion(string simdOpt)
 {
@@ -116,36 +58,34 @@ T when(T)(bool condition, lazy T r){ return condition ? r : T.init; }
     return true;
 }
 
-bool verbose;
+auto archFlags(SIMD simd, Compiler c)
+{
+    if(c == Compiler.GDC)
+        return [
+            SIMD.SSE:    "-msse2", 
+            SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a9",
+            SIMD.Scalar: "",
+            SIMD.AVX :   "-mavx"][simd];
+    else if(c == Compiler.LDC)
+        return  
+            simd == SIMD.Scalar ? "" :
+            simd == SIMD.SSE ? "-mattr=+sse2" : ("-mattr=+" ~ simd.name);
+    else
+        return "";
+}
 
 version(Windows)
-{
     enum isWindows = true;
-    enum dlibPath = "lib\\pfft.lib";
-    enum clibPath = "lib\\pfft-c.lib";
-    enum dynLibPath = "lib\\pfft-c.dll";
-    enum defPath = "lib\\pfft-c-msvc.def";
-}
 else
-{
     enum isWindows = false;
-    enum dlibPath = "lib/libpfft.a";
-    enum clibPath = "lib/libpfft-c.a";
-}
 
 version(linux)
-{
     enum isLinux = true;
-    enum dynLibPath = "lib/libpfft-c.so";
-}
 else 
     enum isLinux = false;
 
 version(OSX)
-{
     enum isOSX = true;
-    enum dynLibPath = "lib/libpfft-c.dylib";
-}
 else 
     enum isOSX = false;
 
@@ -154,45 +94,11 @@ version(ARM)
 else 
     enum isARM = false;
 
-string libPath(bool clib){ return clib ? clibPath : dlibPath; }
-string cObjs(Compiler c, bool clib)
-{ 
-    return when(clib, c == (Compiler.DMD && isWindows) ? 
-        "druntime.obj clib.obj" : "druntime.o clib.o"); 
-}
+enum cObjs = ["druntime", "clib"];
 
 string fixSeparators(string s)
 {
     return replace(s, "/", dirSeparator);
-}
-
-void execute(Cmds...)(Cmds cmds)
-{
-    foreach(c; cmds)
-    {
-        auto cc = fixSeparators(c);
-        if(verbose)
-            writeln(cc);
-        
-        auto r = shell(cc);
-        if(verbose)
-            writeln(r);
-    }
-}
-
-auto ex(Cmds...)(Cmds cmds)
-{
-    auto r = "execute(";
-    foreach(c; cmds)
-        r ~= interpolate(c) ~ ", ";
-    
-    return r ~ ");";
-}
-
-void removeFiles(S...)(S files)
-{
-    foreach(f; files)
-        remove(f);
 }
 
 auto simdModuleName(SIMD simd, string type)
@@ -201,102 +107,60 @@ auto simdModuleName(SIMD simd, string type)
         "sse_real" : "scalar_real",
         "avx_real" : "scalar_real"];
     
-    auto s = mixin(itp("%{simd.name}_%{type}"));
+    auto s = simd.name~"_"~type;
     return dict.get(s, s); 
 }
 
 auto fileName(string moduleName)
 {
-    return mixin(itp(`../pfft/%{moduleName}.d`));
+    return "../pfft/"~moduleName;
 }
 
-string implSources(SIMD simd, string[] types)
+auto implSources(SIMD simd, string[] types)
 {
-    return types.map!(t => fileName(simdModuleName(simd, t)))().join(" ");
+    return types.map!(t => fileName(simdModuleName(simd, t))).array;
 }
 
-string sources(Version v, string[] types, string[] additional)
+auto sources(Version v, string[] types, string[] additional)
 {
     auto m = 
-        map!(t => simdModuleName(v.baseSIMD, t))(types).array() ~ 
-        map!q{"impl_" ~ a}(types).array() ~
+        map!(t => simdModuleName(v.baseSIMD, t))(types).array ~ 
+        map!q{"impl_" ~ a}(types).array ~
         ["fft_impl", "shuffle"] ~
         additional ~ 
         when(v == Version.SSE_AVX, ["detect_avx"]); 
 
-    return join(map!fileName(m), " "); 
+    return map!fileName(m).array; 
 }
 
-enum dmdOpt = "-O -inline -release";
-enum dmdDbg = "-debug -g";
-enum gdcOpt = "-O3 -finline-functions -frelease";
-
-//on MinGW we must use at least -O2 to avoid the stack alignment bug
-version(Windows)
-    enum gdcDbg = "-fdebug -g -O2";
-else
-    enum gdcDbg = "-fdebug -g";
-
-enum ldcOpt = "-O3 -release";
-enum ldcDbg = "-d-debug -g";
+//TODO: on MinGW we must use at least -O2 to avoid the stack alignment bug
 
 void buildTests(
     string[] types, string dccmd, Compiler c, string outDir, 
     bool optimized = true, bool dbg = false, string fftw = null,
-    bool dynamic = false)
+    bool dynamic = false, bool clib = false)
 {
-    auto srcPath = fixSeparators("../test/test.d");
-
-    auto clibSrc = fixSeparators("../pfft/clib.d");
-    auto clibVersion = "BenchClib";
-
+    auto fftwSuffixes = ["float" : "f", "double" : "", "real" : "l"]; 
+    
     foreach(type; types)
-    {
-        auto binPath = fixSeparators(outDir ~ "/test_" ~ type);
-        auto ver = capitalize(type);
-
-        auto versyn =
-            c == Compiler.DMD ? "-version=" :
-            c == Compiler.GDC ? "-fversion=" : "-d-version=";
-
-        auto common = dynamic ? 
-            mixin(itp("%{versyn}%{ver} %{versyn}DynamicC %{srcPath}")) :
-            mixin(itp("%{versyn}%{ver} -Iinclude %{srcPath} %{clibSrc} %{dlibPath}"));
-
-        auto fftwSuffix = ["float" : "f", "double" : "", "real" : "l"][type]; 
-
-        final switch(c)
-        {
-            case Compiler.DMD:
-                auto fftwFlags = mixin(itp(
-                    `-version=BenchFftw -L-L%{fftw} -L-lfftw3%{fftwSuffix}`));
-                mixin(ex(
-                    `%{dccmd} -version=%{clibVersion} `
-                    `-of%{binPath} %{common} `
-                    `%{when(optimized, dmdOpt)} %{when(dbg, dmdDbg)} `
-                    `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-L-ldl")}`));
-                break;
-
-            case Compiler.GDC:
-                auto fftwFlags = mixin(itp(
-                    `-fversion=BenchFftw -L%{fftw} -lfftw3%{fftwSuffix}`));
-                mixin(ex(
-                    `%{dccmd} -fversion=%{clibVersion} `
-                    `-o %{binPath} %{common} `
-                    `%{when(optimized, gdcOpt)} %{when(dbg, gdcDbg)} `
-                    `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-ldl")}`));
-                break;
-            
-            case Compiler.LDC:
-                auto fftwFlags = mixin(itp(
-                    `-d-version=BenchFftw -L-L%{fftw} -L-lfftw3%{fftwSuffix}`));
-                mixin(ex(
-                    `%{dccmd} -d-version=%{clibVersion} `
-                    `-of%{binPath} %{common} -linkonce-templates `
-                    `%{when(optimized, ldcOpt)} %{when(dbg, ldcDbg)} `
-                    `%{when(!!fftw, fftwFlags)} %{when(isLinux, "-L-ldl")}`));
-        }
-    }
+        argList
+            .compileCmd(dccmd)
+            .src("../test/test")
+            .conditional(clib,
+                argList.src("../pfft/clib").version_("BenchClib"))
+            .version_(capitalize(type))
+            .output(outDir~"/test_"~type)
+            .conditional(dynamic,
+                argList.version_("DynamicC"),
+                argList.ipath("include").lib("lib/pfft"))
+            .conditional(optimized, argList.optimize.inline.release)
+            .conditional(dbg, argList.debug_.g)
+            .conditional(!!fftw, argList
+                .lpath(fftw)
+                .version_("BenchFftw")
+                .linkTo("fftw3"~fftwSuffixes[type]))
+            .conditional(isLinux, argList.linkTo("dl"))
+            .run(c);
 }
 
 void runBenchmarks(string[] types, Version v)
@@ -317,17 +181,36 @@ void runBenchmarks(string[] types, Version v)
 
         foreach(i; r)
         {
-            auto base = absolutePath("test");
+            auto fn = absolutePath("test") ~ "_" ~ type.to!string;
             auto rFlag = when(isReal, "-r");
-            mixin(ex(
-                `%{base}_%{type} -s -m 1000 direct "%{i}" --impl "%{impl}" `
-                `%{rFlag}`));
+            auto iStr = i.to!string;
+            auto implStr = impl.to!string;
+            vshell(fn~" -s -m 1000 pfft "~iStr~" --impl "~implStr~" "~rFlag);
         }
     }
 }
 
-string buildAdditionalSIMD(F)(
-    F buildObj, Version v, SIMD simd, string[] types, 
+void buildObj(
+    Compiler c, string[] src, string objname, Version v, SIMD simd, 
+    string dccmd, bool dbg, bool pic)
+{
+    argList
+        .compileCmd(dccmd)
+        .conditional(dbg,
+            argList.debug_.g,
+            argList.optimize.inline.release)
+        .version_(v.to!string)
+        .conditional(pic, argList.pic)
+        .raw(archFlags(simd, c))
+        .src(src)
+        .output(objname)
+        .genObj
+        .ipath("..")
+        .run(c);
+}
+ 
+string buildAdditionalSIMD(
+    Compiler dc, Version v, SIMD simd, string[] types, 
     string dccmd, bool dbg, bool pic)
 {
     types = types.filter!(
@@ -336,167 +219,70 @@ string buildAdditionalSIMD(F)(
 
     auto src = implSources(simd, types);
     
-    return buildObj(src, simd.name, v, simd, dccmd, dbg, pic);
+    buildObj(dc, src, simd.name, v, simd, dccmd, dbg, pic);
+    
+    return simd.name;
 }
 
-
-void noShared(string dccmd, string objname, string implObjs)
-{
-    stderr.writeln(
-        "Note: when building pfft using DMD, "
-        "the shared library is not built.");
-}
-
-void buildLib(F0, F1)(
-    F0 buildObj, F1 buildShared, Compiler dc, Version v, string[] types,
+void buildLib(
+    Compiler dc, Version v, string[] types,
     string dccmd, bool clib, bool dbg)
 {
     auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
  
     auto implObjs = v.additionalSIMD
-        .map!(s => buildAdditionalSIMD(
-            buildObj, v, s, types, dccmd, dbg, clib))()
-        .array().join(" ");
+        .map!(s => buildAdditionalSIMD(dc, v, s, types, dccmd, dbg, clib))
+        .array;
  
-    auto pfftObj = buildObj(src, "pfft", v, v.baseSIMD, dccmd, dbg, clib);
+    buildObj(dc, src, "pfft", v, v.baseSIMD, dccmd, dbg, clib);
 
-    if(dc == Compiler.GDC)
-        mixin(ex(`ar cr %{libPath(clib)} %{pfftObj} %{cObjs(dc, clib)} %{implObjs}`));
-    else
-        mixin(ex(
-            `%{dccmd} -lib -of%{libPath(clib)} `
-            `%{pfftObj} %{cObjs(dc, clib)} %{implObjs}`)); 
+    argList
+        .genLib
+        .output("lib/pfft")
+        .obj("pfft")
+        .obj(implObjs)
+        .conditional(clib, argList.obj(cObjs))
+        .run(dc);
     
     if(clib)
-        buildShared(dccmd, pfftObj, implObjs);
+        argList
+            .compileCmd(dccmd)
+            .genDynlib
+            .output("lib/pfft-c")
+            .obj("pfft")
+            .obj(implObjs)
+            .obj(cObjs)
+            .noDefaultLib
+            .run(dc);
 }
-
-string buildDmdObj(
-    string src, string objname, Version v, SIMD simd, 
-    string dccmd, bool dbg, bool pic)
-{
-    objname ~= isWindows ? ".obj" : ".o";
-
-    auto optOrDbg = dbg ? dmdDbg : dmdOpt; 
-    
-    mixin(ex(
-        `%{dccmd} -I.. %{optOrDbg} -c %{when(pic, "-fPIC")} `
-        "-of%{objname} -version=%{v} %{src}"));
-
-    return objname;
-}
-
-void buildDmdShared(string dccmd, string objname, string implObjs)
-{
-    stderr.writeln(
-        "Note: when building pfft with DMD the shared library is not built.");
-} 
 
 void buildDmd(Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
-    buildLib(&buildDmdObj, &buildDmdShared, Compiler.DMD, 
-        v, types, dccmd, clib, dbg); 
+    buildLib(Compiler.DMD, v, types, dccmd, clib, dbg); 
 }
 
-void buildLdcShared(string dccmd, string objname, string implObjs)
-{
-    version(Windows)
-    {
-        stderr.writeln(
-            "Note: when building pfft using LDC on Windows, "
-            "the shared library is not built.");
-        
-        return;
-    }
- 
-    mixin(ex(
-        `%{dccmd} -shared -of%{dynLibPath} %{objname} %{cObjs(Compiler.LDC, true)} `
-        `%{implObjs} -nodefaultlib`)); 
-}
-
-string buildLdcObj(
-    string src, string objname, Version v, SIMD simd, 
-    string dccmd, bool dbg, bool pic)
-{
-    objname ~= ".o";
-
-    auto mattrFlag =  
-        simd == SIMD.Scalar ? "" :
-        simd == SIMD.SSE ? "-mattr=+sse2" :
-        ("-mattr=+" ~ simd.name);
-
-    auto optOrDbg = dbg ? ldcDbg : ldcOpt;
-    auto picFlag = when(pic, "-relocation-model=pic");
-
-    mixin(ex(
-        `%{dccmd} -I.. %{optOrDbg} -c -singleobj %{picFlag} `
-        "-of%{objname} -d-version=%{v} %{src} %{mattrFlag}"));
-
-    return objname;
-}
- 
 void buildLdc(Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
-    buildLib(&buildLdcObj, &buildLdcShared, Compiler.LDC, 
-        v, types, dccmd, clib, dbg); 
+    buildLib(Compiler.LDC, v, types, dccmd, clib, dbg); 
 }
 
-void buildGdcShared(string dccmd, string objname, string implObjs)
-{
-    version(Windows)
-        auto def = "-Wl,--output-def=" ~ defPath;
-    else
-        auto def = "";    
- 
-    mixin(ex(
-        `%{dccmd} -shared -o %{dynLibPath} %{objname} `
-        `%{cObjs(Compiler.GDC, true)} %{implObjs} %{def} -nophoboslib`)); 
-}
-
-string buildGdcObj(
-    string src, string objname, Version v, SIMD simd, 
-    string dccmd, bool dbg, bool pic)
-{
-    objname ~= ".o";
-
-    auto archFlags = [
-        SIMD.SSE:    "-msse2", 
-        SIMD.Neon:   "-mfpu=neon -mfloat-abi=softfp -mcpu=cortex-a9",
-        SIMD.Scalar: "",
-        SIMD.AVX :   "-mavx"][simd];
-
-    auto optOrDbg = dbg ? gdcDbg : gdcOpt; 
-
-    mixin(ex(
-        `%{dccmd} %{optOrDbg} -fversion=%{v} %{when(pic, "-fPIC")} `
-        `%{archFlags} %{src} -o %{isOSX ? "tmp.s" : objname} `
-        `-%{isOSX ? "S" : "c"} -I..`));
-
-    static if(isOSX)
-        // use clang as an assembler on OSX so that we can
-        // use AVX
-        mixin(ex(`clang -c tmp.s -o %{objname}`));
-
-    return objname;
-}
- 
 void buildGdc(Version v, string[] types, string dccmd, 
     bool pgo, bool clib, bool dbg)
 {
     if(pgo)
     {
-        buildLib(&buildGdcObj, &noShared, Compiler.GDC, v, types, 
+        buildLib(Compiler.GDC, v, types, 
             dccmd ~ " -fprofile-generate ", false, dbg);
 
-        buildTests(types, dccmd ~ " -fprofile-generate -fversion=JustDirect ", 
+        buildTests(types, dccmd ~ " -fprofile-generate ", 
             Compiler.GDC, ".", false, dbg);
-        
+
         runBenchmarks(types, v);
-        buildLib(&buildGdcObj, &buildGdcShared, Compiler.GDC, v, types, 
+        buildLib(Compiler.GDC, v, types, 
             dccmd ~ " -fprofile-use", clib, dbg);
     }
     else
-        buildLib(&buildGdcObj, &buildGdcShared, Compiler.GDC, v, types, dccmd, clib, dbg);
+        buildLib(Compiler.GDC, v, types, dccmd, clib, dbg);
 }
 
 string getModuleLocation(string dccmd, string module_)
@@ -506,9 +292,9 @@ string getModuleLocation(string dccmd, string module_)
         auto prevPath = absolutePath(".");
         chdir(dirName);
 
-        auto src = mixin(itp("import %{module_};")); 
+        auto src = "import "~module_~";"; 
         std.file.write("tmp.d", cast(void[]) src);
-        mixin(ex("%{dccmd} -c -o- tmp.d -deps=out.deps"));
+        vshell(dccmd~" -c -o- tmp.d -deps=out.deps");
         auto r = match(
             readText("out.deps"), 
             module_ ~ ` \(([^)]*)\)`).front[1];
@@ -520,10 +306,6 @@ string getModuleLocation(string dccmd, string module_)
 
 void buildCObjects(Compiler dc, string[] types, string dccmd)
 {
-    auto buildObj = 
-        dc == Compiler.LDC ? &buildLdcObj : 
-        dc == Compiler.GDC ? &buildGdcObj : &buildDmdObj;
-
     auto versionSyntax =
         dc == Compiler.DMD ? "-version=" :
         dc == Compiler.GDC ? "-fversion=" : "-d-version=";
@@ -533,14 +315,14 @@ void buildCObjects(Compiler dc, string[] types, string dccmd)
     auto src = fixSeparators("../pfft/clib.d");
 
     buildObj(
-        "../pfft/clib.d", "clib", Version.Scalar, SIMD.Scalar, 
-        mixin(itp("%{dccmd} %{typeFlags}")), false, true); 
+        dc, ["../pfft/clib"], "clib", Version.Scalar, SIMD.Scalar, 
+        dccmd~" "~typeFlags, false, true); 
  
     string bitopSrc = when(
         dc == Compiler.LDC, getModuleLocation(dccmd, "core.bitop"));
 
     buildObj(
-        bitopSrc ~ " ../pfft/druntime_stubs.d", "druntime", 
+        dc, [bitopSrc, "../pfft/druntime_stubs"], "druntime", 
         Version.Scalar, SIMD.Scalar, dccmd, false, true);
 }
 
@@ -575,7 +357,7 @@ void copyIncludes(string[] types, bool clib)
 
     foreach(type; types)
     {
-        auto name = mixin(itp("impl_%{type}.di"));
+        auto name ="impl_"~type~".di";
         copy(
             fixSeparators("../pfft/di/" ~ name), 
             fixSeparators("include/pfft/" ~ name));
@@ -589,10 +371,10 @@ void copyIncludes(string[] types, bool clib)
         fixSeparators("include/pfft/pfft.d"));
 }
 
-void deleteDOutput()
+void deleteDOutput(Compiler dc)
 {
     try rmdirRecurse(fixSeparators("include/pfft")); catch{}
-    try std.file.remove(dlibPath); catch{}
+    try std.file.remove(libName(dc, "lib/pfft")); catch{}
 }
 
 enum usage = `
@@ -685,9 +467,6 @@ void doit(string[] args)
         return;
     }
   
-    if(tests && clib)
-        invalidCmd("--tests and --clib can not be used together.");
-
     if(dc == Compiler.DMD && clib)
         invalidCmd("Can not build the C library using DMD");
 
@@ -715,11 +494,11 @@ void doit(string[] args)
     if(simdOpt == "")
         simdOpt = (dc != Compiler.DMD) ? "sse-avx" : "sse";
 
-    auto buildDir = clib ? "generated-c" : "generated";
+    auto buildDir = (clib && !tests) ? "generated-c" : "generated";
     if(tests)
     {
         chdir(buildDir);
-        buildTests(types, dccmd, dc, "../test", !dbg, dbg, fftw, dynamic);
+        buildTests(types, dccmd, dc, "../test", !dbg, dbg, fftw, dynamic, clib);
     }
     else
     {
@@ -753,16 +532,14 @@ void doit(string[] args)
         
         if(dc == Compiler.GDC)
             buildGdc(v, types, dccmd, !nopgo, clib, dbg);
-        else if(dc == Compiler.LDC)
-            buildLdc(v, types, dccmd, clib, dbg);
-        else
-            buildDmd(v, types, dccmd, clib, dbg);
+        else 
+            buildLib(dc, v, types, dccmd, clib, dbg);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 remove(e.name);
         if(clib)
-            deleteDOutput();
+            deleteDOutput(dc);
     }
 }
 
