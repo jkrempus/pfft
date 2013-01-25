@@ -26,6 +26,11 @@ version(BenchFftw)
 else
     enum benchFftw = false;
     
+version(BenchClib)
+    enum benchClib = true;
+else
+    enum benchClib = false;
+    
 auto gc_aligned_array(A)(size_t n)
 {
     version(NoGC)
@@ -892,7 +897,7 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
 
     long flops = mflops * 1000_000;
  
-    static if(!justDirect)
+    static if(!justDirect && (benchClib || dynamicC))
         if(impl == "c")
             return f!(CApi!(transfer, isInverse), transfer, isInverse)(
                 log2n, flops);
@@ -1024,7 +1029,8 @@ Options:
  
 void main(string[] args)
 {
-    PfftC!().load(args);
+    static if(dynamicC)
+        PfftC!().load(args);
 
     try
     {
