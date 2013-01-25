@@ -172,7 +172,9 @@ string libName(Compiler c, string value)
 
 string dynlibName(Compiler c, string value)
 {
-    return isWindows ? fn(value, ".dll") : fn("lib", value, ".so");
+    return 
+	isWindows ? fn(value, ".dll") :
+	isOSX ? fn("lib", value, ".dylib") : fn("lib", value, ".so");
 }
 
 string objName(Compiler c, string value)
