@@ -1,13 +1,34 @@
 module buildutils;
 
 import std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid, 
-       std.conv, std.range, std.getopt, std.file, std.regex, std.exception,
-       std.path : absolutePath, dirSeparator, buildPath, pathSplitter;
+       std.conv, std.range, std.getopt, std.regex, std.exception, std.typecons;
+       
+import std.path : absolutePath, buildPath;
+
+static import std.file;
+
+alias std.range.repeat repeat; 
 
 version(Windows)
     enum isWindows = true;
 else
     enum isWindows = false;
+
+version(linux)
+    enum isLinux = true;
+else 
+    enum isLinux = false;
+
+version(OSX)
+    enum isOSX = true;
+else 
+    enum isOSX = false;
+
+version(ARM)
+    enum isARM = true;
+else 
+    enum isARM = false;
+
 
 enum Compiler { DMD, GDC, LDC }
 
@@ -36,21 +57,110 @@ auto vshell(string cmd)
 
 private string fn(string prefix, string path, string suffix)
 {
-    auto s = path.replace("/", dirSeparator).pathSplitter();
+    import std.path;
+
+    auto s = pathSplitter(path.replace("/", dirSeparator));
     auto name = s.back();
     s.popBack();
 
-    return buildPath(reduce!buildPath("", s), prefix ~ name ~ suffix); 
-}
-
-auto randomFileName()
-{
-    return buildPath(tempDir(), "_" ~ randomUUID().toString().replace("-", ""));
+    return buildPath(buildPath(s.array), prefix ~ name ~ suffix).absolutePath;
 }
 
 private string fn(string path, string suffix = "")
 {
-    return path.replace("/", dirSeparator) ~ suffix;
+    import std.path;
+
+    return absolutePath(path.replace("/", dirSeparator) ~ suffix);
+}
+
+void rm(string path, string flags = "")
+{
+    import std.path, std.file;
+    path = fn(path);
+
+    try
+    {
+        if(isDir(path))
+        {
+            if(flags.canFind('r'))
+                rmdirRecurse(path);
+            else
+                rmdir(path);
+        }
+        else
+            remove(path);
+    }
+    catch(Exception e)
+        if(!flags.canFind('f'))
+            throw e;
+}
+
+void cp(string src, string dst, string flags = "")
+{
+    import std.path, std.file;
+    src = absolutePath(fn(src));
+    dst = absolutePath(fn(dst));
+
+    if(exists(dst) && isDir(dst))
+        dst = buildPath(dst, baseName(src));
+
+    try
+    {
+        if(isDir(src))
+        {
+            enforce(flags.canFind('r'), new FileException(src, "is a directory"));
+
+            if(!exists(dst))
+                mkdir(dst);
+
+            enforce(isDir(dst), new FileException(dst,
+                "cannot copy a directory to a non-directory"));
+
+            void recurse(string src, string dst)
+            {
+                foreach(DirEntry s; dirEntries(src, SpanMode.shallow, true))
+                {
+                    auto d = baseName(s.name).absolutePath(dst);
+
+                    if(isDir(s))
+                    {
+                        if(!exists(d))
+                            std.file.mkdir(d);
+
+                        recurse(s, d);
+                    }
+                    else
+                        copy(s, d);
+                }
+            }
+            recurse(src, dst);
+        }
+        else
+            copy(src, dst); 
+    }
+    catch(Exception e)
+        if(!flags.canFind('f'))
+            throw e;
+}
+
+void cd(string path){ std.file.chdir(fn(path)); }
+
+void mkdir(string path, string flags = "")
+{
+    path = fn(path);
+
+    if(flags.canFind('p'))
+        std.file.mkdirRecurse(path);
+    else
+        std.file.mkdir(path);
+}
+
+string fixSeparators(string s) { return fn(s); }
+
+auto randomFileName()
+{
+    auto dir = std.file.tempDir();
+    return buildPath(dir, "_" ~ randomUUID().toString().replace("-", ""));
 }
 
 string libName(Compiler c, string value)
@@ -71,14 +181,14 @@ string objName(Compiler c, string value)
         fn(value, ".obj") : fn(value, ".o");
 }
 
-string outputFlag(Compiler c){ return c == Compiler.GDC ? "-o " : "-of"; }
-
 string exeName(Compiler c, string value)
 {
     return isWindows ? fn(value, ".exe") : fn(value);
 }
 
-struct Arg
+private string outputFlag(Compiler c){ return c == Compiler.GDC ? "-o " : "-of"; }
+
+private struct Arg
 {
     enum Type
     {
@@ -110,6 +220,7 @@ struct Arg
         deps,
         module_,
         output,
+        exclude, // used to exclude a module from auto dependencies
     }
 
     template hasValue(Type type){ enum hasValue = type >= Type.version_; }
@@ -129,6 +240,7 @@ struct Arg
 
         with(Type) switch(type)
         {
+            case exclude: return ""; 
             case genObj: return "-c";
             case genDynlib: return "-shared";
             case src: return fn(value, value.endsWith(".d") ? "" : ".d");
@@ -167,6 +279,7 @@ struct Arg
                 case noDefaultLib: return "-nodefaultlib";
                 case version_: return "-d-version="~value;
                 case optimize: return "-O3";
+                case debug_: return "-d-debug";
                 case inline: return "-enable-inlining";
                 case pic: return "-relocation-model=pic";
                 default: {}
@@ -220,13 +333,13 @@ private void buildLibGdc(
 
     auto outLibName = libName(Compiler.GDC, outputName);
     
-    try remove(outLibName); catch {} 
+    rm(outLibName, "f");
 
     vshell("ar cr "~outLibName~" "~objs);
     return;
 }
 
-void runCompiler(Compiler dc, immutable(Arg)[] flags)
+private void runCompiler(Compiler dc, immutable(Arg)[] flags)
 {
     with(Arg.Type)
     {
@@ -267,15 +380,16 @@ void runCompiler(Compiler dc, immutable(Arg)[] flags)
 
         string tmpObj = null;
 
+        enforce(outputName !is null, 
+            "There must be an argument of type output.");
+
         if(noOutputFlag)
         {
-            vshell(cmd~" "~args~" "~Arg(noOutput, null).str(dc));
+            auto oflag = outputFlag(dc) ~ fn(outputName);
+            vshell(cmd~" "~args~" "~Arg(noOutput, null).str(dc)~" "~oflag);
             return;
         }
 
-        enforce(outputName !is null, 
-            "Unless there is an argument of type noOutput, there must be an argument of type output.");
-    
         if(outputType == genLib && dc == Compiler.GDC)
             return buildLibGdc(cmd~" "~args, outputName);
 
@@ -295,14 +409,127 @@ void runCompiler(Compiler dc, immutable(Arg)[] flags)
     }
 } 
 
+private alias Tuple!(string, string, string, string) Quad;
+
+// Runs the compiler to get the dependency list 
+// for given args and parses the list.
+private auto generateDeps(immutable(Arg)[] args, Compiler c)
+{
+    import std.path;
+
+    auto modules = args
+        .filter!(a => a.type == Arg.Type.module_)
+        .map!(a => a.value)
+        .array;
+
+    args = args.filter!(a => a.type != Arg.Type.module_).array;
+
+    auto depsFile = randomFileName();
+    auto srcFile = randomFileName();
+    std.file.write(
+        srcFile~".d",
+        modules.map!(a => "import "~a~";\n").join);
+    
+    alias immutable(Arg) A;
+    alias Arg.Type AT;
+
+    runCompiler(c, args ~ [
+        A(AT.src, srcFile), A(AT.deps, depsFile), A(AT.noOutput, null)]);
+
+    auto srcModule = baseName(srcFile);
+    
+    auto re = regex(`^([\w.]+) \(([^\)]+)\) : \w+ : ([\w.]+) \(([^\)]+)\)`, `gm`);
+
+    return match(std.file.readText(depsFile), re)
+        .map!(capt => Quad(
+            capt[1] == srcModule ? "" : capt[1], 
+            capt[2], 
+            capt[3], 
+            capt[4]))
+        .array;
+}
+
+private auto isExcluded(string s, string[] exclude)
+{
+    return
+        zip(exclude, s.repeat)
+        .any!(a => 
+            a[1].startsWith(a[0].until('*')) && 
+            (a[0].back == '*' || a[0] == a[1]));
+}
+
+// Takes dependency list as a parameter and removes all modules that mach
+// en entry in the exclude array. It also recursively removes any modules 
+// that are only imported from the removed modules. It returns the list of
+// files names of the remaining modules.
+private auto fileList(Quad[] deps, string[] exclude)
+{
+    alias Tuple!(string, "name", string, "path") Module;
+
+    size_t[string] indices;
+    auto modules = new Module[](0);
+
+    foreach(line; deps)
+        foreach(i; staticIota!2)
+        {
+            auto name = line[2 * i];
+            if(name in indices)
+                continue;
+
+            indices[name] = modules.length;
+            modules ~= Module(name, line[2 * i + 1]);
+        }
+
+    auto n = modules.length;
+
+    auto adj = iota(n).map!(_ => new size_t[](0)).array;
+    foreach(d; deps)
+        adj[indices[d[0]]] ~= indices[d[2]];
+
+    auto isRoot = true.repeat(n).array;
+    foreach(e; adj)
+        foreach(f; e)
+            isRoot[f] = 0;
+
+    auto isReachable = false.repeat(n).array;
+    void recurse(size_t i)
+    {
+        if( isReachable[i] || isExcluded(modules[i].name, exclude))
+            return;
+
+        isReachable[i] = true;
+        foreach(j; adj[i])
+            recurse(j);
+    }
+
+    foreach(i; iota(n).filter!(a => isRoot[a]))
+        recurse(i);
+
+    return iota(n)
+        .filter!(i => isReachable[i] && modules[i].name != "")
+        .map!(i => modules[i].path)
+        .array;
+}
+
+auto set(R)(R r)
+{
+    bool[ElementType!R] ret;
+
+    foreach(e; r)
+        ret[e] = true;
+
+    return ret;
+}
+
 struct ArgList
 {
+    alias Arg.Type Type;
     immutable(Arg)[] args;
 
-    template argType(string name) { enum argType = mixin("Arg.Type."~name); }
+    template argType(string name) { enum argType = mixin("Type."~name); }
 
-    ArgList opDispatch(string name)(string[] values...) 
-        if(is(typeof(argType!name)) && Arg.hasValue!(argType!name))
+    ArgList opDispatch(string name)(string[] values...) const
+        if(is(typeof(argType!name)) && Arg.hasValue!(argType!name)) 
     {
         ArgList r = this;
         foreach(val; values)
@@ -311,18 +538,18 @@ struct ArgList
         return r;
     } 
 
-    ArgList opDispatch(string name)()
+    ArgList opDispatch(string name)() const
         if(is(typeof(argType!name)) && !Arg.hasValue!(argType!name))
     {
         return ArgList(args ~ Arg(argType!name, null));
     }
 
-    ArgList opBinary(string op)(ArgList other) if(op == "~")
+    ArgList opBinary(string op)(const(ArgList) other) const if(op == "~")
     {
         return ArgList(args ~ other.args);
     }
 
-    ArgList conditional(A...)(A a)
+    ArgList conditional(A...)(A a) const
     {
         foreach(i; staticIota!(A.length / 2))
             if(a[2 * i])
@@ -334,76 +561,90 @@ struct ArgList
         return this;
     }
 
-    void run(Compiler c)
+    ArgList addDependencies(Compiler c) const
+    {
+        auto exclude = args
+            .filter!(a => a.type == Type.exclude)
+            .map!(a => cast(string) a.value)
+            .array;
+
+        exclude ~= [ "std.*", "core.*", "object", "gcc.*", "ldc.*"];
+
+        auto files = fileList(generateDeps(args, c), exclude);
+
+        auto r = ArgList(args
+            .filter!(a => a.type != Type.src && a.type != Type.module_)
+            .array);
+
+        return reduce!((a,f) => a.src(f))(r, files);
+    }
+
+    ArgList findModules(Compiler c) const
+    {
+        auto modules = args
+            .filter!(a => a.type == Type.module_)
+            .map!(a => a.value)
+            .set;
+
+        if(modules.length == 0)
+            return this;
+
+        auto r = ArgList(args.filter!(a => a.type != Type.module_).array);
+
+        foreach(d; generateDeps(args, c))
+        {
+            if(d[2] !in modules)
+                continue;
+
+            modules.remove(d[2]);
+            r = r.src(d[3]); 
+        }
+
+        return r; 
+    }
+
+    void run(Compiler c) const
     {
         runCompiler(c, args);
+    }
+
+    void build(Compiler c, bool autoDeps = true)
+    {
+        if(autoDeps)
+            addDependencies(c).run(c);
+        else
+            findModules(c).run(c); 
     }
 }
 
 enum argList = ArgList([]);
 
-ArgList addDependencies(Compiler c, immutable(string)[] modules, ArgList args)
-{
-    ArgList files;
-    int[string] moduleSet;
-   
-    { 
-        auto depsFile = randomFileName();
-        auto srcModule = randomFileName();
-        std.file.write(
-            srcModule~".d", 
-            modules.map!(a => "import "~a~";\n").join());
-         
-        args.src(srcModule).deps(depsFile).noOutput.run(c);
-
-        auto depsLine = regex(`([\w.]+) \(([^\)]+)\)`, `g`);
-        foreach(capt; match(readText(depsFile), depsLine))
-        {
-            auto name = strip(capt[1]);
-            auto path = strip(capt[2]);
-            
-            if(
-                name.startsWith("core.") || 
-                name.startsWith("std.") || 
-                name == srcModule ||
-                name == "object") 
-            { 
-                continue;
-            }
-
-            if(name in moduleSet)
-                continue;
-
-            writeln(name);
-
-            moduleSet[name] = 1;
-            files = files.src(absolutePath(path)); 
-        }
-    }
-
-    return ArgList(
-        args.args.filter!(x => x.type != Arg.Type.src).array ~ files.args);
-}
-
-ArgList addDependencies(Compiler c, ArgList args)
-{
-    return addDependencies(c,
-        args.args.filter!(a => a.type == Arg.Type.module_).map!(a => a.value).array,
-        ArgList(args.args.filter!(a => a.type != Arg.Type.module_).array));
-}
-
 version(none)
 void main()
 {
-    auto files = addDependencies(
-        Compiler.DMD, 
-        argList
-            .ipath("/home/j/razno/d/fft/pfft/")
-            .module_("pfft.impl_float")
-            .module_("pfft.impl_double"));
+    auto args = argList
+        .output("asdf")
+        .ipath("/home/j/razno/d/fft/pfft/")
+        .module_("pfft.impl_float")
+        .module_("pfft.impl_double")
+        .version_("SSE_AVX")
+        .args;
+    
+    auto deps = generateDeps(args, Compiler.DMD);
+    auto files = fileList(deps, [
+        "std.*", 
+        "core.*", 
+        "object", 
+        "gcc.*", 
+        "ldc.*", 
+        "pfft.avx_*", 
+        ]);
 
-    writeln(files);
+    foreach(e; deps)
+        writefln("%s  %s  %s  %s", e.expand);
 
-//    verbose = true;
-//    argList.src("random_test").genLib.output("random_test").run(Compiler.GDC);
+    writeln();
+
+    foreach(f; files)
+        writefln(f);
 }

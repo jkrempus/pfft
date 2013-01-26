@@ -22,12 +22,18 @@ shared verbose = 1;
 
 auto vshell(string cmd, int vcmd, int vout)
 {
-    if(verbose >= vcmd) 
-        writeln(cmd); 
+    if(verbose >= vcmd)
+    { 
+        writeln(cmd);
+        stdout.flush();
+    }
    
     auto r = shell(cmd);
     if(verbose >= vout)
-        write(r);
+    { 
+        writeln(r);
+        stdout.flush();
+    }
 
     return r; 
 }
@@ -66,7 +72,7 @@ void initBuild()
 {
     auto dir = getcwd();
     chdir("..");
-    vshell("dmd build", 2, 2);
+    vshell("dmd build buildutils", 2, 2);
     chdir(dir); 
 }
 
@@ -79,7 +85,7 @@ void build(string flags)
     chdir("..");
     auto path = absolutePath("build");
     vshell(fm("%s %s", path, flags), 2, 2);
-    vshell(fm("%s --tests %s", path, flags), 2, 2);
+    vshell(fm("%s --tests --clib %s", path, flags), 2, 2);
     chdir(dir); 
 }
 
@@ -99,7 +105,7 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
             f("--dc DMD",  ["sse", "scalar"]) ~
             f(`--dc DMD --dc-cmd "dmd -m32"`,  ["scalar"]) ~
             f(`--dc GDC --dc-cmd "gdc -m32"`, 
-	    	avx ~ ["sse-avx", "sse", "scalar"]);
+                avx ~ ["sse-avx", "sse", "scalar"]);
     }
     else version(OSX)
     {
@@ -113,7 +119,7 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
             f("--dc GDC --no-pgo", avx ~ ["sse-avx", "sse", "scalar"]) ~
             f("--dc DMD",  ["scalar"]) ~
             f(`--dc GDC --no-pgo --dc-cmd "gdc -m32"`, 
-	    	avx ~ ["sse-avx", "sse", "scalar"]);
+                avx ~ ["sse-avx", "sse", "scalar"]);
     }
     else
         static assert("Not supported on this platform.");

@@ -1,14 +1,15 @@
-#!/usr/bin/env rdmd 
+#!/usr/bin/rdmd --force
 //          Copyright Jernej Krempuš 2012
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid, 
-       std.conv, std.range, std.getopt, std.file, std.regex, std.exception,
-       std.path : absolutePath, dirSeparator;
+import  std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid, 
+        std.conv, std.range, std.getopt, std.regex, std.exception;
 
-import buildutils;
+import std.file : dirEntries, SpanMode;
+
+import  buildutils;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
@@ -25,11 +26,7 @@ auto parseVersion(string simdOpt)
 
 T when(T)(bool condition, lazy T r){ return condition ? r : T.init; }
 
-@property name(Version v)
-{
-    return v.to!string.toLower.replace("_", "-"); 
-}
-
+@property name(Version v) { return v.to!string.toLower.replace("_", "-"); }
 @property name(SIMD s) { return s.to!string.toLower; }
 
 @property baseSIMD(Version v)
@@ -74,32 +71,7 @@ auto archFlags(SIMD simd, Compiler c)
         return "";
 }
 
-version(Windows)
-    enum isWindows = true;
-else
-    enum isWindows = false;
-
-version(linux)
-    enum isLinux = true;
-else 
-    enum isLinux = false;
-
-version(OSX)
-    enum isOSX = true;
-else 
-    enum isOSX = false;
-
-version(ARM)
-    enum isARM = true;
-else 
-    enum isARM = false;
-
 enum cObjs = ["druntime", "clib"];
-
-string fixSeparators(string s)
-{
-    return replace(s, "/", dirSeparator);
-}
 
 auto simdModuleName(SIMD simd, string type)
 {
@@ -108,32 +80,13 @@ auto simdModuleName(SIMD simd, string type)
         "avx_real" : "scalar_real"];
     
     auto s = simd.name~"_"~type;
-    return dict.get(s, s); 
+    return "pfft."~dict.get(s, s); 
 }
 
-auto fileName(string moduleName)
+auto commonArgs(Compiler c)
 {
-    return "../pfft/"~moduleName;
+    return isWindows && c == Compiler.GDC ? argList.raw("-O2") : argList;
 }
-
-auto implSources(SIMD simd, string[] types)
-{
-    return types.map!(t => fileName(simdModuleName(simd, t))).array;
-}
-
-auto sources(Version v, string[] types, string[] additional)
-{
-    auto m = 
-        map!(t => simdModuleName(v.baseSIMD, t))(types).array ~ 
-        map!q{"impl_" ~ a}(types).array ~
-        ["fft_impl", "shuffle"] ~
-        additional ~ 
-        when(v == Version.SSE_AVX, ["detect_avx"]); 
-
-    return map!fileName(m).array; 
-}
-
-//TODO: on MinGW we must use at least -O2 to avoid the stack alignment bug
 
 void buildTests(
     string[] types, string dccmd, Compiler c, string outDir, 
@@ -143,7 +96,7 @@ void buildTests(
     auto fftwSuffixes = ["float" : "f", "double" : "", "real" : "l"]; 
     
     foreach(type; types)
-        argList
+        commonArgs(c)
             .compileCmd(dccmd)
             .src("../test/test")
             .conditional(clib,
@@ -191,10 +144,10 @@ void runBenchmarks(string[] types, Version v)
 }
 
 void buildObj(
-    Compiler c, string[] src, string objname, Version v, SIMD simd, 
+    Compiler c, string[] modules, string objname, Version v, SIMD simd, 
     string dccmd, bool dbg, bool pic)
 {
-    argList
+    commonArgs(c)
         .compileCmd(dccmd)
         .conditional(dbg,
             argList.debug_.g,
@@ -202,11 +155,11 @@ void buildObj(
         .version_(v.to!string)
         .conditional(pic, argList.pic)
         .raw(archFlags(simd, c))
-        .src(src)
+        .module_(modules)
         .output(objname)
         .genObj
         .ipath("..")
-        .run(c);
+        .build(c, false);
 }
  
 string buildAdditionalSIMD(
@@ -217,7 +170,7 @@ string buildAdditionalSIMD(
             t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
         .array(); 
 
-    auto src = implSources(simd, types);
+    auto src = types.map!(t => simdModuleName(simd, t)).array;
     
     buildObj(dc, src, simd.name, v, simd, dccmd, dbg, pic);
     
@@ -228,15 +181,20 @@ void buildLib(
     Compiler dc, Version v, string[] types,
     string dccmd, bool clib, bool dbg)
 {
-    auto src = sources(v, types, when(!clib, ["stdapi", "pfft"]));
- 
+    auto src = 
+        types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
+        types.map!(t => "pfft.impl_"~t).array ~
+        ["pfft.fft_impl", "pfft.shuffle"] ~
+        when(!clib, ["pfft.stdapi", "pfft.pfft"]) ~ 
+        when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
+
     auto implObjs = v.additionalSIMD
         .map!(s => buildAdditionalSIMD(dc, v, s, types, dccmd, dbg, clib))
         .array;
- 
+
     buildObj(dc, src, "pfft", v, v.baseSIMD, dccmd, dbg, clib);
 
-    argList
+    commonArgs(dc)
         .genLib
         .output("lib/pfft")
         .obj("pfft")
@@ -245,7 +203,7 @@ void buildLib(
         .run(dc);
     
     if(clib)
-        argList
+        commonArgs(dc)
             .compileCmd(dccmd)
             .genDynlib
             .output("lib/pfft-c")
@@ -256,74 +214,40 @@ void buildLib(
             .run(dc);
 }
 
-void buildDmd(Version v, string[] types, string dccmd, bool clib, bool dbg)
+void buildLibPgo(
+    Compiler dc, Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
-    buildLib(Compiler.DMD, v, types, dccmd, clib, dbg); 
-}
+    buildLib(dc, v, types, 
+        dccmd ~ " -fprofile-generate ", false, dbg);
 
-void buildLdc(Version v, string[] types, string dccmd, bool clib, bool dbg)
-{
-    buildLib(Compiler.LDC, v, types, dccmd, clib, dbg); 
-}
+    buildTests(types, dccmd ~ " -fprofile-generate ", 
+        dc, ".", false, dbg);
 
-void buildGdc(Version v, string[] types, string dccmd, 
-    bool pgo, bool clib, bool dbg)
-{
-    if(pgo)
-    {
-        buildLib(Compiler.GDC, v, types, 
-            dccmd ~ " -fprofile-generate ", false, dbg);
-
-        buildTests(types, dccmd ~ " -fprofile-generate ", 
-            Compiler.GDC, ".", false, dbg);
-
-        runBenchmarks(types, v);
-        buildLib(Compiler.GDC, v, types, 
-            dccmd ~ " -fprofile-use", clib, dbg);
-    }
-    else
-        buildLib(Compiler.GDC, v, types, dccmd, clib, dbg);
-}
-
-string getModuleLocation(string dccmd, string module_)
-{
-        auto dirName = randomUUID().toString();
-        mkdir(dirName);
-        auto prevPath = absolutePath(".");
-        chdir(dirName);
-
-        auto src = "import "~module_~";"; 
-        std.file.write("tmp.d", cast(void[]) src);
-        vshell(dccmd~" -c -o- tmp.d -deps=out.deps");
-        auto r = match(
-            readText("out.deps"), 
-            module_ ~ ` \(([^)]*)\)`).front[1];
-
-        chdir(prevPath);
-        std.file.rmdirRecurse(dirName);
-        return r;
+    runBenchmarks(types, v);
+    buildLib(dc, v, types, 
+        dccmd ~ " -fprofile-use", clib, dbg);
 }
 
 void buildCObjects(Compiler dc, string[] types, string dccmd)
 {
-    auto versionSyntax =
-        dc == Compiler.DMD ? "-version=" :
-        dc == Compiler.GDC ? "-fversion=" : "-d-version=";
-
-    auto typeFlags = types.map!(a => versionSyntax ~ capitalize(a)).join(" ");
-
-    auto src = fixSeparators("../pfft/clib.d");
-
-    buildObj(
-        dc, ["../pfft/clib"], "clib", Version.Scalar, SIMD.Scalar, 
-        dccmd~" "~typeFlags, false, true); 
+    commonArgs(dc)
+        .compileCmd(dccmd)
+        .genObj
+        .output("clib")
+        .module_("pfft.clib")
+        .optimize
+        .version_(types.map!(capitalize).array)
+        .build(dc, false);
  
-    string bitopSrc = when(
-        dc == Compiler.LDC, getModuleLocation(dccmd, "core.bitop"));
-
-    buildObj(
-        dc, [bitopSrc, "../pfft/druntime_stubs"], "druntime", 
-        Version.Scalar, SIMD.Scalar, dccmd, false, true);
+    commonArgs(dc)
+        .compileCmd(dccmd)
+        .genObj
+        .output("druntime")
+        .module_("pfft.druntime_stubs")
+        .conditional(dc = Compiler.LDC, 
+            argList.module_("core.bitop"))
+        .optimize
+        .build(dc, false);
 }
 
 void copyIncludes(string[] types, bool clib)
@@ -340,7 +264,7 @@ void copyIncludes(string[] types, bool clib)
             "double" : "double",
             "real" : "long double"];
 
-        auto iStr = readText(fixSeparators("../c/pfft.template"));
+        auto iStr = std.file.readText(fixSeparators("../c/pfft.template"));
         auto oStr = "";
 
         foreach(type; types)
@@ -356,25 +280,10 @@ void copyIncludes(string[] types, bool clib)
     }
 
     foreach(type; types)
-    {
-        auto name ="impl_"~type~".di";
-        copy(
-            fixSeparators("../pfft/di/" ~ name), 
-            fixSeparators("include/pfft/" ~ name));
-    }
+        cp("../pfft/di/impl_"~type~".di", "include/pfft/");
     
-    copy(
-        fixSeparators("../pfft/stdapi.d"), 
-        fixSeparators("include/pfft/stdapi.d"));
-    copy(
-        fixSeparators("../pfft/pfft.d"), 
-        fixSeparators("include/pfft/pfft.d"));
-}
-
-void deleteDOutput(Compiler dc)
-{
-    try rmdirRecurse(fixSeparators("include/pfft")); catch{}
-    try std.file.remove(libName(dc, "lib/pfft")); catch{}
+    cp("../pfft/stdapi.d", "include/pfft/stdapi.d");
+    cp("../pfft/pfft.d", "include/pfft/pfft.d");
 }
 
 enum usage = `
@@ -403,9 +312,10 @@ Options:
                         equivalent to --type float --type double --type real.
   --clib                Build a C library. This doesn't currently work with DMD.
   --tests               Build tests. Executables will be saved to ./test. 
-                        Can not be used with --clib or when cross compiling.
-                        You must build the D library for selected types before 
-                        building tests.
+                        Can not be used when cross compiling. You must build the 
+                        D library for selected types before building tests.
+                        If both --tests and --clib are present, tests will be built,
+                        and the resulting binaries will support testing the C API.
   --dynamic-tests       Buildt tests for the dynamic c library. Executables 
                         will be saved to ./test.
   --no-pgo              Disable profile guided optimization. This flag can
@@ -467,7 +377,7 @@ void doit(string[] args)
         return;
     }
   
-    if(dc == Compiler.DMD && clib)
+    if(dc == Compiler.DMD && clib && !tests)
         invalidCmd("Can not build the C library using DMD");
 
     if(fftw)
@@ -488,7 +398,7 @@ void doit(string[] args)
         // of the host processor. That's usually not what we want.
         dccmd = dccmd ~ " -mcpu=generic";
    
-    if(types == [])
+    if(types.empty)
         types = ["double", "float", "real"];
 
     if(simdOpt == "")
@@ -497,7 +407,7 @@ void doit(string[] args)
     auto buildDir = (clib && !tests) ? "generated-c" : "generated";
     if(tests)
     {
-        chdir(buildDir);
+        cd(buildDir);
         buildTests(types, dccmd, dc, "../test", !dbg, dbg, fftw, dynamic, clib);
     }
     else
@@ -518,28 +428,32 @@ void doit(string[] args)
                 v.name);
         }
 
-        try rmdirRecurse(buildDir); catch{}
+        rm(buildDir, "rf");
         mkdir(buildDir);
-        chdir(buildDir);
+        cd(buildDir);
         mkdir("lib");
         mkdir("include");
-        mkdir(fixSeparators("include/pfft"));
+        mkdir("include/pfft");
 
         copyIncludes(types, clib);
 
         if(clib)
             buildCObjects(dc, types, dccmd);
         
-        if(dc == Compiler.GDC)
-            buildGdc(v, types, dccmd, !nopgo, clib, dbg);
+        if(dc == Compiler.GDC && !nopgo)
+            buildLibPgo(dc, v, types, dccmd, clib, dbg);
         else 
             buildLib(dc, v, types, dccmd, clib, dbg);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
-                remove(e.name);
+                rm(e.name);
+
         if(clib)
-            deleteDOutput(dc);
+        {
+            rm("include/pfft", "rf");
+            rm(libName(dc, "lib/pfft"), "f");
+        }
     }
 }
 
@@ -551,7 +465,6 @@ void main(string[] args)
     {
         auto s = findSplit(to!string(e), "---")[0];
         stderr.writefln("Exception was thrown: %s", s);
-        stderr.writeln(usage);
         core.stdc.stdlib.exit(1); 
     }
 }
