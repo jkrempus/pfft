@@ -1,15 +1,11 @@
-#!/usr/bin/rdmd --force
+#!/usr/bin/env rdmd
 //          Copyright Jernej Krempuš 2012
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import  std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid, 
-        std.conv, std.range, std.getopt, std.regex, std.exception;
-
-import std.file : dirEntries, SpanMode;
-
-import  buildutils;
+import buildutils;
+import std.string: toLower, toUpper, capitalize;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
@@ -70,8 +66,6 @@ auto archFlags(SIMD simd, Compiler c)
     else
         return "";
 }
-
-enum cObjs = ["druntime", "clib"];
 
 auto simdModuleName(SIMD simd, string type)
 {
@@ -199,7 +193,7 @@ void buildLib(
         .output("lib/pfft")
         .obj("pfft")
         .obj(implObjs)
-        .conditional(clib, argList.obj(cObjs))
+        .conditional(clib, argList.obj("druntime", "clib"))
         .run(dc);
     
     if(clib)
@@ -209,7 +203,7 @@ void buildLib(
             .output("lib/pfft-c")
             .obj("pfft")
             .obj(implObjs)
-            .obj(cObjs)
+            .obj("druntime", "clib")
             .noDefaultLib
             .run(dc);
 }
@@ -286,6 +280,21 @@ void copyIncludes(string[] types, bool clib)
     cp("../pfft/pfft.d", "include/pfft/pfft.d");
 }
 
+void buildDoc(Compiler c, string ccmd)
+{
+    auto common = argList
+        .compileCmd(ccmd)
+        .noOutput
+        .docInclude(
+            "doc/candydoc/candy.ddoc", 
+            "doc/ddoc/modules.ddoc", 
+            "doc/ddoc/additional-macros.ddoc");
+
+    common.src("pfft/pfft").docFile("doc/pfft.pfft.html").build(c, false);
+    common.src("pfft/stdapi").docFile("doc/pfft.stdapi.html").build(c, false);
+    common.src("doc/ddoc/clib").docFile("doc/pfft.clib.html").build(c, false);
+}
+
 enum usage = `
 Usage: rdmd build [options]
 build.d is an rdmd script used to build the pfft library. It saves the 
@@ -310,6 +319,8 @@ Options:
                         TYPE must be one of float, double and real. There can
                         be more than one --type flag. Omitting this flag is 
                         equivalent to --type float --type double --type real.
+  --doc                 Build documentation. This will generate documentation html
+                        files and put them in doc directory.
   --clib                Build a C library. This doesn't currently work with DMD.
   --tests               Build tests. Executables will be saved to ./test. 
                         Can not be used when cross compiling. You must build the 
@@ -352,6 +363,7 @@ void doit(string[] args)
     bool dynamic;
     bool help;
     bool dbg;
+    bool doc;
     string fftw = null;
     Compiler dc = Compiler.GDC;
 
@@ -367,15 +379,22 @@ void doit(string[] args)
         "fftw", &fftw,
         "h|help", &help,
         "v|verbose", &verbose,
+        "doc", &doc,
         "debug", &dbg);
 
     tests = tests || dynamic;
 
+    if(dccmd == "")
+        dccmd = [
+            Compiler.DMD : "dmd", 
+            Compiler.GDC : "gdc", 
+            Compiler.LDC : "ldc2"][dc];
+
+    if(doc)
+        return buildDoc(dc, dccmd);
+
     if(help)
-    {
-        writeln(usage);
-        return;
-    }
+        return writeln(usage);
   
     if(dc == Compiler.DMD && clib && !tests)
         invalidCmd("Can not build the C library using DMD");
@@ -386,12 +405,6 @@ void doit(string[] args)
             "executable will be covered by the GPL (see FFTW's license).");
 
     types = array(uniq(sort(types)));
-
-    if(dccmd == "")
-        dccmd = [
-            Compiler.DMD : "dmd", 
-            Compiler.GDC : "gdc", 
-            Compiler.LDC : "ldc2"][dc];
 
     if(dc == Compiler.LDC)
         // By default, ldc2 will generate code that can use all the features 

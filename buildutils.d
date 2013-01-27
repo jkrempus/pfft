@@ -1,8 +1,10 @@
 module buildutils;
 
-import std.stdio, std.process, std.string, std.array, std.algorithm, std.uuid, 
-       std.conv, std.range, std.getopt, std.regex, std.exception, std.typecons;
-       
+public import std.file : dirEntries, SpanMode;
+public import std.stdio, std.algorithm, std.uuid, std.conv, std.range,
+    std.getopt, std.regex, std.exception, std.typecons;
+
+import std.process, std.uuid;
 import std.path : absolutePath, buildPath;
 
 static import std.file;
@@ -29,12 +31,11 @@ version(ARM)
 else 
     enum isARM = false;
 
-
 enum Compiler { DMD, GDC, LDC }
 
 bool verbose = false;
 
-template staticIota(int n, T...)
+private template staticIota(int n, T...)
 {
     static if(n)
         alias staticIota!(n-1, n-1, T) staticIota;
@@ -205,6 +206,7 @@ private struct Arg
         genDynlib,
         pic,
         noDefaultLib,
+        doc,
         // arguments that use value
         version_,
         ipath,
@@ -221,6 +223,9 @@ private struct Arg
         module_,
         output,
         exclude, // used to exclude a module from auto dependencies
+        docFile,
+        docDir,
+        docInclude,
     }
 
     template hasValue(Type type){ enum hasValue = type >= Type.version_; }
@@ -243,7 +248,8 @@ private struct Arg
             case exclude: return ""; 
             case genObj: return "-c";
             case genDynlib: return "-shared";
-            case src: return fn(value, value.endsWith(".d") ? "" : ".d");
+            case src: return fn(value,
+                value.endsWith(".d") || value.endsWith(".di") ?  "" : ".d");
 
             case raw: return value;
             case lib: return libName(dc, value);
@@ -257,11 +263,14 @@ private struct Arg
         if(dc == Compiler.GDC)
             with(Type) switch(type)
             {
+                case doc: return "-fdoc";
+                case docFile: return "-fdoc-file="~fn(value);
+                case docDir: return "-fdoc-dir="~fn(value);
                 case noDefaultLib: return "-nophoboslib";
                 case pic: return "-fPIC";
                 case version_: return "-fversion="~value;
-                case ipath: return "-I "~value;
-                case lpath: return "-L "~value;
+                case ipath: return "-I "~fn(value);
+                case lpath: return "-L "~fn(value);
                 case linkTo: return "-l"~value;
                 case noOutput: return "-fsyntax-only";
                 case inline: return "-finline-functions";
@@ -269,6 +278,7 @@ private struct Arg
                 case optimize: return "-O3";
                 case debug_: return "-fdebug";
                 case deps: return "-fdeps="~fn("", value, "");
+                case docInclude: return "-fdoc-inc="~fn(value);
                 default: enforce(0, "str() does not suport arg type "~
                     type.to!string~" for compiler "~dc.to!string);
             }
@@ -276,6 +286,8 @@ private struct Arg
         if(dc == Compiler.LDC)
             with(Type) switch(type)
             {
+                case docFile: return "-Df="~fn(value);
+                case docDir: return "-Dd="~fn(value);
                 case noDefaultLib: return "-nodefaultlib";
                 case version_: return "-d-version="~value;
                 case optimize: return "-O3";
@@ -287,6 +299,10 @@ private struct Arg
 
         with(Type) switch(type)
         {
+            case doc: return "-D";
+            case docFile: return "-Df"~fn(value);
+            case docDir: return "-Dd"~fn(value);
+            case docInclude: return fn(value);
             case pic: return "-fPIC";
             case deps: return "-deps="~value;
             case linkTo: return "-L-l"~value;
@@ -295,8 +311,8 @@ private struct Arg
             case inline: return "-inline";
             case release: return "-release";
             case debug_: return "-debug";
-            case ipath: return "-I"~value;
-            case lpath: return "-L-L"~value;
+            case ipath: return "-I"~fn(value);
+            case lpath: return "-L-L"~fn(value);
             case noOutput: return "-o-";
             case genLib: return "-lib";
             default: enforce(0, "str() does not suport arg type "~
@@ -304,6 +320,31 @@ private struct Arg
         }
 
         assert(0);
+    }
+}
+
+bool ofType(haystack...)(Arg needle)
+{
+    foreach(h; haystack)
+        if(h == needle.type)
+            return true;
+
+    return false;
+}
+
+template filterType(haystack...)
+{
+    auto filterType(R)(R r)
+    {
+        return r.filter!(ofType!haystack);
+    }
+}
+
+template excludeType(haystack...)
+{
+    auto excludeType(R)(R r)
+    {
+        return r.filter!(a => !ofType!haystack(a));
     }
 }
 
@@ -416,23 +457,20 @@ private alias Tuple!(string, string, string, string) Quad;
 private auto generateDeps(immutable(Arg)[] args, Compiler c)
 {
     import std.path;
+    
+    alias immutable(Arg) A;
+    alias Arg.Type AT;
 
-    auto modules = args
-        .filter!(a => a.type == Arg.Type.module_)
-        .map!(a => a.value)
-        .array;
+    auto modules = args.filterType!(AT.module_);
 
-    args = args.filter!(a => a.type != Arg.Type.module_).array;
+    args = args.excludeType!(AT.module_, AT.doc, AT.docDir, AT.docFile).array;
 
     auto depsFile = randomFileName();
     auto srcFile = randomFileName();
     std.file.write(
         srcFile~".d",
-        modules.map!(a => "import "~a~";\n").join);
+        modules.map!(a => "import "~a.value~";\n").join);
     
-    alias immutable(Arg) A;
-    alias Arg.Type AT;
-
     runCompiler(c, args ~ [
         A(AT.src, srcFile), A(AT.deps, depsFile), A(AT.noOutput, null)]);
 
@@ -564,7 +602,7 @@ struct ArgList
     ArgList addDependencies(Compiler c) const
     {
         auto exclude = args
-            .filter!(a => a.type == Type.exclude)
+            .filterType!(Type.exclude)
             .map!(a => cast(string) a.value)
             .array;
 
@@ -573,7 +611,7 @@ struct ArgList
         auto files = fileList(generateDeps(args, c), exclude);
 
         auto r = ArgList(args
-            .filter!(a => a.type != Type.src && a.type != Type.module_)
+            .excludeType!(Type.src, Type.module_)
             .array);
 
         return reduce!((a,f) => a.src(f))(r, files);
@@ -582,14 +620,14 @@ struct ArgList
     ArgList findModules(Compiler c) const
     {
         auto modules = args
-            .filter!(a => a.type == Type.module_)
+            .filterType!(Type.module_)
             .map!(a => a.value)
             .set;
 
         if(modules.length == 0)
             return this;
 
-        auto r = ArgList(args.filter!(a => a.type != Type.module_).array);
+        auto r = ArgList(args.excludeType!(Type.module_).array);
 
         foreach(d; generateDeps(args, c))
         {
@@ -603,6 +641,30 @@ struct ArgList
         return r; 
     }
 
+    ArgList addOutputArg(Compiler c) const
+    {
+        import std.path;
+
+        if(!args.any!(a => a.type == Type.output))
+        {
+            auto firstSource = args.find!(ofType!(Type.src, Type.module_));
+
+            if(firstSource.empty)
+            {
+                if(args.any!(a => a.type == Type.noOutput))
+                    return this.output(randomFileName());
+                
+                enforce(0, "Can not determine the name of the ouput file");
+            }
+            else if(firstSource.front.type == Type.src)
+                return this.output(baseName(firstSource.front.str(c), ".d"));
+            else
+                return this.output(firstSource.front.value.splitter('.').back);
+        }
+
+        return this;
+    }
+
     void run(Compiler c) const
     {
         runCompiler(c, args);
@@ -610,41 +672,13 @@ struct ArgList
 
     void build(Compiler c, bool autoDeps = true)
     {
+        auto list = addOutputArg(c);
+        
         if(autoDeps)
-            addDependencies(c).run(c);
+            list.addDependencies(c).run(c);
         else
-            findModules(c).run(c); 
+            list.findModules(c).run(c); 
     }
 }
 
 enum argList = ArgList([]);
-
-version(none)
-void main()
-{
-    auto args = argList
-        .output("asdf")
-        .ipath("/home/j/razno/d/fft/pfft/")
-        .module_("pfft.impl_float")
-        .module_("pfft.impl_double")
-        .version_("SSE_AVX")
-        .args;
-    
-    auto deps = generateDeps(args, Compiler.DMD);
-    auto files = fileList(deps, [
-        "std.*", 
-        "core.*", 
-        "object", 
-        "gcc.*", 
-        "ldc.*", 
-        "pfft.avx_*", 
-        ]);
-
-    foreach(e; deps)
-        writefln("%s  %s  %s  %s", e.expand);
-
-    writeln();
-
-    foreach(f; files)
-        writefln(f);
-}
