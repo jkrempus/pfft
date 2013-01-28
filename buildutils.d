@@ -452,6 +452,11 @@ private void runCompiler(Compiler dc, immutable(Arg)[] flags)
 
 private alias Tuple!(string, string, string, string) Quad;
 
+auto fixBackslashes(string s)
+{
+    return isWindows ? s.replace(`\\`, `\`) : s;
+}
+
 // Runs the compiler to get the dependency list 
 // for given args and parses the list.
 private auto generateDeps(immutable(Arg)[] args, Compiler c)
@@ -478,7 +483,7 @@ private auto generateDeps(immutable(Arg)[] args, Compiler c)
     
     auto re = regex(`^([\w.]+) \(([^\)]+)\) : \w+ : ([\w.]+) \(([^\)]+)\)`, `gm`);
 
-    return match(std.file.readText(depsFile), re)
+    return match(std.file.readText(depsFile).fixBackslashes, re)
         .map!(capt => Quad(
             capt[1] == srcModule ? "" : capt[1], 
             capt[2], 
