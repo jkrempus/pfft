@@ -224,23 +224,22 @@ void buildLibPgo(
 
 void buildCObjects(Compiler dc, string[] types, string dccmd)
 {
-    commonArgs(dc)
+    auto common = commonArgs(dc)
         .compileCmd(dccmd)
         .genObj
+        .optimize
+        .ipath("..");
+
+    common
         .output("clib")
         .module_("pfft.clib")
-        .optimize
         .version_(types.map!(capitalize).array)
         .build(dc, false);
  
-    commonArgs(dc)
-        .compileCmd(dccmd)
-        .genObj
+    common
         .output("druntime")
         .module_("pfft.druntime_stubs")
-        .conditional(dc = Compiler.LDC, 
-            argList.module_("core.bitop"))
-        .optimize
+        .conditional(dc == Compiler.LDC, argList.module_("core.bitop"))
         .build(dc, false);
 }
 
