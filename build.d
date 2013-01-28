@@ -228,7 +228,8 @@ void buildCObjects(Compiler dc, string[] types, string dccmd)
         .compileCmd(dccmd)
         .genObj
         .optimize
-        .ipath("..");
+        .ipath("..")
+        .pic;
 
     common
         .output("clib")
