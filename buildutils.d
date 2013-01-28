@@ -172,8 +172,7 @@ string libName(Compiler c, string value)
 
 string dynlibName(Compiler c, string value)
 {
-    return isWindows && c == Compiler.DMD ? 
-        fn(value, ".lib") : fn("lib", value, ".so");
+    return isWindows ? fn(value, ".dll") : fn("lib", value, ".so");
 }
 
 string objName(Compiler c, string value)
@@ -240,6 +239,7 @@ private struct Arg
             {
                 case linkTo: return value~".lib";
                 case lpath: enforce(0, "lpath is not supported with DMD on Windows");
+                case dynlib: return libName(dc, value);
                 default: {};
             }
 
