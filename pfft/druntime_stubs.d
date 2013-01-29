@@ -61,3 +61,8 @@ void _d_assert(string file, uint line)
     }
     abort();
 }
+
+void _d_assert_msg(string msg, string file, uint line)
+{
+    _d_assert(file, line);
+}

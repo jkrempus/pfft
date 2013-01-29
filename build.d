@@ -240,7 +240,7 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
         .output("druntime")
         .src("../pfft/druntime_stubs")
         .conditional(dc == Compiler.LDC, argList.module_("core.bitop"))
-        .run(dc);
+        .build(dc, false);
 }
 
 void copyIncludes(string[] types, bool clib)
