@@ -272,12 +272,15 @@ void copyIncludes(string[] types, bool clib)
         
         std.file.write(fixSeparators("include/pfft.h"), oStr);
     }
-
-    foreach(type; types)
-        cp("../pfft/di/impl_"~type~".di", "include/pfft/");
-    
-    cp("../pfft/stdapi.d", "include/pfft/stdapi.d");
-    cp("../pfft/pfft.d", "include/pfft/pfft.d");
+    else
+    {
+        mkdir("include/pfft");
+	foreach(type; types)
+            cp("../pfft/di/impl_"~type~".di", "include/pfft/");
+        
+        cp("../pfft/stdapi.d", "include/pfft/stdapi.d");
+        cp("../pfft/pfft.d", "include/pfft/pfft.d");
+    }
 }
 
 void buildDoc(Compiler c, string ccmd)
@@ -446,7 +449,6 @@ void doit(string[] args)
         cd(buildDir);
         mkdir("lib");
         mkdir("include");
-        mkdir("include/pfft");
 
         copyIncludes(types, clib);
 
@@ -461,12 +463,6 @@ void doit(string[] args)
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 rm(e.name);
-
-        if(clib)
-        {
-            rm("include/pfft", "rf");
-            rm(libName(dc, "lib/pfft"), "f");
-        }
     }
 }
 
