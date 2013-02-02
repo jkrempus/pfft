@@ -64,6 +64,16 @@ version(GNU) version(ARM)
 
 template st(alias a){ enum st = cast(size_t) a; } 
 
+template isComplex(T)
+{
+    enum isComplex =
+        !isNumeric!T &&
+        is(typeof(T.init.re)) &&
+        is(typeof(T.init.im)) &&
+        isFloatingPoint!(typeof(T.init.re)) && 
+        isFloatingPoint!(typeof(T.init.im));
+}
+
 auto isComplexArray(R, T)()
 {
     static if(
@@ -243,6 +253,15 @@ void main(string[] args)
  */
 final class Fft
 {
+    /*struct TableEntry
+    {
+        void* table;
+        void* rtable;
+        void* itable;
+        void* re;
+        void* im;
+    }*/ 
+
     import std.variant;
 
     private enum nSizes = 8 * size_t.sizeof;
@@ -272,7 +291,7 @@ final class Fft
         static if(hasLength!R)
             return r.length;
         else static if(isForwardRange!R)
-            return walkLength(r.save());
+            return walkLength(r.save);
         else
             static assert(false, 
                 "Can't get the length of the range without consumming it.");
@@ -282,38 +301,9 @@ final class Fft
 Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
  */
     this(size_t nmax = size_t.init) { }
-    
-    private Complex!(T)[] fftTemplate(bool inverse, T, R)(R r) 
-    {
-        auto n = numberOfElements(r);
-        assert((n & (n - 1)) == 0);
-        return impl!T(n).fft!inverse(r);
-    }
 
-/**
-Computes  the discrete fourier transform of data in r  and returns it. Data in
-r isn't changed. $(D R) must be a forward range or a range with a length property.
-It must have complex or floating point elements. Here a complex type is a type
-with assignable floating point properties $(D re) and $(D im). The number of elements
-in r must be a power of two. $(D T) must be a floating point type. The length
-of the returned array is the same as the number of elements in r.
- */
-    Complex!(T)[] fft(T, R)(R r) if(!isNumeric!(ElementType!R)) 
-    {
-        return fftTemplate!false(r);
-    }
-
-    Complex!(T)[] fft(T, R)(R r) if(isNumeric!(ElementType!R)) 
-    {
-        auto n = numberOfElements(r);
-        assert((n & (n - 1)) == 0);
-        return impl!T(n / 2).rfft(r);
-    }
-   
     private void fftTemplate(bool inverse, R, Ret)(R r, Ret ret)
     {
-        r = r.save();
-
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
         impl!(typeof(ret[0].re))(n).fft!inverse(r, ret);
@@ -327,17 +317,43 @@ elements. Here a complex type is a type with assignable floating point propertie
 $(D re) and $(D im). Ret must be an input range with complex elements. r and ret must
 have the same number of elements and that number must be a power of two.
  */ 
-    void fft(R, Ret)(R r, Ret ret) if(!isNumeric!(ElementType!R))
+    void fft(R, Ret)(R r, Ret ret) if(isComplex!(ElementType!R))
     {
        fftTemplate!false(r, ret); 
     }
 
-    auto fft(R, Ret)(R r, Ret ret) if(isNumeric!(ElementType!R))
+    auto fft(R, Ret)(R r, Ret ret) if(isFloatingPoint!(ElementType!R))
     {
-        r = r.save();
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
         impl!(typeof(ret[0].re))(r.length / 2).rfft(r, ret);
+    }
+
+    private Complex!(T)[] fftTemplate(bool inverse, T, R)(R r) 
+    {
+        auto ret = allocate!(Complex!T)(numberOfElements(r));
+        fftTemplate!inverse(r, ret);
+        return ret;
+    }
+
+/**
+Computes  the discrete fourier transform of data in r  and returns it. Data in
+r isn't changed. $(D R) must be a forward range or a range with a length property.
+It must have complex or floating point elements. Here a complex type is a type
+with assignable floating point properties $(D re) and $(D im). The number of elements
+in r must be a power of two. $(D T) must be a floating point type. The length
+of the returned array is the same as the number of elements in r.
+ */
+    Complex!(T)[] fft(T, R)(R r) if(isComplex!(ElementType!R)) 
+    {
+        return fftTemplate!(false, T)(r);
+    }
+
+    Complex!(T)[] fft(T, R)(R r) if(isFloatingPoint!(ElementType!R)) 
+    {
+        auto n = numberOfElements(r);
+        assert((n & (n - 1)) == 0);
+        return impl!T(n / 2).rfft(r);
     }
 
 /**

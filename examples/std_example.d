@@ -23,7 +23,7 @@ void main(string[] args)
     enforce((n & (n-1)) == 0, "N must be a power of two.");
 
     auto f = new Fft(n);
-    auto data = Fft.allocate!(double)(n);
+    auto data = cast(Complex!(double)[]) Fft.allocate!(double)(2 * n);
 
     foreach(ref e; data)
         readf("%s %s\n", &e.re, &e.im);
