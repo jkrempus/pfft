@@ -83,7 +83,7 @@ auto commonArgs(Compiler c)
 }
 
 void buildTests(
-    string[] types, string dccmd, Compiler c, string outDir, 
+    string[] types, string dccmd, Compiler c, string baseDir, 
     bool optimized = true, bool dbg = false, string fftw = null,
     bool dynamic = false, bool clib = false)
 {
@@ -92,14 +92,17 @@ void buildTests(
     foreach(type; types)
         commonArgs(c)
             .compileCmd(dccmd)
-            .src("../test/test")
-            .conditional(clib,
-                argList.src("../pfft/clib").version_("BenchClib"))
+            .src(baseDir~"/test/test")
             .version_(capitalize(type))
-            .output(outDir~"/test_"~type)
+            .output("test_"~type)
             .conditional(dynamic,
                 argList.version_("DynamicC"),
-                argList.ipath("include").lib("lib/pfft"))
+                argList
+                    .ipath(baseDir~"/generated/include")
+                    .lib(baseDir~"/generated/lib/pfft")
+                    .conditional(clib, argList
+                        .src(baseDir~"/pfft/clib")
+                        .version_("BenchClib")))
             .conditional(optimized, argList.optimize.inline.release)
             .conditional(dbg, argList.debug_.g)
             .conditional(!!fftw, argList
@@ -110,7 +113,7 @@ void buildTests(
             .run(c);
 }
 
-void runBenchmarks(string[] types, Version v)
+void runBenchmarks(string[] types, Version v, string api = "")
 {
     import std.parallelism;
 
@@ -132,7 +135,7 @@ void runBenchmarks(string[] types, Version v)
             auto rFlag = when(isReal, "-r");
             auto iStr = i.to!string;
             auto implStr = impl.to!string;
-            vshell(fn~" -s -m 1000 pfft "~iStr~" --impl "~implStr~" "~rFlag);
+            vshell(fn~" -s -m 1000 "~api~" "~iStr~" --impl "~implStr~" "~rFlag);
         }
     }
 }
@@ -143,9 +146,7 @@ void buildObj(
 {
     commonArgs(c)
         .compileCmd(dccmd)
-        .conditional(dbg,
-            argList.debug_.g,
-            argList.optimize.inline.release)
+        .conditional(dbg, argList.debug_.g, argList.optimize.inline.release)
         .version_(v.to!string)
         .conditional(pic, argList.pic)
         .raw(archFlags(simd, c))
@@ -172,8 +173,7 @@ string buildAdditionalSIMD(
 }
 
 void buildLib(
-    Compiler dc, Version v, string[] types,
-    string dccmd, bool clib, bool dbg)
+    Compiler dc, Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
@@ -212,12 +212,13 @@ void buildLibPgo(
     Compiler dc, Version v, string[] types, string dccmd, bool clib, bool dbg)
 {
     buildLib(dc, v, types, 
-        dccmd ~ " -fprofile-generate ", false, dbg);
+        dccmd ~ " -fprofile-generate ", clib, dbg);
 
+    // benchmark with DynamicC when clib is true
     buildTests(types, dccmd ~ " -fprofile-generate ", 
-        dc, ".", false, dbg);
+        dc, "..", false, dbg, null, clib); 
 
-    runBenchmarks(types, v);
+    runBenchmarks(types, v, clib ? "c" : "pfft");
     buildLib(dc, v, types, 
         dccmd ~ " -fprofile-use", clib, dbg);
 }
@@ -275,7 +276,7 @@ void copyIncludes(string[] types, bool clib)
     else
     {
         mkdir("include/pfft");
-	foreach(type; types)
+        foreach(type; types)
             cp("../pfft/di/impl_"~type~".di", "include/pfft/");
         
         cp("../pfft/stdapi.d", "include/pfft/stdapi.d");
@@ -423,8 +424,8 @@ void doit(string[] args)
     auto buildDir = (clib && !tests) ? "generated-c" : "generated";
     if(tests)
     {
-        cd(buildDir);
-        buildTests(types, dccmd, dc, "../test", !dbg, dbg, fftw, dynamic, clib);
+        cd("test");
+        buildTests(types, dccmd, dc, "..", !dbg, dbg, fftw, dynamic, clib);
     }
     else
     {

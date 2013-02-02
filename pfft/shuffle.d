@@ -7,6 +7,9 @@ module pfft.shuffle;
 
 import core.bitop;
 
+nothrow:
+pure:
+
 template st(alias a){ enum st = cast(size_t) a; }
 
 struct Tuple(A...)

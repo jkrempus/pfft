@@ -1,3 +1,8 @@
+//          Copyright Jernej Krempuš 2013
+// Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//          http://www.boost.org/LICENSE_1_0.txt)
+
 module buildutils;
 
 public import std.file : dirEntries, SpanMode;
@@ -78,7 +83,8 @@ void rm(string path, string flags = "")
 {
     import std.path, std.file;
     path = fn(path);
-
+    if(verbose)
+        stderr.writeln(`rm("`~path~`", "`~flags~`")`);
     try
     {
         if(isDir(path))
@@ -99,9 +105,12 @@ void rm(string path, string flags = "")
 void cp(string src, string dst, string flags = "")
 {
     import std.path, std.file;
-    src = absolutePath(fn(src));
-    dst = absolutePath(fn(dst));
+    src = fn(src);
+    dst = fn(dst);
 
+    if(verbose)
+        stderr.writeln(`:p("`~src~`", "`~dst~`", "`~flags~`")`);
+    
     if(exists(dst) && isDir(dst))
         dst = buildPath(dst, baseName(src));
 
@@ -144,11 +153,20 @@ void cp(string src, string dst, string flags = "")
             throw e;
 }
 
-void cd(string path){ std.file.chdir(fn(path)); }
+void cd(string path)
+{
+    path = fn(path);
+    if(verbose)
+        stderr.writeln(`cd("`~path~`")`);
+
+    std.file.chdir(path); 
+}
 
 void mkdir(string path, string flags = "")
 {
     path = fn(path);
+    if(verbose)
+        stderr.writeln(`mkdir("`~path~`", "`~flags~`")`);
 
     if(flags.canFind('p'))
         std.file.mkdirRecurse(path);

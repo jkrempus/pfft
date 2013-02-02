@@ -7,6 +7,9 @@ module pfft.fft_impl;
 
 import pfft.shuffle;
 
+nothrow:
+pure:
+
 enum Action{ passes_first, passes, passes_last, bit_reverse, br_passes }
 import pfft.profile;
 mixin ProfileMixin!Action;

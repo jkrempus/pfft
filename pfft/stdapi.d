@@ -91,16 +91,14 @@ private final class TypedFft(TT)
         import impl = pfft.impl_real;
     else 
         static assert(0, "Not implemented");
-        
-    
+
     uint log2n;
     impl.T* re;
     impl.T* im;
     alias Complex!(impl.T) C;
     impl.Table table;
     impl.RTable rtable;
-    
-    
+
     this(size_t n)
     {
         log2n  = bsf(n);
@@ -208,7 +206,6 @@ private final class TypedFft(TT)
         return r[0 .. n];
     }
 }
-
 
 /**
 A class for calculating discrete fourier transforms using fast fourier 
@@ -343,7 +340,6 @@ have the same number of elements and that number must be a power of two.
         impl!(typeof(ret[0].re))(r.length / 2).rfft(r, ret);
     }
 
-
 /**
 Computes  the inverse discrete fourier transform of data in r  and returns it. 
 Data in r isn't changed.  $(D R) must be a forward range or a range with a
@@ -384,4 +380,3 @@ they will just be a bit slower.
         return r[0 .. n];
     }
 }
-
