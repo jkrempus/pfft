@@ -5,7 +5,10 @@
 
 module pfft.stdapi;
 
-import core.memory, std.complex, std.traits, core.bitop, std.typetuple, std.range;
+import  std.complex, std.traits, core.bitop, std.typetuple, std.range,
+        std.algorithm;
+
+import core.memory;
 
 // Current GDC branch for android insists on using sinl and friends when
 // std.math is imported, so we need to do this:
@@ -64,6 +67,18 @@ version(GNU) version(ARM)
 
 template st(alias a){ enum st = cast(size_t) a; } 
 
+template impl(T)
+{
+    static if(is(T == float))
+        import impl = pfft.impl_float;
+    else static if(is(T == double))
+        import impl = pfft.impl_double;
+    else static if(is(T == real))
+        import impl = pfft.impl_real;
+    else 
+        static assert(0, "Not implemented");
+}
+
 template isComplex(T)
 {
     enum isComplex =
@@ -74,146 +89,150 @@ template isComplex(T)
         isFloatingPoint!(typeof(T.init.im));
 }
 
-auto isComplexArray(R, T)()
+void saveIfForward(R)(ref R r)
 {
-    static if(
-        ((isArray!R || isPointer!R) &&
-        is(typeof(R.init[0].re) == T) && 
-        is(typeof(R.init[0].im) == T) &&
-        typeof(R.init[0]).sizeof == 2*T.sizeof))
+    static if(isForwardRange!R)
+        r = r.save;
+}
+
+bool isAligned(T)(T* p, uint log2n)
+{
+    return ((cast(size_t)p) & (impl!(T).alignment(log2n) - 1)) == 0;
+}    
+
+T* alignedScalarPtr(T, R)(R r, uint log2n)
+{
+    static if(!(isArray!R || isPointer!R))
+        enum isSupported = false;
+    else static if(
+        isComplex!(ElementType!R) && 
+        is(typeof(R.init[0].re) == T) &&
+        typeof(R.init[0]).sizeof == 2 * T.sizeof)
     {
         typeof(R.init[0]) e;
-        return 
+        auto isSupported =  
             cast(typeof(e.re)*)&e == &(e.re) && 
             &(e.re) + 1 == &(e.im);
     }
     else
-        return false;
+        enum isSupported = is(T == ElementType!R);
+
+    return isSupported && isAligned(&(r[0].re), log2n) ?  &(r[0].re) : null;
 }
 
-private final class TypedFft(TT)
-{    
-    static if(is(TT == float))
-        import impl = pfft.impl_float;
-    else static if(is(TT == double))
-        import impl = pfft.impl_double;
-    else static if(is(TT == real))
-        import impl = pfft.impl_real;
-    else 
-        static assert(0, "Not implemented");
+void deinterleave_array(R, T)(uint log2n, R r, T* re, T* im)
+{
+    static if(is(typeof(r[0].re) == T))
+        if(auto p = alignedScalarPtr!T(r, log2n))
+            return impl!(T).deinterleave_array(re, im, p, st!1 << log2n);
 
-    uint log2n;
-    impl.T* re;
-    impl.T* im;
-    alias Complex!(impl.T) C;
-    impl.Table table;
-    impl.RTable rtable;
-
-    this(size_t n)
+    foreach(i; 0 .. st!1 << log2n)
     {
-        log2n  = bsf(n);
-        re = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
-        im = cast(impl.T*)GC.malloc(impl.T.sizeof << log2n);
-        
-        auto mem = GC.malloc( impl.table_size_bytes(log2n));
-        table = impl.fft_table(log2n, mem);
-
-        mem = GC.malloc( impl.rtable_size_bytes(log2n + 1));
-        rtable = impl.rfft_table(log2n + 1, mem);
-    }
-
-    private bool isAligned(impl.T* p)
-    {
-        return ((cast(size_t)p) & (impl.alignment(log2n) - 1)) == 0;
-    }    
-    
-    private bool fastInterleave(R)(R range)
-    {
-        return isComplexArray!(R, TT)() && isAligned(&(range[0].re));
-    }
-    
-    private void deinterleave_array(R)(R range)
-    {
-        static if(is(typeof(range[0].re) == impl.T))
-            if(fastInterleave(range))
-                return impl.deinterleave_array(
-                    re, im, &(range[0].re), st!1 << log2n);
-        
-        foreach(i, e; range)
+        static if(isComplex!(ElementType!R))
         {
-            re[i] = e.re;
-            im[i] = e.im;
-        }
-    }
-   
-    private void interleave_array(R)(R range)
-    {
-        static if(is(typeof(range[0].re) == impl.T))
-            if(fastInterleave(range))
-                return impl.interleave_array(
-                    re, im, &(range[0].re), st!1 << log2n);
-        
-        foreach(i, ref e; range)
-        {
-            e.re = re[i];
-            e.im = im[i];
-        }
-    }
-
-    void fft(bool inverse, Ret, R)(R range, Ret buf)
-    {
-        deinterleave_array(range);
-        static if(inverse)
-        {
-            auto n = st!1 << log2n; 
-            impl.fft(im, re, log2n, table);
-
-            impl.scale(re, n, (cast(TT) 1) / n);
-            impl.scale(im, n, (cast(TT) 1) / n);
+            re[i] = r.front.re;
+            im[i] = r.front.im;
+            r.popFront();
         }
         else
-            impl.fft(re, im, log2n, table);
-        
-        interleave_array(buf);
-    }
-    
-    void rfft(Ret, R)(R range, Ret buf)
-    {
-        deinterleave_array(cast(Complex!(ElementType!R)[])range);
-        impl.rfft(re, im, log2n + 1, table, rtable);
-        interleave_array(buf);
-       
-        auto n = st!1 << log2n; 
-        buf[n] = Complex!TT(buf[0].im, 0);
-        buf[0].im = 0;
-        
-        foreach(i; 1 .. n)
         {
-            buf[2*n - i].re = buf[i].re;
-            buf[2*n - i].im = -buf[i].im;
+            re[i] = r.front;
+            r.popFront();
+            im[i] = r.front;
+            r.popFront();
         }
     }
+}
+
+void interleave_array(R, T)(uint log2n, R r, T* re, T* im)
+{
+    static if(is(typeof(r[0].re) == T))
+        if(auto p = alignedScalarPtr!T(r, log2n))
+            return impl!(T).interleave_array(re, im, p, st!1 << log2n);
+
+    foreach(i; 0 .. st!1 << log2n)
+    {
+        static if(isComplex!(ElementType!R))
+        {
+            r.front.re = re[i];
+            r.front.im = im[i];
+            r.popFront();
+        }
+        else
+        {
+            r.front = re[i];
+            r.popFront();
+            r.front = im[i];
+            r.popFront();
+        }
+    }
+}
+
+struct Cached
+{
+    template typeIndex(T)
+    {
+        enum typeIndex =
+            is(T == float) ? 0 :
+            is(T == double) ? 1 : 2;
+    }
+
+    struct Entry
+    {
+        void* table;
+        void* rtable;
+        void* re;
+        void* im;
+    }
+
+    enum nsizes = size_t.sizeof * 8;
+    Entry[nsizes * 3] entries;
+
+    Entry* entry(T)(uint log2n)
+    {
+        return entries.ptr + nsizes * typeIndex!T + log2n;
+    }
+
+    impl!(T).Table table(T)(uint log2n)
+    {
+        auto e = entry!T(log2n);
+        if(!e.table)
+        {
+            auto mem = GC.malloc(impl!(T).table_size_bytes(log2n));
+            e.table = cast(void*) impl!(T).fft_table(log2n, mem);
+        }
+        
+        return cast(typeof(return)) e.table; 
+    }
     
-    C[] fft(bool inverse, R)(R range)
+    impl!(T).RTable rtable(T)(uint log2n)
     {
-        auto return_buf = cast(C*)GC.malloc(C.sizeof << log2n);
-        fft!inverse(range, return_buf);
-        return return_buf[0 .. (1 << log2n)];
+        auto e = entry!T(log2n);
+        if(!e.rtable)
+        {
+            auto mem = GC.malloc(impl!(T).rtable_size_bytes(log2n));
+            e.rtable = cast(void*) impl!(T).rfft_table(log2n, mem);
+        }
+        
+        return cast(typeof(return)) e.rtable; 
     }
-
-    C[] rfft(R)(R range)
+    
+    T* re(T)(uint log2n)
     {
-        auto n = st!1 << log2n;
-        auto return_buf = cast(C*)GC.malloc(C.sizeof << (log2n + 1));
-        rfft(range, return_buf[0 .. 2 * n]);
-        return return_buf[0 .. 2 * n];
+        auto e = entry!T(log2n);
+        if(!e.re)
+            e.re = GC.malloc(T.sizeof << log2n);
+        
+        return cast(typeof(return)) e.re; 
     }
-
-    static C[] allocate(size_t n)
+    
+    T* im(T)(uint log2n)
     {
-        auto r = cast(C*) GC.malloc(n * C.sizeof);
-        assert(((impl.alignment(bsr(n)) - 1) & cast(size_t) r) == 0);
-        return r[0 .. n];
+        auto e = entry!T(log2n);
+        if(!e.im)
+            e.im = GC.malloc(T.sizeof << log2n);
+        
+        return cast(typeof(return)) e.im; 
     }
 }
 
@@ -251,41 +270,15 @@ void main(string[] args)
 }
 ---
  */
+
 final class Fft
 {
-    /*struct TableEntry
-    {
-        void* table;
-        void* rtable;
-        void* itable;
-        void* re;
-        void* im;
-    }*/ 
-
     import std.variant;
 
     private enum nSizes = 8 * size_t.sizeof;
-    private void*[3 * nSizes] cache;
 
-    private auto impl(T)(size_t n)
-    {
-        static if(is(T == float))
-            auto i = bsf(n);
-        else static if(is(T == double))
-            auto i = nSizes + bsf(n);
-        else
-            auto i = 2 * nSizes + bsf(n);
+    Cached cached;
 
-        if(cache[i] )
-            return cast(TypedFft!T) cache[i];
-        else
-        {
-            auto t = new TypedFft!T(n);
-            cache[i] = cast(void*)t;
-            return t;
-        }
-    }
-   
     auto numberOfElements(R)(R r)
     {
         static if(hasLength!R)
@@ -304,9 +297,41 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
     private void fftTemplate(bool inverse, R, Ret)(R r, Ret ret)
     {
+        saveIfForward(r);
+        saveIfForward(ret); 
+
+        alias typeof(ret[0].re) T;
+
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
-        impl!(typeof(ret[0].re))(n).fft!inverse(r, ret);
+        auto log2n = bsr(n);
+
+        auto re = cached.re!T(log2n);
+        auto im = cached.im!T(log2n);
+        auto table = cached.table!T(log2n);
+
+        static if(isComplex!(ElementType!R))
+            deinterleave_array(log2n, r, re, im);
+        else
+        {
+            im[0 .. n] = 0;
+            static if(is(ElementType!R == T) && (isPointer!R || isArray!R))
+                re[0 .. n] = r[0 .. n];
+            else
+                for(T* p = re; p < re + n; re++, r.popFront())
+                    *p = r.front;
+        }
+
+        static if(inverse)
+        {
+            impl!(T).fft(im, re, log2n, table);
+            impl!(T).scale(re, n, cast(T) 1 / n);
+            impl!(T).scale(im, n, cast(T) 1 / n);
+        }
+        else
+            impl!(T).fft(re, im, log2n, table);
+
+        interleave_array(log2n, ret, re, im);
     }
 
 /**
@@ -324,9 +349,33 @@ have the same number of elements and that number must be a power of two.
 
     auto fft(R, Ret)(R r, Ret ret) if(isFloatingPoint!(ElementType!R))
     {
+        saveIfForward(r);
+        saveIfForward(ret); 
+
+        alias typeof(ret[0].re) T;
+
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
-        impl!(typeof(ret[0].re))(r.length / 2).rfft(r, ret);
+        n /= 2;
+        auto log2n = bsr(n);
+
+        auto re = cached.re!T(log2n);
+        auto im = cached.im!T(log2n);
+        auto table = cached.table!T(log2n);
+        auto rtable = cached.rtable!T(log2n + 1);
+
+        deinterleave_array(log2n, r, re, im);
+        impl!(T).rfft(re, im, log2n + 1, table, rtable);
+        interleave_array(log2n, ret, re, im);
+
+        ret[n] = complex(ret[0].im, 0);
+        ret[0].im = 0;
+
+        foreach(i; 1 .. n)
+        {
+            ret[2 * n - i].re = ret[i].re;
+            ret[2 * n - i].im = -ret[i].im;
+        }
     }
 
     private Complex!(T)[] fftTemplate(bool inverse, T, R)(R r) 
@@ -351,9 +400,9 @@ of the returned array is the same as the number of elements in r.
 
     Complex!(T)[] fft(T, R)(R r) if(isFloatingPoint!(ElementType!R)) 
     {
-        auto n = numberOfElements(r);
-        assert((n & (n - 1)) == 0);
-        return impl!T(n / 2).rfft(r);
+        auto ret = allocate!(Complex!T)(numberOfElements(r));
+        fft(r, ret);
+        return ret;
     }
 
 /**
