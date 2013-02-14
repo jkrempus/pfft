@@ -22,6 +22,7 @@ mixin template Instantiate()
     void deinterleave_array(T* even, T* odd, T* interleaved, size_t n);
     void interleave_array(T* even, T* odd, T* interleaved, size_t n);
     void scale(T* data, size_t n, T factor);
+    //void cmul(T*, T*, T*, T*, size_t);
     size_t alignment(size_t n);
 
     struct ITableValue{};

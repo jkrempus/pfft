@@ -1216,6 +1216,28 @@ struct FFT(alias V, alias Options)
             e = e * factor;
     }
 
+    static void cmul(T* dr, T* di, T* sr, T* si, size_t n)
+    {
+        foreach(i; 0 .. n / vec_size)
+        {
+            auto _dr = (cast(vec*) dr)[i]; 
+            auto _di = (cast(vec*) di)[i]; 
+            auto _sr = (cast(vec*) sr)[i]; 
+            auto _si = (cast(vec*) si)[i];
+            (cast(vec*) dr)[i] = _dr * _sr - _di * _si;
+            (cast(vec*) di)[i] = _dr * _si + _di * _sr;
+        }
+        foreach(i; n / vec_size * vec_size .. n)
+        {
+            auto _dr = dr[i]; 
+            auto _di = di[i]; 
+            auto _sr = sr[i]; 
+            auto _si = si[i];
+            dr[i] = _dr * _sr - _di * _si;
+            di[i] = _dr * _si + _di * _sr;
+        }
+    }
+
     size_t alignment(size_t n)
     {
         enum pow2tsize = cast(size_t)1 << bsr(T.sizeof);
@@ -1282,6 +1304,11 @@ mixin template Instantiate()
         return selected!"table_size_bytes"(log2n);
     }
 
+    /*void cmul(T* dr, T* di, T* sr, T* si, size_t n)
+    {
+        selected!"cmul"(dr, di, sr, si, n);
+    }*/
+
     void scale(T* data, size_t n, T factor)
     {
         selected!"scale"(data, n, factor); 
@@ -1341,7 +1368,7 @@ mixin template Instantiate()
     {
         selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
     }
-
+    
     void set_implementation(int i)
     {
         static if(is(typeof(implementation.set)))
