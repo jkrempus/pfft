@@ -200,7 +200,7 @@ struct Vector
         a3 = shufps!(3, 1, 3, 1)(b2, b3);
     }
 
-    private void br64(
+    void bit_reverse(
         ref vec a0, ref vec a1, ref vec a2, ref vec a3,
         ref vec a4, ref vec a5, ref vec a6, ref vec a7)
     {
@@ -215,48 +215,6 @@ struct Vector
         _deinterleave2(a6, a7, a6, a7); 
     }
     
-    template RepeatType(T, int n, R...)
-    {
-        static if(n == 0)
-            alias R RepeatType;
-        else
-            alias RepeatType!(T, n - 1, T, R) RepeatType;
-    }
-        
-    void bit_reverse_swap(T* p0, T* p1, size_t m)
-    {
-        RepeatType!(vec, 8) a, b;    
-
-        foreach(i, _; a)
-            a[i] = *v8(p0 + i * m);
-
-        br64(a);
-
-        foreach(i, _; a)
-            b[i] = *v8(p1 + i * m);
-
-        foreach(i, _; a)
-            *v8(p1 + i * m) = a[i];
-
-        br64(b);
-
-        foreach(i, _; a)
-            *v8(p0 + i * m) = b[i];
-    }
-
-    void bit_reverse(T* p0, size_t m)
-    {
-        RepeatType!(vec, 8) a;    
-
-        foreach(i, _; a)
-            a[i] = *v8(p0 + i * m);
-
-        br64(a);
-
-        foreach(i, _; a)
-            *v8(p0 + i * m) = a[i];
-    }
-
     vec scalar_to_vector(T a)
     {
         return a;

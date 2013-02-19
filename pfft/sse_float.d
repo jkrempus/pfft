@@ -181,43 +181,17 @@ struct Vector
             r1 = shufps!(3,1,3,1)(a0,a1);
         }
         
-        private float4 * v()(float * a)
-        {
-            return cast(float4*)a;
-        }
-        
-        private void br16()(
-            float4 a0, float4 a1, float4 a2, float4 a3, 
-            ref float4 r0, ref float4 r1, ref float4 r2, ref float4 r3)
+        private void bit_reverse()(
+            ref float4 a0, ref float4 a1, ref float4 a2, ref float4 a3)
         {
             float4 b0 = shufps!(1,0,1,0)(a0, a2);
             float4 b1 = shufps!(1,0,1,0)(a1, a3);
             float4 b2 = shufps!(3,2,3,2)(a0, a2);
             float4 b3 = shufps!(3,2,3,2)(a1, a3);
-            r0 = shufps!(2,0,2,0)(b0, b1);
-            r1 = shufps!(2,0,2,0)(b2, b3);
-            r2 = shufps!(3,1,3,1)(b0, b1);
-            r3 = shufps!(3,1,3,1)(b2, b3);
-        }
-        
-        void bit_reverse_swap()(float * p0, float * p1, size_t m)
-        {
-            float4 b0 = *v(p1 + 0 * m); 
-            float4 b1 = *v(p1 + 1 * m); 
-            float4 b2 = *v(p1 + 2 * m); 
-            float4 b3 = *v(p1 + 3 * m);
-            
-            br16(*v(p0 + 0 * m), *v(p0 + 1 * m), *v(p0 + 2 * m), *v(p0 + 3 * m), 
-                 *v(p1 + 0 * m), *v(p1 + 1 * m), *v(p1 + 2 * m), *v(p1 + 3 * m));
-            
-            br16(b0, b1, b2, b3, 
-                 *v(p0 + 0 * m), *v(p0 + 1 * m), *v(p0 + 2 * m), *v(p0 + 3 * m));
-        }
-
-        void bit_reverse()(float * p, size_t m)
-        {
-            br16(*v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m), 
-                 *v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m));
+            a0 = shufps!(2,0,2,0)(b0, b1);
+            a1 = shufps!(2,0,2,0)(b2, b3);
+            a2 = shufps!(3,1,3,1)(b0, b1);
+            a3 = shufps!(3,1,3,1)(b2, b3);
         }
     }
     else

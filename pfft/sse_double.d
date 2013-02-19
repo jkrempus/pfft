@@ -140,78 +140,17 @@ struct Vector
             static assert(0);
     }
     
-    void bit_reverse_swap(T * p0, T * p1, size_t m)
+    void bit_reverse(
+        ref vec a0, ref vec a1, ref vec a2, ref vec a3,
+        ref vec a4, ref vec a5, ref vec a6, ref vec a7)
     {
-        vec a0, a1, a2, a3, b0, b1, b2, b3;
-
-        a0 = v(p0 + m * 0)[0];
-        a1 = v(p0 + m * 2)[0];
-        b0 = v(p1 + m * 0)[0];
-        b1 = v(p1 + m * 2)[0];
-        interleave(a0, a1, a0, a1);
-        interleave(b0, b1, b0, b1);
-        v(p1 + m * 0)[0] = a0;
-        v(p1 + m * 2)[0] = a1;
-        v(p0 + m * 0)[0] = b0;
-        v(p0 + m * 2)[0] = b1;
+        interleave(a0, a4, a0, a4);
+        interleave(a3, a7, a3, a7);
         
-        a2 = v(p0 + m * 1)[1];
-        a3 = v(p0 + m * 3)[1];
-        b2 = v(p1 + m * 1)[1];
-        b3 = v(p1 + m * 3)[1];
-        interleave(a2, a3, a2, a3);
-        interleave(b2, b3, b2, b3);
-        v(p1 + m * 1)[1] = a2;
-        v(p1 + m * 3)[1] = a3;
-        v(p0 + m * 1)[1] = b2;
-        v(p0 + m * 3)[1] = b3;
-        
-        a0 = v(p0 + m * 0)[1];
-        a1 = v(p0 + m * 2)[1];
-        a2 = v(p0 + m * 1)[0];
-        a3 = v(p0 + m * 3)[0];
-        interleave(a0, a1, a0, a1);
-        interleave(a2, a3, a2, a3);
-        b0 = v(p1 + m * 0)[1];
-        b1 = v(p1 + m * 2)[1];
-        b2 = v(p1 + m * 1)[0];
-        b3 = v(p1 + m * 3)[0];
-        v(p1 + m * 0)[1] = a2;
-        v(p1 + m * 2)[1] = a3;
-        v(p1 + m * 1)[0] = a0;
-        v(p1 + m * 3)[0] = a1;
-        interleave(b0, b1, b0, b1);
-        interleave(b2, b3, b2, b3);
-        v(p0 + m * 0)[1] = b2;
-        v(p0 + m * 2)[1] = b3;
-        v(p0 + m * 1)[0] = b0;
-        v(p0 + m * 3)[0] = b1;
-    }
-
-    void bit_reverse(T * p, size_t m)
-    {
-        vec a0, a1, a2, a3;
-        a0 = v(p + m * 0)[0];
-        a1 = v(p + m * 2)[0];
-        a2 = v(p + m * 1)[1];
-        a3 = v(p + m * 3)[1];
-        interleave(a0, a1, a0, a1);
-        interleave(a2, a3, a2, a3);
-        v(p + m * 0)[0] = a0;
-        v(p + m * 2)[0] = a1;
-        v(p + m * 1)[1] = a2;
-        v(p + m * 3)[1] = a3;
-        
-        a0 = v(p + m * 0)[1];
-        a1 = v(p + m * 2)[1];
-        a2 = v(p + m * 1)[0];
-        a3 = v(p + m * 3)[0];
-        interleave(a0, a1, a0, a1);
-        interleave(a2, a3, a2, a3);
-        v(p + m * 0)[1] = a2;
-        v(p + m * 2)[1] = a3;
-        v(p + m * 1)[0] = a0;
-        v(p + m * 3)[0] = a1;
+        vec a2copy = a2;
+        vec a6copy = a6;
+        interleave(a1, a5, a2, a6);
+        interleave(a2copy, a6copy, a1, a5);
     }
 }
 

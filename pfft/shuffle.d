@@ -178,7 +178,7 @@ struct BitReverse(alias V, alias Options)
                 table++;
             }
     }
-       
+    
     void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
@@ -189,11 +189,41 @@ struct BitReverse(alias V, alias Options)
         uint m = 1u << (log2n - log2l);
       
         uint* t1 = table + n1, t2 = table + n2;
-      
+
+        enum l = 1u << V.log2_bitreverse_chunk_size;
+        enum vec_per_chunk = l / V.vec_size;
+        alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
+        
+        static void load(ref Chunks c, T* p, size_t m)
+        {
+            foreach(i; ints_up_to!l)
+                foreach(j; ints_up_to!vec_per_chunk)
+                    c[i * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
+        }
+
+        static void save(ref Chunks c, T* p, size_t m)
+        {
+            foreach(i; ints_up_to!l)
+                foreach(j; ints_up_to!vec_per_chunk)
+                    *(cast(V.vec*)(p + m * i) + j) = c[i * vec_per_chunk + j];
+        }
         for(; table < t1; table++)
-            V.bit_reverse( p + table[0], m);
+        {
+            Chunks c;
+            load(c, p + table[0], m);
+            V.bit_reverse(c);
+            save(c, p + table[0], m);
+        }
         for(; table < t2; table += 2)
-            V.bit_reverse_swap( p + table[0], p + table[1], m);
+        {
+            Chunks c0, c1;
+            load(c0, p + table[0], m);
+            V.bit_reverse(c0);
+            load(c1, p + table[1], m);
+            save(c0, p + table[1], m);
+            V.bit_reverse(c1);
+            save(c1, p + table[0], m);
+        }
     }
 
     private auto highest_power_2(int a, int maxpower)

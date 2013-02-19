@@ -35,89 +35,16 @@ struct Scalar(_T, A...)
     alias _T T;
     
     enum vec_size = 1;
-    enum log2_bitreverse_chunk_size = 2;
+    enum log2_bitreverse_chunk_size = 1;
     
     vec scalar_to_vector(T a)
     {
         return a;
     }
    
-    private void load4br(T* p, size_t m, ref T a0, ref T a1, ref T a2, ref T a3)
+    void bit_reverse(A...)(ref A arg)
     {
-        a0 = p[0];
-        a1 = p[m];
-        a2 = p[1];
-        a3 = p[m + 1];
-    } 
- 
-    private void store4(T* p, size_t m, T a0, T a1, T a2, T a3)
-    {
-        p[0] = a0;
-        p[1] = a1;
-        p[m] = a2;
-        p[m + 1] = a3;
-    }
- 
-    void bit_reverse_swap(T * p0, T * p1, size_t m)
-    {
-        RepeatType!(T, 4) a, b;
-       
-        auto s = 2 * m;
-        auto i0 = 0, i1 = 2, i2 = m, i3 = m + 2;
- 
-        load4br(p0, s, a); 
-        load4br(p1, s, b); 
-        store4(p1, s, a);     
-        store4(p0, s, b);     
-        
-        load4br(p0 + i3, s, a); 
-        load4br(p1 + i3, s, b); 
-        store4(p1 + i3, s, a);     
-        store4(p0 + i3, s, b);
-
-        load4br(p0 + i1, s, a);
-        load4br(p1 + i2, s, b);
-        store4(p1 + i2, s, a);
-        store4(p0 + i1, s, b);
-
-        load4br(p1 + i1, s, a);
-        load4br(p0 + i2, s, b);
-        store4(p0 + i2, s, a);
-        store4(p1 + i1, s, b);
-    }
-
-    void bit_reverse(T * p,  size_t m)
-    {
-        //bit_reverse_static_size!4(p, m);
-        T a0, a1, a2, b0, b1, b2;       
-
-        a0 = p[1 + 0 * m];
-        a1 = p[2 + 0 * m];
-        a2 = p[3 + 0 * m];
-        b0 = p[0 + 2 * m];
-        b1 = p[0 + 1 * m];
-        b2 = p[0 + 3 * m];
-
-        p[0 + 2 * m] = a0;
-        p[0 + 1 * m] = a1;
-        p[0 + 3 * m] = a2;
-        p[1 + 0 * m] = b0; 
-        p[2 + 0 * m] = b1; 
-        p[3 + 0 * m] = b2;
-
-        a0 = p[1 + 1 * m];
-        a1 = p[3 + 1 * m];
-        a2 = p[3 + 2 * m];
-        b0 = p[2 + 2 * m];
-        b1 = p[2 + 3 * m];
-        b2 = p[1 + 3 * m];
-
-        p[2 + 2 * m] = a0;
-        p[2 + 3 * m] = a1;
-        p[1 + 3 * m] = a2;
-        p[1 + 1 * m] = b0; 
-        p[3 + 1 * m] = b1; 
-        p[3 + 2 * m] = b2;
+        _swap(arg[1], arg[2]);
     }
 
     T unaligned_load(T* p){ return *p; }
