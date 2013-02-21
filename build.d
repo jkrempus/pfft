@@ -83,15 +83,14 @@ auto commonArgs(Compiler c)
 }
 
 void buildTests(
-    string[] types, string dccmd, Compiler c, string baseDir, 
+    string[] types, ArgList dcArgs, Compiler c, string baseDir, 
     bool optimized = true, bool dbg = false, string fftw = null,
     bool dynamic = false, bool clib = false)
 {
     auto fftwSuffixes = ["float" : "f", "double" : "", "real" : "l"]; 
     
     foreach(type; types)
-        commonArgs(c)
-            .compileCmd(dccmd)
+        dcArgs
             .src(baseDir~"/test/test")
             .version_(capitalize(type))
             .output("test_"~type)
@@ -142,10 +141,9 @@ void runBenchmarks(string[] types, Version v, string api = "")
 
 void buildObj(
     Compiler c, string[] modules, string objname, Version v, SIMD simd, 
-    string dccmd, bool dbg, bool pic)
+    ArgList dcArgs, bool dbg, bool pic)
 {
-    commonArgs(c)
-        .compileCmd(dccmd)
+    dcArgs
         .conditional(dbg, argList.debug_.g, argList.optimize.inline.release)
         .version_(v.to!string)
         .conditional(pic, argList.pic)
@@ -159,7 +157,7 @@ void buildObj(
  
 string buildAdditionalSIMD(
     Compiler dc, Version v, SIMD simd, string[] types, 
-    string dccmd, bool dbg, bool pic)
+    ArgList dcArgs, bool dbg, bool pic)
 {
     types = types.filter!(
             t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
@@ -167,13 +165,13 @@ string buildAdditionalSIMD(
 
     auto src = types.map!(t => simdModuleName(simd, t)).array;
     
-    buildObj(dc, src, simd.name, v, simd, dccmd, dbg, pic);
+    buildObj(dc, src, simd.name, v, simd, dcArgs, dbg, pic);
     
     return simd.name;
 }
 
 void buildLib(
-    Compiler dc, Version v, string[] types, string dccmd, bool clib, bool dbg)
+    Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib, bool dbg)
 {
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
@@ -183,10 +181,10 @@ void buildLib(
         when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
 
     auto implObjs = v.additionalSIMD
-        .map!(s => buildAdditionalSIMD(dc, v, s, types, dccmd, dbg, clib))
+        .map!(s => buildAdditionalSIMD(dc, v, s, types, dcArgs, dbg, clib))
         .array;
 
-    buildObj(dc, src, "pfft", v, v.baseSIMD, dccmd, dbg, clib);
+    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs, dbg, clib);
 
     commonArgs(dc)
         .genLib
@@ -197,8 +195,7 @@ void buildLib(
         .run(dc);
     
     if(clib)
-        commonArgs(dc)
-            .compileCmd(dccmd)
+        dcArgs
             .genDynlib
             .output("lib/pfft-c")
             .obj("pfft")
@@ -209,24 +206,23 @@ void buildLib(
 }
 
 void buildLibPgo(
-    Compiler dc, Version v, string[] types, string dccmd, bool clib, bool dbg)
+    Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib, bool dbg)
 {
     buildLib(dc, v, types, 
-        dccmd ~ " -fprofile-generate ", clib, dbg);
+        dcArgs.raw("-fprofile-generate"), clib, dbg);
 
     // benchmark with DynamicC when clib is true
-    buildTests(types, dccmd ~ " -fprofile-generate ", 
+    buildTests(types, dcArgs.raw("-fprofile-generate"), 
         dc, "..", false, dbg, null, clib); 
 
     runBenchmarks(types, v, clib ? "c" : "pfft");
     buildLib(dc, v, types, 
-        dccmd ~ " -fprofile-use", clib, dbg);
+        dcArgs.raw("-fprofile-use"), clib, dbg);
 }
 
-void buildCObjects(Compiler dc, string[] types, string dccmd)
+void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
 {
-    auto common = commonArgs(dc)
-        .compileCmd(dccmd)
+    auto common = dcArgs
         .genObj
         .optimize
         .ipath("..")
@@ -339,6 +335,10 @@ Options:
                         much faster. You must use this flag when cross
                         compiling with GDC. This flag is ignored when building
                         tests.
+  --dversion VERSION    Pass version flag VERSION to compiler. There can be multiple
+                        --dversion flags.
+  --flag FLAG           Prepend - to FLAG and pass it to compiler. There can be
+                        multiple --flag flags.
   --debug               Turns on debug flags and turns off optimization flags.
   --fftw PATH           Enable support for testing FFTW. PATH must be the path
                         to FFTW libraries. The generated executables will
@@ -369,6 +369,8 @@ void doit(string[] args)
     bool dbg;
     bool doc;
     string fftw = null;
+    string[] versions; 
+    string[] flags; 
     Compiler dc = Compiler.GDC;
 
     getopt(args, 
@@ -384,7 +386,9 @@ void doit(string[] args)
         "h|help", &help,
         "v|verbose", &verbose,
         "doc", &doc,
-        "debug", &dbg);
+        "debug", &dbg,
+        "dversion", &versions,
+        "flag", &flags);
 
     tests = tests || dynamic;
 
@@ -421,11 +425,16 @@ void doit(string[] args)
     if(simdOpt == "")
         simdOpt = (dc != Compiler.DMD) ? "sse-avx" : "sse";
 
+    auto dcArgs = commonArgs(dc)
+        .compileCmd(dccmd)
+        .version_(versions)
+        .raw(flags.map!(a => "-"~a).array);
+
     auto buildDir = (clib && !tests) ? "generated-c" : "generated";
     if(tests)
     {
         cd("test");
-        buildTests(types, dccmd, dc, "..", !dbg, dbg, fftw, dynamic, clib);
+        buildTests(types, dcArgs, dc, "..", !dbg, dbg, fftw, dynamic, clib);
     }
     else
     {
@@ -454,12 +463,12 @@ void doit(string[] args)
         copyIncludes(types, clib);
 
         if(clib)
-            buildCObjects(dc, types, dccmd);
+            buildCObjects(dc, types, dcArgs);
         
         if(dc == Compiler.GDC && !nopgo)
-            buildLibPgo(dc, v, types, dccmd, clib, dbg);
+            buildLibPgo(dc, v, types, dcArgs, clib, dbg);
         else 
-            buildLib(dc, v, types, dccmd, clib, dbg);
+            buildLib(dc, v, types, dcArgs, clib, dbg);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)

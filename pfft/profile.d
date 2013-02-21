@@ -45,9 +45,15 @@ template ProfileMixin(E)
 
         static ~this()
         {
+            float sum = 0;
             foreach(e; EnumMembers!E)
+            {
+                sum += seconds(profTimes[e]);
                 stderr.writefln("%-15s %sms", 
-                    e, seconds(profTimes[e]) * 1e3); 
+                    e, seconds(profTimes[e]) * 1e3);
+            }
+
+            stderr.writefln("%-15s %sms", "sum", sum * 1e3);
         }
 
         void profStart(E e)

@@ -2,9 +2,25 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import std.stdio, std.conv, std.datetime, std.complex, std.getopt, 
-    std.random, std.numeric, std.math, std.algorithm, std.range,
+import std.stdio, std.conv, std.complex, std.getopt, 
+    std.random, std.numeric, std.math, std.algorithm,
     std.exception, std.typetuple, std.traits, std.string : toUpper, toStringz;
+
+import core.time;
+
+int global;
+
+void bloat(int n, int m = 0)()
+{
+    global += m;
+    static if(n != 0)
+    {
+        bloat!(n - 1, m);
+        bloat!(n - 1, m | (1 << n));
+    }
+}
+
+//alias bloat!12 B_L_O_A_T;
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -812,14 +828,13 @@ void speed(F, Transfer transfer, bool isInverse)(int log2n, long flops)
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
         
-    StopWatch sw;
-    sw.start();
+    auto tick = TickDuration.currSystemTick;
     
     foreach(i; 0 .. niter)
         f.compute();
     
-    sw.stop();
-    writefln("%f", to!double(niter * flopsPerIter) / sw.peek().nsecs());
+    tick = TickDuration.currSystemTick - tick;
+    writefln("%f", to!double(niter * flopsPerIter) / tick.nsecs());
 }
 
 void initialization(F, Transfer transfer, bool isInverse)(int log2n, long flops)
@@ -827,17 +842,16 @@ void initialization(F, Transfer transfer, bool isInverse)(int log2n, long flops)
     auto niter = 100_000_000 / (1 << log2n);
     niter = niter ? niter : 1;
 
-    StopWatch sw;
-    sw.start();
+    auto tick = TickDuration.currSystemTick;
     
     foreach(i; 0 .. niter)
     {
         auto f = F(log2n);
         f.compute();
     }
-
-    sw.stop();
-    writefln("%.3e", sw.peek().nsecs() * 1e-9 / niter);
+    
+    tick = TickDuration.currSystemTick - tick;
+    writefln("%.3e", tick.nsecs() * 1e-9 / niter);
 }
 
 void precision(F, Transfer transfer, bool isInverse)(int log2n, long flops)

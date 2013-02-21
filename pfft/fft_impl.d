@@ -7,12 +7,22 @@ module pfft.fft_impl;
 
 import pfft.shuffle;
 
-nothrow:
-pure:
+enum Action
+{ 
+    passes_first, 
+    passes, 
+    passes_last, 
+    bit_reverse, 
+    br_passes,
+    strided_copy1,
+    strided_copy2
+}
 
-enum Action{ passes_first, passes, passes_last, bit_reverse, br_passes }
 import pfft.profile;
 mixin ProfileMixin!Action;
+
+nothrow:
+pure:
 
 version(DontUseTwoPasses)
     enum useTwoPasses = false;
@@ -753,8 +763,10 @@ struct FFT(alias V, alias Options)
         auto rbuf = cast(vec*) tmp_buffer;
         auto ibuf = rbuf + l * chunk_size;
 
-        BR.strided_copy!(chunk_size)(rbuf, pr, chunk_size, stride, l);
-        BR.strided_copy!(chunk_size)(ibuf, pi, chunk_size, stride, l);
+        profStart(Action.strided_copy1);
+        BR.strided_copy!(chunk_size, true)(rbuf, pr, chunk_size, stride, l);
+        BR.strided_copy!(chunk_size, true)(ibuf, pi, chunk_size, stride, l);
+        profStopStart(Action.strided_copy1, Action.passes);
 
         size_t m2 = l*chunk_size/2;
         size_t m2_limit = m2>>nPasses;
@@ -782,9 +794,11 @@ struct FFT(alias V, alias Options)
             fft_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
             tableI *= 2;
         }
-      
-        BR.strided_copy!(chunk_size)(pr, rbuf, stride, chunk_size, l);
-        BR.strided_copy!(chunk_size)(pi, ibuf, stride, chunk_size, l);
+        
+        profStopStart(Action.passes, Action.strided_copy2);
+        BR.strided_copy!(chunk_size, false)(pr, rbuf, stride, chunk_size, l);
+        BR.strided_copy!(chunk_size, false)(pi, ibuf, stride, chunk_size, l);
+        profStop(Action.strided_copy2);
     }
 
     void fft_passes_recursive()
@@ -792,6 +806,7 @@ struct FFT(alias V, alias Options)
     {
         if(N <= (1<<Options.log2_optimal_n))
         {
+            profStart(Action.passes_last);
             size_t m2 = N >> 1;
            
             static if(useTwoPasses)
@@ -812,6 +827,7 @@ struct FFT(alias V, alias Options)
             static if(!isScalar) 
                 fft_passes_fractional(pr, pi, pr + N, table, tableI);
 
+            profStop(Action.passes_last);
             return;
         }
    
@@ -838,14 +854,12 @@ struct FFT(alias V, alias Options)
                 pr + i, pi + i, N, table, tableI, tmp_buffer, m, nPasses);
         }
 
-        {
-            size_t nextN = (N>>nPasses);
+        size_t nextN = N >> nPasses;
 
-            for(int i = 0; i<(1<<nPasses); i++)
-                fft_passes_recursive(
-                    pr + nextN*i, pi  + nextN*i, nextN, 
-                    table, tableI + 2*i, tmp_buffer);
-        }
+        for(int i = 0; i<(1<<nPasses); i++)
+            fft_passes_recursive(
+                pr + nextN*i, pi  + nextN*i, nextN, 
+                table, tableI + 2*i, tmp_buffer);
     }
   
     void bit_reverse_small_two
@@ -932,8 +946,10 @@ struct FFT(alias V, alias Options)
             v(re), v(im), N / vec_size, 
             twiddle_table_ptr(tables, log2n), 0, tmp_buf);
 
+        profStart(Action.bit_reverse);
         BR.bit_reverse_large(re, log2n, br_table_ptr(tables, log2n), tmp_buf); 
         BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf);
+        profStop(Action.bit_reverse);
     }
 
     void fft()(T * re, T * im, int log2n, Table tables)

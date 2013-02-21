@@ -258,7 +258,7 @@ struct BitReverse(alias V, alias Options)
         foreach(i; 0 .. len * TT.sizeof / n / vec.sizeof)
             swap_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
-    
+   
     void copy_some(int n, TT)(TT* dst, TT* src)
     {
         RepeatType!(TT, n) a;
@@ -268,7 +268,31 @@ struct BitReverse(alias V, alias Options)
         foreach(i, _; a)
             dst[i] = a[i];
     }
-    
+
+    template hex_string(int a)
+    {
+        static if(a == 0)
+            enum hex_string = "0x0";
+        else
+        {
+            enum r = (a & 0xf);
+            enum hex_string = 
+                hex_string!(a >> 4) ~ 
+                (r <= 9 ? '0' + r : 'a' + r - 10);
+        }
+    }
+
+    void prefetch_array(int len, TT)(TT* a)
+    {
+        enum elements_per_cache_line = 64 / TT.sizeof;
+
+        foreach(i; ints_up_to!(len / elements_per_cache_line))
+        {
+            enum offset = hex_string!(i * elements_per_cache_line * TT.sizeof);
+            mixin(`asm{ "prefetcht0 `~offset~`(%0)" : : "r" a : "memory"; }`);
+        }
+    }
+
     void copy_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert((len * TT.sizeof % vec.sizeof == 0));
@@ -280,7 +304,7 @@ struct BitReverse(alias V, alias Options)
     }
     
     void strided_copy
-    (size_t chunk_size, TT)
+    (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
     {
         for(
@@ -288,6 +312,9 @@ struct BitReverse(alias V, alias Options)
             s < src + nchunks * src_stride; 
             s += src_stride, d += dst_stride)
         {
+            prefetch_array!chunk_size(
+                prefetch_src ? s + src_stride : d + dst_stride);
+
             copy_array!chunk_size(d, s);
         }
     } 
@@ -307,7 +334,7 @@ struct BitReverse(alias V, alias Options)
         foreach(i; bit_reversed_pairs(log2m - log2l))
             if(i[1] >= i[0])
             {
-                strided_copy!l(buffer, p + i[0] * l, l, m, l);
+                strided_copy!(l, true)(buffer, p + i[0] * l, l, m, l);
           
                 bit_reverse_small(buffer,log2l+log2l, table);
 
@@ -318,13 +345,14 @@ struct BitReverse(alias V, alias Options)
                         pp < pend; 
                         pb += l, pp += m)
                     {
+                        prefetch_array!l(pp + m);
                         swap_array!l(pp, pb);
                     }
                 
                     bit_reverse_small(buffer,log2l+log2l, table);
                 }
 
-                strided_copy!l(p + i[0] * l, buffer, m, l, l);
+                strided_copy!(l, false)(p + i[0] * l, buffer, m, l, l);
             }
     }
 }
