@@ -471,6 +471,7 @@ struct FFT(alias V, alias Options)
         pi[k3] = i3;
     };
  
+    pragma(attribute, always_inline)
     void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -492,6 +493,7 @@ struct FFT(alias V, alias Options)
         }
     }
  
+    pragma(attribute, always_inline)
     void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -517,6 +519,7 @@ struct FFT(alias V, alias Options)
         }
     }
 
+    pragma(attribute, always_inline)
     void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride)
     {
@@ -543,6 +546,7 @@ struct FFT(alias V, alias Options)
         }
     }
     
+    pragma(attribute, always_inline)
     void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
@@ -575,6 +579,7 @@ struct FFT(alias V, alias Options)
         }
     }
         
+    pragma(attribute, always_inline)
     void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -597,6 +602,7 @@ struct FFT(alias V, alias Options)
         }
     }
 
+    pragma(attribute, always_inline)
     void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
@@ -656,6 +662,7 @@ struct FFT(alias V, alias Options)
         }
     }
 
+    pragma(attribute, always_inline)
     void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, T* table)
     {
@@ -710,6 +717,7 @@ struct FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
     
+    pragma(attribute, always_inline)
     void fft_passes_fractional()
     (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
@@ -726,6 +734,7 @@ struct FFT(alias V, alias Options)
                 {
                     vec wr, wi, ur, ui;
 
+                    BR.prefetch_nt(table + ((tableI + 4) << i));
                     V.complex_array_to_real_imag_vec!(2 << i)(
                         table + (tableI << i), wr, wi);
                     
@@ -755,6 +764,7 @@ struct FFT(alias V, alias Options)
             }
     }
   
+    pragma(attribute, always_inline)
     void fft_passes_strided
     (int l, int chunk_size)
     (vec * pr, vec * pi, size_t N , ref T * table, ref size_t tableI, 
@@ -862,6 +872,7 @@ struct FFT(alias V, alias Options)
                 table, tableI + 2*i, tmp_buffer);
     }
   
+    pragma(attribute, always_inline)
     void bit_reverse_small_two
     (int minLog2n)
     (T* re, T* im, int log2n, uint* brTable)
@@ -966,7 +977,7 @@ struct FFT(alias V, alias Options)
             static if(!disable_large)
                 fft_large(re, im, log2n, tables);
     }
-  
+
     alias T* RTable;
  
     auto rtable_size_bytes()(int log2n)

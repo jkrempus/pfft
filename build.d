@@ -164,9 +164,11 @@ string buildAdditionalSIMD(
         .array(); 
 
     auto src = types.map!(t => simdModuleName(simd, t)).array;
-    
-    buildObj(dc, src, simd.name, v, simd, dcArgs, dbg, pic);
-    
+
+    buildObj(
+        dc, src, simd.name, v, simd, 
+        dcArgs.version_("InstantiateAdditionalSimd"), dbg, pic);
+
     return simd.name;
 }
 
@@ -274,9 +276,10 @@ void copyIncludes(string[] types, bool clib)
         mkdir("include/pfft");
         foreach(type; types)
             cp("../pfft/di/impl_"~type~".di", "include/pfft/");
-        
-        cp("../pfft/stdapi.d", "include/pfft/stdapi.d");
-        cp("../pfft/pfft.d", "include/pfft/pfft.d");
+     
+        cp("../pfft/instantiate_declarations.di", "include/pfft/");   
+        cp("../pfft/stdapi.d", "include/pfft/");
+        cp("../pfft/pfft.d", "include/pfft/");
     }
 }
 

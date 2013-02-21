@@ -7,8 +7,6 @@ module pfft.avx_double;
 
 import core.simd;
 
-import pfft.fft_impl;
-
 version(LDC)
 {
     import ldc.simd;
@@ -168,7 +166,16 @@ struct Options
 
 version(SSE_AVX)
 {
-    import pfft.fft_impl;
-    alias TypeTuple!(FFT!(Vector, Options)) FFTs;
-    mixin Instantiate!();
+    version(InstantiateAdditionalSimd)
+    {
+        import pfft.fft_impl;
+        alias TypeTuple!(FFT!(Vector, Options)) FFTs;
+        mixin Instantiate!();
+    }
+    else
+    {
+        import pfft.instantiate_declarations;
+        alias double T;
+        mixin Instantiate!();
+    }
 }

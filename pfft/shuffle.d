@@ -179,6 +179,27 @@ struct BitReverse(alias V, alias Options)
             }
     }
     
+    enum l = 1u << V.log2_bitreverse_chunk_size;
+    enum vec_per_chunk = l / V.vec_size;
+    alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
+    
+    pragma(attribute, always_inline)
+    static void load(ref Chunks c, T* p, size_t m)
+    {
+        foreach(i; ints_up_to!l)
+            foreach(j; ints_up_to!vec_per_chunk)
+                c[i * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
+    }
+
+    pragma(attribute, always_inline)
+    static void save(ref Chunks c, T* p, size_t m)
+    {
+        foreach(i; ints_up_to!l)
+            foreach(j; ints_up_to!vec_per_chunk)
+                *(cast(V.vec*)(p + m * i) + j) = c[i * vec_per_chunk + j];
+    }
+    
+    pragma(attribute, always_inline)
     void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
@@ -190,23 +211,6 @@ struct BitReverse(alias V, alias Options)
       
         uint* t1 = table + n1, t2 = table + n2;
 
-        enum l = 1u << V.log2_bitreverse_chunk_size;
-        enum vec_per_chunk = l / V.vec_size;
-        alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
-        
-        static void load(ref Chunks c, T* p, size_t m)
-        {
-            foreach(i; ints_up_to!l)
-                foreach(j; ints_up_to!vec_per_chunk)
-                    c[i * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
-        }
-
-        static void save(ref Chunks c, T* p, size_t m)
-        {
-            foreach(i; ints_up_to!l)
-                foreach(j; ints_up_to!vec_per_chunk)
-                    *(cast(V.vec*)(p + m * i) + j) = c[i * vec_per_chunk + j];
-        }
         for(; table < t1; table++)
         {
             Chunks c;
@@ -282,14 +286,20 @@ struct BitReverse(alias V, alias Options)
         }
     }
 
+    void prefetch_nt(TT)(TT* a)
+    {
+        import gcc.builtins;
+        __builtin_prefetch(a, 0, 0);
+    }
+
     void prefetch_array(int len, TT)(TT* a)
     {
         enum elements_per_cache_line = 64 / TT.sizeof;
 
         foreach(i; ints_up_to!(len / elements_per_cache_line))
         {
-            enum offset = hex_string!(i * elements_per_cache_line * TT.sizeof);
-            mixin(`asm{ "prefetcht0 `~offset~`(%0)" : : "r" a : "memory"; }`);
+            import gcc.builtins;
+            __builtin_prefetch(a + i * elements_per_cache_line, 0, 3);
         }
     }
 
@@ -303,6 +313,7 @@ struct BitReverse(alias V, alias Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
+    pragma(attribute, always_inline)
     void strided_copy
     (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
@@ -314,6 +325,9 @@ struct BitReverse(alias V, alias Options)
         {
             prefetch_array!chunk_size(
                 prefetch_src ? s + src_stride : d + dst_stride);
+           
+//            static if(prefetch_src) 
+//                prefetch_array!chunk_size(s + src_stride);
 
             copy_array!chunk_size(d, s);
         }

@@ -7,8 +7,6 @@ module pfft.avx_float;
 
 import core.simd;
 
-import pfft.fft_impl;
-
 version(LDC)
     version = GNU_OR_LDC;
 
@@ -99,6 +97,8 @@ version(GNU_OR_LDC)
 
 struct Vector
 {
+    pragma(attribute, always_inline):
+    pragma(attribute, flatten):
     static:
 
     alias float8 vec;
@@ -254,7 +254,16 @@ struct Options
 
 version(SSE_AVX)
 {
-    import pfft.fft_impl;
-    alias TypeTuple!(FFT!(Vector, Options)) FFTs;
-    mixin Instantiate!();
+    version(InstantiateAdditionalSimd)
+    {
+        import pfft.fft_impl;
+        alias TypeTuple!(FFT!(Vector, Options)) FFTs;
+        mixin Instantiate!();
+    }
+    else
+    {
+        import pfft.instantiate_declarations;
+        alias float T;
+        mixin Instantiate!();
+    }
 }
