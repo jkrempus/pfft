@@ -7,8 +7,8 @@ module pfft.shuffle;
 
 import core.bitop;
 
-nothrow:
-pure:
+//nothrow:
+//pure:
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -144,10 +144,8 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
-struct BitReverse(alias V, alias Options)
+template BitReverse(alias V, alias Options)
 {
-    static:
-
     alias V.T T;
     alias V.vec vec;
     
@@ -178,27 +176,30 @@ struct BitReverse(alias V, alias Options)
                 table++;
             }
     }
-    
-    enum l = 1u << V.log2_bitreverse_chunk_size;
-    enum vec_per_chunk = l / V.vec_size;
-    alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
-    
-    pragma(attribute, always_inline)
-    static void load(ref Chunks c, T* p, size_t m)
+   
+    mixin template BRChunks()
     {
-        foreach(i; ints_up_to!l)
-            foreach(j; ints_up_to!vec_per_chunk)
-                c[i * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
+        pragma(attribute, always_inline):
+
+        enum l = 1u << V.log2_bitreverse_chunk_size;
+        enum vec_per_chunk = l / V.vec_size;
+        alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
+        
+        static void load(ref Chunks c, T* p, size_t m)
+        {
+            foreach(i; ints_up_to!l)
+                foreach(j; ints_up_to!vec_per_chunk)
+                    c[i * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
+        }
+
+        static void save(ref Chunks c, T* p, size_t m)
+        {
+            foreach(i; ints_up_to!l)
+                foreach(j; ints_up_to!vec_per_chunk)
+                    *(cast(V.vec*)(p + m * i) + j) = c[i * vec_per_chunk + j];
+        }
     }
 
-    pragma(attribute, always_inline)
-    static void save(ref Chunks c, T* p, size_t m)
-    {
-        foreach(i; ints_up_to!l)
-            foreach(j; ints_up_to!vec_per_chunk)
-                *(cast(V.vec*)(p + m * i) + j) = c[i * vec_per_chunk + j];
-    }
-    
     pragma(attribute, always_inline)
     void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
@@ -210,6 +211,8 @@ struct BitReverse(alias V, alias Options)
         uint m = 1u << (log2n - log2l);
       
         uint* t1 = table + n1, t2 = table + n2;
+
+        mixin BRChunks!();
 
         for(; table < t1; table++)
         {
@@ -303,6 +306,17 @@ struct BitReverse(alias V, alias Options)
         }
     }
 
+    void prefetch_array(TT)(TT* a, size_t len)
+    {
+        enum elements_per_cache_line = 64 / TT.sizeof;
+
+        foreach(i; 0 .. len / elements_per_cache_line)
+        {
+            import gcc.builtins;
+            __builtin_prefetch(a + i * elements_per_cache_line, 0, 3);
+        }
+    }
+
     void copy_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert((len * TT.sizeof % vec.sizeof == 0));
@@ -349,11 +363,14 @@ struct BitReverse(alias V, alias Options)
             if(i[1] >= i[0])
             {
                 strided_copy!(l, true)(buffer, p + i[0] * l, l, m, l);
-          
-                bit_reverse_small(buffer,log2l+log2l, table);
+         
+                for(int j = 0; ; j++)
+                { 
+                    bit_reverse_small(buffer,log2l+log2l, table);
 
-                if(i[1] != i[0])
-                {
+                    if(i[1] == i[0] || j == 1)
+                        break;
+
                     for(
                         T* pp = p + i[1] * l, pb = buffer;
                         pp < pend; 
@@ -362,8 +379,6 @@ struct BitReverse(alias V, alias Options)
                         prefetch_array!l(pp + m);
                         swap_array!l(pp, pb);
                     }
-                
-                    bit_reverse_small(buffer,log2l+log2l, table);
                 }
 
                 strided_copy!(l, false)(p + i[0] * l, buffer, m, l, l);
@@ -374,7 +389,6 @@ struct BitReverse(alias V, alias Options)
 private struct Scalar(TT, alias V)
 {
     static:
-    public:
 
     alias TT T;
     alias TT vec;
@@ -400,12 +414,9 @@ template hasInterleaving(alias V)
         is(typeof(V.deinterleave));
 }
 
-struct InterleaveImpl
+template InterleaveImpl
 (alias V, int chunk_size, bool is_inverse, bool swap_even_odd) 
 {
-    static:
-    public:
-
     size_t itable_size_bytes()(int log2n)
     {
         return (bool.sizeof << log2n) / V.vec_size / chunk_size; 

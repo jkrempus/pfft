@@ -56,10 +56,8 @@ else version(GNU)
     }
 }
 
-struct Vector 
+template Vector()
 {
-    static:
-
     alias double4 vec;
     alias double T;
     
@@ -155,7 +153,7 @@ struct Vector
     }
 }
 
-struct Options
+template Options()
 {
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 14;
@@ -169,7 +167,7 @@ version(SSE_AVX)
     version(InstantiateAdditionalSimd)
     {
         import pfft.fft_impl;
-        alias TypeTuple!(FFT!(Vector, Options)) FFTs;
+        alias TypeTuple!(FFT!(Vector!(), Options!())) FFTs;
         mixin Instantiate!();
     }
     else

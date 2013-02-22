@@ -13,7 +13,7 @@ version(SSE_AVX)
         avx = pfft.avx_double, 
         implementation = pfft.detect_avx;
 
-    alias TypeTuple!(FFT!(sse.Vector, sse.Options), avx) FFTs;
+    alias TypeTuple!(FFT!(sse.Vector!(), sse.Options!()), avx) FFTs;
 }
 else
 {
@@ -38,7 +38,7 @@ else
         import pfft.sse_double;
     }
     
-    alias FFT!(Vector,Options) F;
+    alias FFT!(Vector!(),Options!()) F;
     alias TypeTuple!F FFTs;
 }
 

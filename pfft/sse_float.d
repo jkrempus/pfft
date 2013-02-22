@@ -24,10 +24,8 @@ version(LDC)
     import ldc.gccbuiltins_x86;
 }
         
-struct Vector 
+template Vector()
 {
-    static:
-
     alias float4 vec;
     alias float T;
     
@@ -181,7 +179,7 @@ struct Vector
             r1 = shufps!(3,1,3,1)(a0,a1);
         }
         
-        private void bit_reverse()(
+        void bit_reverse()(
             ref float4 a0, ref float4 a1, ref float4 a2, ref float4 a3)
         {
             float4 b0 = shufps!(1,0,1,0)(a0, a2);
@@ -298,7 +296,7 @@ struct Vector
     }
 }
 
-struct Options
+template Options()
 {
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 14;

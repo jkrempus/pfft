@@ -95,12 +95,10 @@ version(GNU_OR_LDC)
     alias __builtin_ia32_storeups256 storeups;
 }
 
-struct Vector
+template Vector()
 {
     pragma(attribute, always_inline):
-    pragma(attribute, flatten):
-    static:
-
+    
     alias float8 vec;
     alias float T;
     
@@ -243,7 +241,7 @@ struct Vector
     }
 }
 
-struct Options
+template Options()
 {
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 14;
@@ -257,7 +255,7 @@ version(SSE_AVX)
     version(InstantiateAdditionalSimd)
     {
         import pfft.fft_impl;
-        alias TypeTuple!(FFT!(Vector, Options)) FFTs;
+        alias TypeTuple!(FFT!(Vector!(), Options!())) FFTs;
         mixin Instantiate!();
     }
     else

@@ -24,10 +24,8 @@ version(LDC)
     import ldc.gccbuiltins_x86;
 }
 
-struct Vector
+template Vector()
 {
-    static:
-
     alias double2 vec;
     alias double T;
     
@@ -154,7 +152,7 @@ struct Vector
     }
 }
 
-struct Options
+template Options()
 {
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 13;
@@ -162,4 +160,3 @@ struct Options
     enum passes_per_recursive_call = 4;
     enum log2_recursive_passes_chunk_size = 5;
 }
-

@@ -190,7 +190,7 @@ void buildLib(
 
     commonArgs(dc)
         .genLib
-        .output("lib/pfft")
+        .output("lib/pfft" ~ (clib ? "-c" : ""))
         .obj("pfft")
         .obj(implObjs)
         .conditional(clib, argList.obj("druntime", "clib"))
@@ -227,20 +227,20 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
     auto common = dcArgs
         .genObj
         .optimize
-        .ipath("..")
-        .pic;
+        .pic
+        .ipath("include");
 
     common
         .output("clib")
-        .module_("pfft.clib")
+        .src("../pfft/clib")
         .version_(types.map!(capitalize).array)
         .build(dc, false);
  
     common
         .output("druntime")
-        .module_("pfft.druntime_stubs")
+        .src("../pfft/druntime_stubs")
         .conditional(dc == Compiler.LDC, argList.module_("core.bitop"))
-        .build(dc, false);
+        .run(dc);
 }
 
 void copyIncludes(string[] types, bool clib)
@@ -271,16 +271,14 @@ void copyIncludes(string[] types, bool clib)
         
         std.file.write(fixSeparators("include/pfft.h"), oStr);
     }
-    else
-    {
-        mkdir("include/pfft");
-        foreach(type; types)
-            cp("../pfft/di/impl_"~type~".di", "include/pfft/");
-     
-        cp("../pfft/instantiate_declarations.di", "include/pfft/");   
-        cp("../pfft/stdapi.d", "include/pfft/");
-        cp("../pfft/pfft.d", "include/pfft/");
-    }
+        
+    mkdir("include/pfft");
+    foreach(type; types)
+        cp("../pfft/di/impl_"~type~".di", "include/pfft/");
+ 
+    cp("../pfft/instantiate_declarations.di", "include/pfft/");   
+    cp("../pfft/stdapi.d", "include/pfft/");
+    cp("../pfft/pfft.d", "include/pfft/");
 }
 
 void buildDoc(Compiler c, string ccmd)
@@ -476,6 +474,9 @@ void doit(string[] args)
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 rm(e.name);
+
+        if(clib)
+            rm("include/pfft", "-rf");
     }
 }
 
@@ -485,7 +486,7 @@ void main(string[] args)
         doit(args);
     catch(Exception e)
     {
-        auto s = findSplit(to!string(e), "---")[0];
+        auto s = to!string(e);//.findSplit("---")[0];
         stderr.writefln("Exception was thrown: %s", s);
         core.stdc.stdlib.exit(1); 
     }

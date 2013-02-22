@@ -7,7 +7,7 @@ module pfft.scalar_real;
 
 import pfft.fft_impl;
 
-struct Options
+template Options()
 {
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 12;
@@ -16,4 +16,4 @@ struct Options
     enum log2_recursive_passes_chunk_size = 5;
 }
 
-alias Scalar!real Vector;
+template Vector(){ alias Scalar!real Vector; }

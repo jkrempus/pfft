@@ -21,8 +21,8 @@ enum Action
 import pfft.profile;
 mixin ProfileMixin!Action;
 
-nothrow:
-pure:
+//nothrow:
+//pure:
 
 version(DontUseTwoPasses)
     enum useTwoPasses = false;
@@ -36,10 +36,8 @@ version(GNU)
     version(Windows)
         version = MinGW;  
 
-struct Scalar(_T, A...)
+template Scalar(_T, A...)
 {
-    static:
-
     enum{ isScalar }
     alias _T vec;
     alias _T T;
@@ -149,9 +147,9 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
         pi[i] = ai[reverse_bits!(i, log2n)];
 }
 
-struct FFT(alias V, alias Options)
+template FFT(alias V, alias Options)
 {
-    static:
+    static assert(!(Options.passes_per_recursive_call & 1));
 
     import core.bitop, core.stdc.stdlib;
    
@@ -774,8 +772,10 @@ struct FFT(alias V, alias Options)
         auto ibuf = rbuf + l * chunk_size;
 
         profStart(Action.strided_copy1);
-        BR.strided_copy!(chunk_size, true)(rbuf, pr, chunk_size, stride, l);
-        BR.strided_copy!(chunk_size, true)(ibuf, pi, chunk_size, stride, l);
+        foreach(i; 0 .. 2)
+            BR.strided_copy!(chunk_size, true)(
+                i ? ibuf : rbuf, i ? pi : pr, chunk_size, stride, l);
+
         profStopStart(Action.strided_copy1, Action.passes);
 
         size_t m2 = l*chunk_size/2;
@@ -798,58 +798,54 @@ struct FFT(alias V, alias Options)
 
                 tableI *= 4;
             }
-        
-        for(; m2 > m2_limit; m2 >>= 1)
-        {
-            fft_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
-            tableI *= 2;
-        }
+        else 
+            for(; m2 > m2_limit; m2 >>= 1)
+            {
+                fft_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
+                tableI *= 2;
+            }
         
         profStopStart(Action.passes, Action.strided_copy2);
-        BR.strided_copy!(chunk_size, false)(pr, rbuf, stride, chunk_size, l);
-        BR.strided_copy!(chunk_size, false)(pi, ibuf, stride, chunk_size, l);
+        foreach(i; 0 .. 2)
+            BR.strided_copy!(chunk_size, false)(
+                i ? pi : pr, i ? ibuf : rbuf, stride, chunk_size, l);
+
         profStop(Action.strided_copy2);
     }
 
+    void fft_passes_recursive_last()
+    (vec * pr, vec *  pi, size_t N, T * table, size_t tableI)
+    {
+        profStart(Action.passes_last);
+        size_t m2 = N >> 1;
+       
+        static if(useTwoPasses)
+            for (; m2 > 1 ; m2 >>= 2, tableI *= 4)
+                fft_two_passes(pr, pi, pr + N, m2, table + tableI, 
+                    table + 2 * tableI);
+
+        for (; m2 > 0 ; m2 >>= 1, tableI *= 2)
+            fft_pass(pr, pi, pr + N, table + tableI, m2);
+       
+        static if(!isScalar) 
+            fft_passes_fractional(pr, pi, pr + N, table, tableI);
+
+        profStop(Action.passes_last);
+    }
+
+    pragma(attribute, flatten)
     void fft_passes_recursive()
     (vec * pr, vec *  pi, size_t N, T * table, size_t tableI, void* tmp_buffer)
     {
-        if(N <= (1<<Options.log2_optimal_n))
-        {
-            profStart(Action.passes_last);
-            size_t m2 = N >> 1;
-           
-            static if(useTwoPasses)
-                for (; m2 > 1 ; m2 >>= 2)
-                {
-                    fft_two_passes(pr, pi, pr + N, m2, table + tableI, 
-                        table + 2 * tableI);
-                    
-                    tableI *= 4;
-                }
-
-            for (; m2 > 0 ; m2 >>= 1)
-            {
-                fft_pass(pr, pi, pr + N, table + tableI, m2);
-                tableI *= 2;
-            }
-           
-            static if(!isScalar) 
-                fft_passes_fractional(pr, pi, pr + N, table, tableI);
-
-            profStop(Action.passes_last);
-            return;
-        }
-   
         enum log2l =  Options.passes_per_recursive_call, l = 1 << log2l;
-        enum chunk_size = 1UL << Options.log2_recursive_passes_chunk_size;
+        enum chunk_size = st!1 << Options.log2_recursive_passes_chunk_size;
 
         int log2n = bsf(N);
 
         int nPasses = log2n > log2l + Options.log2_optimal_n ?
             log2l : log2n - Options.log2_optimal_n;
 
-        nPasses = (nPasses & 1) && !(log2l & 1)  ? nPasses + 1 : nPasses;
+        nPasses = (nPasses & 1) ? nPasses + 1 : nPasses;
 
         int log2m = log2n - log2l;
         size_t m = st!1 << log2m;
@@ -866,10 +862,16 @@ struct FFT(alias V, alias Options)
 
         size_t nextN = N >> nPasses;
 
-        for(int i = 0; i<(1<<nPasses); i++)
-            fft_passes_recursive(
-                pr + nextN*i, pi  + nextN*i, nextN, 
-                table, tableI + 2*i, tmp_buffer);
+        for(int i = 0; i < (1 << nPasses); i++)
+            if(nextN > (1<<Options.log2_optimal_n))
+                fft_passes_recursive(
+                    pr + nextN * i, pi  + nextN * i, nextN, 
+                    table, tableI + 2 * i, tmp_buffer);
+            else
+                fft_passes_recursive_last(
+                    pr + nextN * i, pi  + nextN * i, nextN, 
+                    table, tableI + 2 * i);
+
     }
   
     pragma(attribute, always_inline)
@@ -884,20 +886,18 @@ struct FFT(alias V, alias Options)
             if(log2n < 2 * l)
             {
                 // only works for log2n < 2 * l
-                bit_reverse_tiny!(2 * l)(re, log2n);
-                bit_reverse_tiny!(2 * l)(im, log2n);
+                foreach(i; 0 .. 2)
+                    bit_reverse_tiny!(2 * l)(i ? im : re, log2n);
             }
             else
-            {
-                BR.bit_reverse_small(re, log2n, brTable); 
-                BR.bit_reverse_small(im, log2n, brTable);
-            }
+                foreach(i; 0 .. 2)
+                    BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
         }
         else                                                            
         {
             //we already know that log2n >= 2 * l here.
-            BR.bit_reverse_small(re, log2n, brTable); 
-            BR.bit_reverse_small(im, log2n, brTable);
+            foreach(i; 0 .. 2)
+                BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
         }   
     }
 
@@ -959,7 +959,8 @@ struct FFT(alias V, alias Options)
 
         profStart(Action.bit_reverse);
         BR.bit_reverse_large(re, log2n, br_table_ptr(tables, log2n), tmp_buf); 
-        BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf);
+        BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf); 
+        
         profStop(Action.bit_reverse);
     }
 
