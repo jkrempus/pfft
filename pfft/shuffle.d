@@ -6,70 +6,10 @@
 module pfft.shuffle;
 
 import core.bitop;
+public import pfft.common;
 
 //nothrow:
 //pure:
-
-template TypeTuple(A...)
-{
-    alias A TypeTuple;
-}
-
-static if(is(typeof({ import gcc.attribute; })))
-{
-    public import gcc.attribute;
-    enum always_inline = attribute("always_inline");
-    enum hot = attribute("hot");
-}
-else
-{
-    alias always_inline = TypeTuple!();
-    alias hot = TypeTuple!();
-}
-
-template st(alias a){ enum st = cast(size_t) a; }
-
-struct Tuple(A...)
-{
-    A a;
-    alias a this;
-}
-
-void _swap(T)(ref T a, ref T b)
-{
-    auto aa = a;
-    auto bb = b;
-    b = aa;
-    a = bb;
-}
-
-template ints_up_to(int n, T...)
-{
-    static if(n)
-    {
-        alias ints_up_to!(n-1, n-1, T) ints_up_to;
-    }
-    else
-        alias T ints_up_to;
-}
-
-template powers_up_to(int n, T...)
-{
-    static if(n > 1)
-    {
-        alias powers_up_to!(n / 2, n / 2, T) powers_up_to;
-    }
-    else
-        alias T powers_up_to;
-}
-
-template RepeatType(T, int n, R...)
-{
-    static if(n == 0)
-        alias R RepeatType;
-    else
-        alias RepeatType!(T, n - 1, T, R) RepeatType;
-}
 
 struct BitReversedPairs
 {
@@ -101,7 +41,7 @@ void bit_reverse_simple(T)(T* p, int log2n)
 {
     foreach(i0, i1; bit_reversed_pairs(log2n))
         if(i1 > i0)
-            _swap(p[i0],p[i1]);
+            swap(p[i0],p[i1]);
 }
 
 template reverse_bits(int i, int bits_left, int r = 0)
@@ -157,7 +97,7 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
         j += chunk_size*2, i += chunk_size*2)
     {        
         foreach(k; ints_up_to!chunk_size)
-            _swap(p[i + k], p[j + k]);
+            swap(p[i + k], p[j + k]);
     }
 }
 
@@ -196,8 +136,8 @@ template BitReverse(alias V, alias Options)
    
     mixin template BRChunks()
     {
-        pragma(attribute, always_inline):
-        pragma(attribute, hot):
+        @always_inline:
+        @hot:
 
         enum l = 1u << V.log2_bitreverse_chunk_size;
         enum vec_per_chunk = l / V.vec_size;
@@ -218,7 +158,7 @@ template BitReverse(alias V, alias Options)
         }
     }
 
-    pragma(attribute, always_inline)
+    @always_inline
     void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
@@ -274,8 +214,7 @@ template BitReverse(alias V, alias Options)
             a[i] = tmp[i + n];
     }
 
-    pragma(attribute, always_inline)
-    pragma(attribute, hot)
+    @always_inline @hot
     void swap_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert(len*TT.sizeof % vec.sizeof == 0);
@@ -347,8 +286,7 @@ template BitReverse(alias V, alias Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    pragma(attribute, always_inline)
-    pragma(attribute, hot)
+    @always_inline @hot
     void strided_copy
     (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)

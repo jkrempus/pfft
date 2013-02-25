@@ -178,7 +178,7 @@ void buildLib(
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
         types.map!(t => "pfft.impl_"~t).array ~
-        ["pfft.fft_impl", "pfft.shuffle"] ~
+        ["pfft.fft_impl", "pfft.shuffle", "pfft.common"] ~
         when(!clib, ["pfft.stdapi", "pfft.pfft"]) ~ 
         when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
 

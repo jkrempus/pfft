@@ -6,7 +6,7 @@
 module pfft.avx_float;
 
 import core.simd;
-import pfft.shuffle;
+import pfft.common;
 
 version(LDC)
     version = GNU_OR_LDC;
