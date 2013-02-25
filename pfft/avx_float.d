@@ -6,6 +6,7 @@
 module pfft.avx_float;
 
 import core.simd;
+import pfft.shuffle;
 
 version(LDC)
     version = GNU_OR_LDC;
@@ -97,7 +98,7 @@ version(GNU_OR_LDC)
 
 template Vector()
 {
-    pragma(attribute, always_inline):
+    @always_inline:
     
     alias float8 vec;
     alias float T;
@@ -198,6 +199,7 @@ template Vector()
         a3 = shufps!(3, 1, 3, 1)(b2, b3);
     }
 
+    @hot
     void bit_reverse(
         ref vec a0, ref vec a1, ref vec a2, ref vec a3,
         ref vec a4, ref vec a5, ref vec a6, ref vec a7)

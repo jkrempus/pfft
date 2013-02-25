@@ -10,6 +10,23 @@ import core.bitop;
 //nothrow:
 //pure:
 
+template TypeTuple(A...)
+{
+    alias A TypeTuple;
+}
+
+static if(is(typeof({ import gcc.attribute; })))
+{
+    public import gcc.attribute;
+    enum always_inline = attribute("always_inline");
+    enum hot = attribute("hot");
+}
+else
+{
+    alias always_inline = TypeTuple!();
+    alias hot = TypeTuple!();
+}
+
 template st(alias a){ enum st = cast(size_t) a; }
 
 struct Tuple(A...)
@@ -180,6 +197,7 @@ template BitReverse(alias V, alias Options)
     mixin template BRChunks()
     {
         pragma(attribute, always_inline):
+        pragma(attribute, hot):
 
         enum l = 1u << V.log2_bitreverse_chunk_size;
         enum vec_per_chunk = l / V.vec_size;
@@ -256,6 +274,8 @@ template BitReverse(alias V, alias Options)
             a[i] = tmp[i + n];
     }
 
+    pragma(attribute, always_inline)
+    pragma(attribute, hot)
     void swap_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert(len*TT.sizeof % vec.sizeof == 0);
@@ -328,6 +348,7 @@ template BitReverse(alias V, alias Options)
     }
     
     pragma(attribute, always_inline)
+    pragma(attribute, hot)
     void strided_copy
     (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)

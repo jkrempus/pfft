@@ -5,7 +5,7 @@
 
 module pfft.fft_impl;
 
-import pfft.shuffle;
+public import pfft.shuffle;
 
 enum Action
 { 
@@ -67,11 +67,6 @@ else
 
 // reinventing some Phobos stuff...
 
-template TypeTuple(A...)
-{
-    alias A TypeTuple;
-}
-
 template ParamTypeTuple(alias f)
 {
     auto params_struct(Ret, Params...)(Ret function(Params) f) 
@@ -97,22 +92,26 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
     RepeatType!(T, n) ar, ai;
 
     foreach(i; ints_up_to!n)
+    {
         ar[i] = pr[i];
-    foreach(i; ints_up_to!n)
         ai[i] = pi[i];
+    }
     
     foreach(i; powers_up_to!n)
     {
         enum m = n / i;
         
-        auto tp = table;
         foreach(j; ints_up_to!(n / m))
         {
             enum offset = m * j;
-            
-            T wr = tp[0];
-            T wi = tp[1];
-            tp += 2;
+            static if (j >= 4)
+            {
+                T wr = table[2 * j];
+                T wi = table[2 * j + 1];
+            }
+            else static if(j >= 2)
+                T sqrt2 = table[4];
+
             foreach(k1; ints_up_to!(m / 2))
             {
                 enum k2 = k1 + m / 2;
@@ -130,8 +129,21 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
                 {
                     T tmpr = ar[offset + k2], ti = ai[offset + k2];
                     T ur = ar[offset + k1], ui = ai[offset + k1];
-                    T tr = tmpr*wr - ti*wi;
-                    ti = tmpr*wi + ti*wr;
+                    static if(j == 2)
+                    {
+                        T tr = sqrt2 * (tmpr + ti);
+                        ti = sqrt2 * (ti - tmpr); 
+                    }
+                    else static if(j == 3)
+                    {
+                        T tr = sqrt2 * (ti - tmpr);
+                        ti = sqrt2 * (-tmpr - ti);
+                    }
+                    else
+                    {
+                        T tr = tmpr*wr - ti*wi;
+                        ti = tmpr*wi + ti*wr;
+                    }
                 }
                 ar[offset + k2] = ur - tr;
                 ar[offset + k1] = ur + tr;                                                    
@@ -142,9 +154,10 @@ void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
     }
 
     foreach(i; ints_up_to!n)
+    {
         pr[i] = ar[reverse_bits!(i, log2n)];
-    foreach(i; ints_up_to!n)
         pi[i] = ai[reverse_bits!(i, log2n)];
+    }
 }
 
 template FFT(alias V, alias Options)
@@ -469,7 +482,7 @@ template FFT(alias V, alias Options)
         pi[k3] = i3;
     };
  
-    pragma(attribute, always_inline)
+    @always_inline @hot
     void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -491,7 +504,7 @@ template FFT(alias V, alias Options)
         }
     }
  
-    pragma(attribute, always_inline)
+    @always_inline @hot
     void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -517,34 +530,7 @@ template FFT(alias V, alias Options)
         }
     }
 
-    pragma(attribute, always_inline)
-    void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
-        vec* table, size_t start_stride)
-    {
-        //version(DigitalMars)
-            // prevent inlining of this function to avoid stack alignment
-            // bug with latest DMD 2.061 from git
-            //asm{ nop; }
-
-        table += start_stride + start_stride;
-        vec* re_end = re + N;
-        size_t m2 = start_stride;
-        
-        static if(useTwoPasses)
-            for(; m2 < N / 2; m2 <<= 2)
-            {
-                fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
-                table += 6 * m2;
-            }
-
-        for(; m2 < N; m2 <<= 1)
-        {
-            fft_pass_bit_reversed(re, im, re_end, table, m2);
-            table += m2 + m2;
-        }
-    }
-    
-    pragma(attribute, always_inline)
+    @always_inline @hot
     void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
@@ -577,7 +563,7 @@ template FFT(alias V, alias Options)
         }
     }
         
-    pragma(attribute, always_inline)
+    @always_inline @hot
     void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -600,7 +586,7 @@ template FFT(alias V, alias Options)
         }
     }
 
-    pragma(attribute, always_inline)
+    @always_inline @hot
     void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
@@ -660,7 +646,34 @@ template FFT(alias V, alias Options)
         }
     }
 
-    pragma(attribute, always_inline)
+    @always_inline
+    void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
+        vec* table, size_t start_stride)
+    {
+        //version(DigitalMars)
+            // prevent inlining of this function to avoid stack alignment
+            // bug with latest DMD 2.061 from git
+            //asm{ nop; }
+
+        table += start_stride + start_stride;
+        vec* re_end = re + N;
+        size_t m2 = start_stride;
+        
+        static if(useTwoPasses)
+            for(; m2 < N / 2; m2 <<= 2)
+            {
+                fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
+                table += 6 * m2;
+            }
+
+        for(; m2 < N; m2 <<= 1)
+        {
+            fft_pass_bit_reversed(re, im, re_end, table, m2);
+            table += m2 + m2;
+        }
+    }
+    
+    @always_inline
     void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, T* table)
     {
@@ -715,7 +728,7 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
     
-    pragma(attribute, always_inline)
+    @always_inline
     void fft_passes_fractional()
     (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
@@ -762,7 +775,7 @@ template FFT(alias V, alias Options)
             }
     }
   
-    pragma(attribute, always_inline)
+    @always_inline
     void fft_passes_strided
     (int l, int chunk_size)
     (vec * pr, vec * pi, size_t N , ref T * table, ref size_t tableI, 
@@ -833,7 +846,6 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
 
-    pragma(attribute, flatten)
     void fft_passes_recursive()
     (vec * pr, vec *  pi, size_t N, T * table, size_t tableI, void* tmp_buffer)
     {
@@ -874,7 +886,7 @@ template FFT(alias V, alias Options)
 
     }
   
-    pragma(attribute, always_inline)
+    @always_inline
     void bit_reverse_small_two
     (int minLog2n)
     (T* re, T* im, int log2n, uint* brTable)
