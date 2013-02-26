@@ -250,8 +250,11 @@ template BitReverse(alias V, alias Options)
 
     void prefetch_nt(TT)(TT* a)
     {
-        import gcc.builtins;
-        __builtin_prefetch(a, 0, 0);
+        version(GNU)
+        {
+            import gcc.builtins;
+            __builtin_prefetch(a, 0, 0);
+        }
     }
 
     void prefetch_array(int len, TT)(TT* a)
@@ -260,19 +263,11 @@ template BitReverse(alias V, alias Options)
 
         foreach(i; ints_up_to!(len / elements_per_cache_line))
         {
-            import gcc.builtins;
-            __builtin_prefetch(a + i * elements_per_cache_line, 0, 3);
-        }
-    }
-
-    void prefetch_array(TT)(TT* a, size_t len)
-    {
-        enum elements_per_cache_line = 64 / TT.sizeof;
-
-        foreach(i; 0 .. len / elements_per_cache_line)
-        {
-            import gcc.builtins;
-            __builtin_prefetch(a + i * elements_per_cache_line, 0, 3);
+            version(GNU)
+            {
+                import gcc.builtins;
+                __builtin_prefetch(a + i * elements_per_cache_line, 0, 3);
+            }
         }
     }
 
