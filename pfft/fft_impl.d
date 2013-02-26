@@ -52,7 +52,7 @@ template Scalar(_T, A...)
    
     void bit_reverse(A...)(ref A arg)
     {
-        _swap(arg[1], arg[2]);
+        swap(arg[1], arg[2]);
     }
 
     T unaligned_load(T* p){ return *p; }
@@ -682,6 +682,7 @@ template FFT(alias V, alias Options)
         size_t tableRowLen = 2;
         size_t m2 = N/2;
 
+        @always_inline
         static nextRow(ref T* table, ref size_t len)
         {
             static if(!compact_table)

@@ -7,7 +7,7 @@ module pfft.sse_double;
 
 import core.simd;
 
-import pfft.fft_impl;
+import pfft.common;
 
 template shuf_mask(int a3, int a2, int a1, int a0)
 { 
@@ -18,14 +18,10 @@ version(X86_64)
     version(linux)
         version = linux_x86_64;
 
-version(LDC)
-{
-    import ldc.simd;
-    import ldc.gccbuiltins_x86;
-}
-
 template Vector()
 {
+    @always_inline:
+
     alias double2 vec;
     alias double T;
     
@@ -65,6 +61,9 @@ template Vector()
     }
     else version(LDC)
     {
+        import ldc.simd;
+        import ldc.gccbuiltins_x86;
+
         vec scalar_to_vector(T a)
         {
             return a;
