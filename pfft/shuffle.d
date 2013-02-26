@@ -248,29 +248,6 @@ template BitReverse(alias V, alias Options)
         }
     }
 
-    void prefetch_nt(TT)(TT* a)
-    {
-        version(GNU)
-        {
-            import gcc.builtins;
-            __builtin_prefetch(a, 0, 0);
-        }
-    }
-
-    void prefetch_array(int len, TT)(TT* a)
-    {
-        enum elements_per_cache_line = 64 / TT.sizeof;
-
-        foreach(i; ints_up_to!(len / elements_per_cache_line))
-        {
-            version(GNU)
-            {
-                import gcc.builtins;
-                __builtin_prefetch(a + i * elements_per_cache_line, 0, 3);
-            }
-        }
-    }
-
     void copy_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert((len * TT.sizeof % vec.sizeof == 0));

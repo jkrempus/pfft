@@ -746,7 +746,7 @@ template FFT(alias V, alias Options)
                 {
                     vec wr, wi, ur, ui;
 
-                    BR.prefetch_nt(table + ((tableI + 4) << i));
+                    prefetch!(true, false)(table + ((tableI + 4) << i));
                     V.complex_array_to_real_imag_vec!(2 << i)(
                         table + (tableI << i), wr, wi);
                     
