@@ -215,7 +215,7 @@ void buildLibPgo(
 
     // benchmark with DynamicC when clib is true
     buildTests(types, dcArgs.raw("-fprofile-generate"), 
-        dc, "..", false, dbg, null, clib); 
+        dc, "..", !dbg, dbg, null, clib); 
 
     runBenchmarks(types, v, clib ? "c" : "pfft");
     buildLib(dc, v, types, 
