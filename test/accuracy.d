@@ -18,6 +18,11 @@ alias format fm;
         return a;
 }
 
+template Alias(alias a)
+{
+    alias Alias = a;
+}
+
 shared verbose = 1;
 
 auto vshell(string cmd, int vcmd, int vout)
@@ -76,7 +81,7 @@ void initBuild()
     chdir(dir); 
 }
 
-void build(string flags)
+void build(string flags, bool dynamicC)
 {
     scope(failure)
         writefln("Error when building with flags: %s", flags);
@@ -84,12 +89,16 @@ void build(string flags)
     auto dir = getcwd();
     chdir("..");
     auto path = absolutePath("build");
-    vshell(fm("%s %s", path, flags), 2, 2);
-    vshell(fm("%s --tests --clib %s", path, flags), 2, 2);
+
+    auto f = (string fs) => vshell(fm(fs, path, flags), 2, 2); 
+    f(dynamicC ? "%s %s --clib" : "%s %s");
+    f(dynamicC ? "%s %s --dynamic-tests" : "%s %s --tests --clib");
+
     chdir(dir); 
 }
 
-void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
+void all(string commonFlags, bool dynamicC, 
+    bool skipDmd = false, bool skipMinGW = false)
 {
     auto f = (string prepend, string[] simd) =>
         simd.map!(a => fm("%s --simd %s", prepend, a))().array();
@@ -137,12 +146,12 @@ void all(string commonFlags, bool skipDmd = false, bool skipMinGW = false)
             if(skipMinGW && flagStr.canFind("GDC"))
                 continue;
 
-        build(flagStr);
+        build(flagStr, dynamicC);
         scope(failure)
             writefln(
                 "Error when running tests for executables built with %s", flagStr);
 
-        test();
+        test("", dynamicC ? "c" : "");
         if(verbose)
             writefln("Successfully ran tests for build flags %s.", flagStr);
     }
@@ -159,8 +168,13 @@ void main(string[] args)
 
     if(args[1 .. $] == ["all"])
     {
-        all("");
-        all("--debug");
+        all("", false);
+        all("--debug", false);
+    }
+    else if(args[1 .. $] == ["all-dynamic-c"])
+    {
+        all("", true, true);
+        all("--debug", true, true);
     }
     else
         test(flags, api);

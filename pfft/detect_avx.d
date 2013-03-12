@@ -19,9 +19,10 @@ private void set_avx_state()
         version(PreserveEBX)
             asm
             {
-                "mov %%ebx, %1
-                mov $1, %%eax
+                "mov $1, %%eax
+                mov %%ebx, %1
                 cpuid
+                xchg %1, %%ebx
                 mov $0, %%eax
                 and $0x14000000, %%ecx
                 cmp $0x14000000, %%ecx
@@ -31,8 +32,7 @@ private void set_avx_state()
                 shr $2, %%eax
                 and $1, %%eax
             exit_label%=: 
-                mov %%eax, %0
-                mov %1, %%ebx"
+                mov %%eax, %0"
                 : "=r" r
                 : "r" 0
                 : "eax", "ecx", "edx" ;
