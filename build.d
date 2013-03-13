@@ -82,6 +82,8 @@ auto commonArgs(Compiler c)
     return isWindows && c == Compiler.GDC ? argList.raw("-O2") : argList;
 }
 
+enum optimizeFlags = argList.optimize.inline.release.noboundscheck;
+
 void buildTests(
     string[] types, ArgList dcArgs, Compiler c, string baseDir, 
     bool optimized = true, bool dbg = false, string fftw = null,
@@ -102,7 +104,7 @@ void buildTests(
                     .conditional(clib, argList
                         .src(baseDir~"/pfft/clib")
                         .version_("BenchClib")))
-            .conditional(optimized, argList.optimize.inline.release)
+            .conditional(optimized, optimizeFlags)
             .conditional(dbg, argList.debug_.g)
             .conditional(!!fftw, argList
                 .lpath(fftw)
@@ -144,7 +146,7 @@ void buildObj(
     ArgList dcArgs, bool dbg, bool pic)
 {
     dcArgs
-        .conditional(dbg, argList.debug_.g, argList.optimize.inline.release)
+        .conditional(dbg, argList.debug_.g, optimizeFlags)
         .version_(v.to!string)
         .conditional(pic, argList.pic)
         .raw(archFlags(simd, c))

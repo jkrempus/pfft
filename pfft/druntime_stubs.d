@@ -32,6 +32,7 @@ void `~name~`()
 }
 
 mixin(
+    stub!"_d_array_bounds" ~
     stub!"_D15TypeInfo_Struct6__vtblZ" ~
     stub!"_D10TypeInfo_g6__initZ" ~
     stub!"_D10TypeInfo_i6__initZ" ~
@@ -42,6 +43,10 @@ mixin(
     stub!"_D10TypeInfo_v6__initZ" ~
     stub!"_D16TypeInfo_Pointer6__vtblZ" ~
     stub!"_D13TypeInfo_Enum6__vtblZ");
+
+version(GNU)
+    mixin(stub!"__gdc_personality_v0");
+
 
 void _d_assert(string file, uint line)
 {

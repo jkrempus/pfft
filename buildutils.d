@@ -218,6 +218,7 @@ private struct Arg
         inline,
         release,
         optimize,
+        noboundscheck,
         debug_,
         g,
         genObj,
@@ -296,6 +297,7 @@ private struct Arg
                 case inline: return "-finline-functions";
                 case release: return "-frelease";
                 case optimize: return "-O3";
+                case noboundscheck: return "-fno-bounds-check";
                 case debug_: return "-fdebug";
                 case deps: return "-fdeps="~fn("", value, "");
                 case docInclude: return "-fdoc-inc="~fn(value);
@@ -311,6 +313,7 @@ private struct Arg
                 case noDefaultLib: return "-nodefaultlib";
                 case version_: return "-d-version="~value;
                 case optimize: return "-O3";
+                case noboundscheck: return "-disable-boundscheck";
                 case debug_: return "-d-debug";
                 case inline: return "-enable-inlining";
                 case pic: return "-relocation-model=pic";
@@ -328,6 +331,7 @@ private struct Arg
             case linkTo: return "-L-l"~value;
             case version_: return "-version="~value;
             case optimize: return "-O";
+            case noboundscheck: return "-noboundscheck";
             case inline: return "-inline";
             case release: return "-release";
             case debug_: return "-debug";

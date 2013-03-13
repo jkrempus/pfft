@@ -356,19 +356,17 @@ template PfftC()
                 "..", "generated-c", "lib", libname);
 
             auto dl = loadLib(toStringz(lib));
-            if(dl)
-            {
-                allocate = cast(typeof(allocate)) getFunc(dl, toStringz("pfft_allocate_"~suffix));
-                table = cast(typeof(table)) getFunc(dl, toStringz("pfft_table_"~suffix));
-                rtable = cast(typeof(rtable)) getFunc(dl, toStringz("pfft_rtable_"~suffix));
-                table_free = cast(typeof(table_free)) getFunc(dl, toStringz("pfft_table_free_"~suffix));
-                rtable_free = cast(typeof(rtable_free)) getFunc(dl, toStringz("pfft_rtable_free_"~suffix));
-                free = cast(typeof(free)) getFunc(dl, toStringz("pfft_free_"~suffix));
-                fft = cast(typeof(fft)) getFunc(dl, toStringz("pfft_fft_"~suffix));
-                rfft = cast(typeof(rfft)) getFunc(dl, toStringz("pfft_rfft_"~suffix));
-                ifft = cast(typeof(ifft)) getFunc(dl, toStringz("pfft_ifft_"~suffix));
-                irfft = cast(typeof(irfft)) getFunc(dl, toStringz("pfft_irfft_"~suffix));
-            }
+            enforce(dl, dlerror().to!string);
+            allocate = cast(typeof(allocate)) getFunc(dl, toStringz("pfft_allocate_"~suffix));
+            table = cast(typeof(table)) getFunc(dl, toStringz("pfft_table_"~suffix));
+            rtable = cast(typeof(rtable)) getFunc(dl, toStringz("pfft_rtable_"~suffix));
+            table_free = cast(typeof(table_free)) getFunc(dl, toStringz("pfft_table_free_"~suffix));
+            rtable_free = cast(typeof(rtable_free)) getFunc(dl, toStringz("pfft_rtable_free_"~suffix));
+            free = cast(typeof(free)) getFunc(dl, toStringz("pfft_free_"~suffix));
+            fft = cast(typeof(fft)) getFunc(dl, toStringz("pfft_fft_"~suffix));
+            rfft = cast(typeof(rfft)) getFunc(dl, toStringz("pfft_rfft_"~suffix));
+            ifft = cast(typeof(ifft)) getFunc(dl, toStringz("pfft_ifft_"~suffix));
+            irfft = cast(typeof(irfft)) getFunc(dl, toStringz("pfft_irfft_"~suffix));
         }
     }
     else
