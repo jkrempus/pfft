@@ -212,16 +212,15 @@ void buildLib(
 void buildLibPgo(
     Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib, bool dbg)
 {
-    buildLib(dc, v, types, 
-        dcArgs.raw("-fprofile-generate"), clib, dbg);
+    buildLib(dc, v, types, dcArgs.raw("-fprofile-generate"), clib, dbg);
 
     // benchmark with DynamicC when clib is true
-    buildTests(types, dcArgs.raw("-fprofile-generate"), 
+    auto jd = argList.version_("JustDirect");
+    buildTests(types, dcArgs.raw("-fprofile-generate").conditional(!clib, jd), 
         dc, "..", !dbg, dbg, null, clib); 
 
-    runBenchmarks(types, v, clib ? "c" : "pfft");
-    buildLib(dc, v, types, 
-        dcArgs.raw("-fprofile-use"), clib, dbg);
+    runBenchmarks(types, v, clib ? "c" : "direct");
+    buildLib(dc, v, types, dcArgs.raw("-fprofile-use"), clib, dbg);
 }
 
 void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
