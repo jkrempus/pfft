@@ -43,7 +43,7 @@ struct NeonVec
     }*/
 }
 
-struct Vector 
+template Vector()
 {
     alias NeonVec vec;
     alias float T;
@@ -51,12 +51,12 @@ struct Vector
     enum vec_size = 4;
     enum log2_bitreverse_chunk_size = 2;   
  
-    static vec scalar_to_vector(T a)
+    vec scalar_to_vector(T a)
     {
         return vec(a);
     }
     
-    static void complex_array_to_real_imag_vec(int N)(T * arr, ref vec rr, ref vec ri)
+    void complex_array_to_real_imag_vec(int N)(T * arr, ref vec rr, ref vec ri)
     {
         static if(N==4)
         {
@@ -66,18 +66,18 @@ struct Vector
         {
             asm
             {
-                "vldmia  %2, {%e0-%f0} \n"
-                "vmov %q1, %q0 \n"
-                "vuzp.32 %q0, %q1 \n"
-                "vuzp.32 %e0, %f0 \n"
-                "vuzp.32 %e1, %f1 \n"
-                : "=w" rr, "=w" ri
+                "vldmia  %2, {%e0-%f0}
+                vmov %q1, %q0
+                vuzp.32 %q0, %q1
+                vuzp.32 %e0, %f0
+                vuzp.32 %e1, %f1"
+                : "=w" rr, "=w" ri //"
                 : "r" arr ;
             }
         }
     }
     
-    static void transpose(int elements_per_vector)(
+    void transpose(int elements_per_vector)(
         vec a0, vec a1, ref vec r0, ref vec r1)
     {
         if(elements_per_vector == 4)
@@ -99,7 +99,7 @@ struct Vector
         }
     }
     
-    static void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    void interleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         float4[2] tmp;
         __builtin_neon_vzipv4sf(&tmp[0], a0.v, a1.v);
@@ -107,7 +107,7 @@ struct Vector
         r1.v = tmp[1];
     }
     
-    static void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
+    void deinterleave(vec a0, vec a1, ref vec r0, ref vec r1)
     {
         float4[2] tmp;
         __builtin_neon_vuzpv4sf(&tmp[0], a0.v, a1.v);
@@ -115,63 +115,30 @@ struct Vector
         r1.v = tmp[1];
     }
     
-    private static float4 * v(float * a)
+    private float4 * v(float * a)
     {
         return cast(float4*)a;
     }
     
-    private static _bit_reverse(ref float4 a0, ref float4 a1, 
-                               ref float4 a2, ref float4 a3)
+    void bit_reverse(ref vec a0, ref vec a1, ref vec a2, ref vec a3)
     {
         asm
         {
-            "vtrn.32 %q0, %q2 \n"
-            "vtrn.32 %q1, %q3 \n"
-            "vswp %f0, %e1 \n"
-            "vswp %f2, %e3 \n"
-            : "+w" a0, "+w" a1, "+w" a2, "+w" a3;
+            "vtrn.32 %q0, %q2
+            vtrn.32 %q1, %q3
+            vswp %f0, %e1
+            vswp %f2, %e3"
+            : "+w" a0.v, "+w" a1.v, "+w" a2.v, "+w" a3.v;
         }
-    }
-    
-    
-    static void bit_reverse_swap(T * p0, T * p1, int m)
-    {                
-        float4  
-        a0 = *v(p0 + 0 * m), 
-        a1 = *v(p0 + 1 * m), 
-        a2 = *v(p0 + 2 * m), 
-        a3 = *v(p0 + 3 * m);
-        _bit_reverse(a0, a1, a2, a3);
-        
-        float4  
-        b0 = *v(p1 + 0 * m), 
-        b1 = *v(p1 + 1 * m), 
-        b2 = *v(p1 + 2 * m), 
-        b3 = *v(p1 + 3 * m);
-        *v(p1 + 0 * m) = a0;
-        *v(p1 + 1 * m) = a1;
-        *v(p1 + 2 * m) = a2;
-        *v(p1 + 3 * m) = a3;
-        
-        _bit_reverse(b0, b1, b2, b3);
-        *v(p0 + 0 * m) = b0;
-        *v(p0 + 1 * m) = b1;
-        *v(p0 + 2 * m) = b2;
-        *v(p0 + 3 * m) = b3;
-    }
-
-    static void bit_reverse(T * p, int m)
-    {
-        _bit_reverse(*v(p + 0 * m), *v(p + 1 * m), *v(p + 2 * m), *v(p + 3 * m));
     }
 }
 
-struct Options
+template Options()
 {
     enum log2_bitreverse_large_chunk_size = 5;
     enum large_limit = 14;
     enum log2_optimal_n = 9;
-    enum passes_per_recursive_call = 5;
-    enum log2_recursive_passes_chunk_size = 5;
+    enum passes_per_recursive_call = 4;
+    enum log2_recursive_passes_chunk_size = 6;
 }
 
