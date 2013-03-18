@@ -20,8 +20,6 @@ version(X86_64)
 
 template Vector()
 {
-    @always_inline:
-
     alias float4 vec;
     alias float T;
     

@@ -356,7 +356,7 @@ template PfftC()
                 "..", "generated-c", "lib", libname);
 
             auto dl = loadLib(toStringz(lib));
-            enforce(dl, dlerror().to!string);
+
             allocate = cast(typeof(allocate)) getFunc(dl, toStringz("pfft_allocate_"~suffix));
             table = cast(typeof(table)) getFunc(dl, toStringz("pfft_table_"~suffix));
             rtable = cast(typeof(rtable)) getFunc(dl, toStringz("pfft_rtable_"~suffix));

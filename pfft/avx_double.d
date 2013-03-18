@@ -10,8 +10,6 @@ import pfft.common;
 
 template Vector()
 {
-    @always_inline:
-
     version(LDC)
     {
         import ldc.simd;

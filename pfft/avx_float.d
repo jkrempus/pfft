@@ -16,8 +16,6 @@ version(GNU)
 
 template Vector()
 {
-    @always_inline:
-    
     version(LDC)
     {
         import ldc.simd;
@@ -200,7 +198,6 @@ template Vector()
         a3 = shufps!(3, 1, 3, 1)(b2, b3);
     }
 
-    @hot
     void bit_reverse(
         ref vec a0, ref vec a1, ref vec a2, ref vec a3,
         ref vec a4, ref vec a5, ref vec a6, ref vec a7)

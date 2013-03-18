@@ -136,9 +136,6 @@ template BitReverse(alias V, alias Options)
    
     mixin template BRChunks()
     {
-        @always_inline:
-        @hot:
-
         enum l = 1u << V.log2_bitreverse_chunk_size;
         enum vec_per_chunk = l / V.vec_size;
         alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
@@ -158,7 +155,6 @@ template BitReverse(alias V, alias Options)
         }
     }
 
-    @always_inline
     void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
@@ -214,7 +210,6 @@ template BitReverse(alias V, alias Options)
             a[i] = tmp[i + n];
     }
 
-    @always_inline @hot
     void swap_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert(len*TT.sizeof % vec.sizeof == 0);
@@ -258,7 +253,6 @@ template BitReverse(alias V, alias Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    @always_inline @hot
     void strided_copy
     (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)

@@ -482,7 +482,6 @@ template FFT(alias V, alias Options)
         pi[k3] = i3;
     };
  
-    @always_inline @hot
     void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -504,7 +503,6 @@ template FFT(alias V, alias Options)
         }
     }
  
-    @always_inline @hot
     void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -530,7 +528,6 @@ template FFT(alias V, alias Options)
         }
     }
 
-    @always_inline @hot
     void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
@@ -563,7 +560,6 @@ template FFT(alias V, alias Options)
         }
     }
         
-    @always_inline @hot
     void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -586,7 +582,6 @@ template FFT(alias V, alias Options)
         }
     }
 
-    @always_inline @hot
     void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
@@ -646,7 +641,6 @@ template FFT(alias V, alias Options)
         }
     }
 
-    @always_inline
     void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
         vec* table, size_t start_stride)
     {
@@ -673,7 +667,6 @@ template FFT(alias V, alias Options)
         }
     }
     
-    @always_inline
     void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, T* table)
     {
@@ -682,7 +675,6 @@ template FFT(alias V, alias Options)
         size_t tableRowLen = 2;
         size_t m2 = N/2;
 
-        @always_inline
         static nextRow(ref T* table, ref size_t len)
         {
             static if(!compact_table)
@@ -729,7 +721,6 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
     
-    @always_inline
     void fft_passes_fractional()
     (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
@@ -776,7 +767,6 @@ template FFT(alias V, alias Options)
             }
     }
   
-    @always_inline
     void fft_passes_strided
     (int l, int chunk_size)
     (vec * pr, vec * pi, size_t N , ref T * table, ref size_t tableI, 
@@ -887,7 +877,6 @@ template FFT(alias V, alias Options)
 
     }
   
-    @always_inline
     void bit_reverse_small_two
     (int minLog2n)
     (T* re, T* im, int log2n, uint* brTable)

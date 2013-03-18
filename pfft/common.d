@@ -5,18 +5,6 @@ template TypeTuple(A...)
     alias A TypeTuple;
 }
 
-static if(false && is(typeof({ import gcc.attribute; }))) //disable this for now
-{
-    public import gcc.attribute;
-    enum always_inline = attribute("always_inline");
-    enum hot = attribute("hot");
-}
-else
-{
-    alias always_inline = TypeTuple!();
-    alias hot = TypeTuple!();
-}
-
 template st(alias a){ enum st = cast(size_t) a; }
 
 struct Tuple(A...)
@@ -65,7 +53,6 @@ version(LDC)
     pragma(LDC_intrinsic, "llvm.prefetch")
         void llvm_prefetch(void*, int, int, int);
 
-@always_inline
 void prefetch(bool isRead, bool isTemporal)(void* p)
 {
     version(GNU)
@@ -77,7 +64,6 @@ void prefetch(bool isRead, bool isTemporal)(void* p)
         llvm_prefetch(p, isRead ? 0 : 1, isTemporal ? 3 : 0, 1);
 }
 
-@always_inline
 void prefetch_array(int len, TT)(TT* a)
 {
     enum elements_per_cache_line = 64 / TT.sizeof;

@@ -16,4 +16,4 @@ template Options()
     enum log2_recursive_passes_chunk_size = 6;
 }
 
-template Vector(){ alias Vector = Scalar!double; }
+template Vector(){ alias Scalar!double Vector; }
