@@ -6,6 +6,7 @@
 module buildutils;
 
 public import std.file : dirEntries, SpanMode;
+public import std.string : format;
 public import std.stdio, std.algorithm, std.uuid, std.conv, std.range,
     std.getopt, std.regex, std.exception, std.typecons;
 
@@ -109,7 +110,7 @@ void cp(string src, string dst, string flags = "")
     dst = fn(dst);
 
     if(verbose)
-        stderr.writeln(`:p("`~src~`", "`~dst~`", "`~flags~`")`);
+        stderr.writeln(`cp("`~src~`", "`~dst~`", "`~flags~`")`);
     
     if(exists(dst) && isDir(dst))
         dst = buildPath(dst, baseName(src));
