@@ -79,7 +79,8 @@ auto simdModuleName(SIMD simd, string type)
 
 auto commonArgs(Compiler c)
 {
-    return isWindows && c == Compiler.GDC ? argList.raw("-O2") : argList;
+    return isWindows && c == Compiler.GDC ? 
+        argList.raw("-O2").inline : argList;
 }
 
 enum optimizeFlags = argList.optimize.inline.release.noboundscheck;
