@@ -1,3 +1,4 @@
+#!/usr/bin/env rdmd
 import buildutils;
 
 enum Arch { x86, x86_64 }
