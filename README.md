@@ -1,6 +1,6 @@
 ##pfft
 
-The pretty fast fourier transform (pfft) is a fast, in place power of two split format fft library. It is written in D, but can also be used from C and other languages that support calling C functions. 
+The pretty fast fourier transform (pfft) is a fast, in place power of two split format fft library. It is written in D, but can also be used from C and other languages that support calling C functions. Its source can be found at http://github.com/jerro/pfft.
 
 
 
