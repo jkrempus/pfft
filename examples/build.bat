@@ -8,5 +8,6 @@ gdc -o std_real_example.exe std_real_example.d -I ..\generated\include -L ..\gen
 
 gcc -o c_example.exe c_example.c -I ..\generated-c\include -L ..\generated-c\lib -lpfft-c
 
-gcc -o c_real_example.exe c_real_example.c -I ..\generated-c\include -L ..\generated-c\lib -lpfft-c
+cl c_real_example.c /I..\generated-c\include ../generated-c/lib/pfft-c-msvc.lib
 
+copy ..\generated-c\lib\pfft-c.dll .

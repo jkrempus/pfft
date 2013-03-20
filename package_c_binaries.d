@@ -10,6 +10,9 @@ void main(string[] args)
     vshell("dmd build buildutils");
     auto build = absolutePath("build");
     vshell(build~" --clib" ~ (arch == Arch.x86 ? " --flag m32" : ""));
+    if(isWindows)
+        vshell("msvc-implib");
+
     vshell(build~" --doc");
     
     auto name = "pfft-c-" ~ 
