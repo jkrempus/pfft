@@ -87,8 +87,7 @@ enum optimizeFlags = argList.optimize.inline.release.noboundscheck;
 
 void buildTests(
     string[] types, ArgList dcArgs, Compiler c, string baseDir, 
-    bool optimized = true, bool dbg = false, string fftw = null,
-    bool dynamic = false, bool clib = false)
+    string fftw = null, bool dynamic = false, bool clib = false)
 {
     auto fftwSuffixes = ["float" : "f", "double" : "", "real" : "l"]; 
     
@@ -105,8 +104,6 @@ void buildTests(
                     .conditional(clib, argList
                         .src(baseDir~"/pfft/clib")
                         .version_("BenchClib")))
-            .conditional(optimized, optimizeFlags)
-            .conditional(dbg, argList.debug_.g)
             .conditional(!!fftw, argList
                 .lpath(fftw)
                 .version_("BenchFftw")
@@ -144,10 +141,9 @@ void runBenchmarks(string[] types, Version v, string api = "")
 
 void buildObj(
     Compiler c, string[] modules, string objname, Version v, SIMD simd, 
-    ArgList dcArgs, bool dbg, bool pic)
+    ArgList dcArgs, bool pic)
 {
     dcArgs
-        .conditional(dbg, argList.debug_.g, optimizeFlags)
         .version_(v.to!string)
         .conditional(pic, argList.pic)
         .raw(archFlags(simd, c))
@@ -159,8 +155,7 @@ void buildObj(
 }
  
 string buildAdditionalSIMD(
-    Compiler dc, Version v, SIMD simd, string[] types, 
-    ArgList dcArgs, bool dbg, bool pic)
+    Compiler dc, Version v, SIMD simd, string[] types, ArgList dcArgs, bool pic)
 {
     types = types.filter!(
             t => !(v == Version.SSE_AVX && simd == SIMD.AVX && t == "real"))()
@@ -170,13 +165,12 @@ string buildAdditionalSIMD(
 
     buildObj(
         dc, src, simd.name, v, simd, 
-        dcArgs.version_("InstantiateAdditionalSimd"), dbg, pic);
+        dcArgs.version_("InstantiateAdditionalSimd"), pic);
 
     return simd.name;
 }
 
-void buildLib(
-    Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib, bool dbg)
+void buildLib(Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
 {
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
@@ -186,10 +180,10 @@ void buildLib(
         when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
 
     auto implObjs = v.additionalSIMD
-        .map!(s => buildAdditionalSIMD(dc, v, s, types, dcArgs, dbg, clib))
+        .map!(s => buildAdditionalSIMD(dc, v, s, types, dcArgs, clib))
         .array;
 
-    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs, dbg, clib);
+    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs, clib);
 
     commonArgs(dc)
         .genLib
@@ -211,17 +205,17 @@ void buildLib(
 }
 
 void buildLibPgo(
-    Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib, bool dbg)
+    Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
 {
-    buildLib(dc, v, types, dcArgs.raw("-fprofile-generate"), clib, dbg);
+    buildLib(dc, v, types, dcArgs.raw("-fprofile-generate"), clib);
 
     // benchmark with DynamicC when clib is true
     auto jd = argList.version_("JustDirect");
     buildTests(types, dcArgs.raw("-fprofile-generate").conditional(!clib, jd), 
-        dc, "..", !dbg, dbg, null, clib); 
+        dc, "..", null, clib); 
 
     runBenchmarks(types, v, clib ? "c" : "direct");
-    buildLib(dc, v, types, dcArgs.raw("-fprofile-use"), clib, dbg);
+    buildLib(dc, v, types, dcArgs.raw("-fprofile-use"), clib);
 }
 
 void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
@@ -245,6 +239,31 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
         .build(dc, false);
 }
 
+enum cHeaderTemplate = 
+q{
+    struct PfftTable{Suffix}Struct;
+    typedef struct PfftTable{Suffix}Struct* PfftTable{Suffix};
+
+    size_t pfft_table_size_bytes_{suffix}(size_t);
+    PfftTable{Suffix} pfft_table_{suffix}(size_t, void*);
+    void pfft_table_free_{suffix}(PfftTable{Suffix});
+    void pfft_fft_{suffix}({type}*, {type}*, PfftTable{Suffix});
+    void pfft_ifft_{suffix}({type}*, {type}*, PfftTable{Suffix});
+
+    struct PfftRTable{Suffix}Struct;
+    typedef struct PfftRTable{Suffix}Struct* PfftRTable{Suffix};
+
+    size_t pfft_rtable_size_bytes_{suffix}(size_t);
+    PfftRTable{Suffix} pfft_rtable_{suffix}(size_t, void*);
+    void pfft_rtable_free_{suffix}(PfftRTable{Suffix});
+    void pfft_rfft_{suffix}({type}*, PfftRTable{Suffix});
+    void pfft_irfft_{suffix}({type}*, PfftRTable{Suffix});
+
+    size_t pfft_alignment_{suffix}(size_t);
+    {type}* pfft_allocate_{suffix}(size_t);
+    void pfft_free_{suffix}({type}*);
+};
+
 void copyIncludes(string[] types, bool clib)
 {
     if(clib)
@@ -259,12 +278,11 @@ void copyIncludes(string[] types, bool clib)
             "double" : "double",
             "real" : "long double"];
 
-        auto iStr = std.file.readText(fixSeparators("../c/pfft.template"));
         auto oStr = "";
 
         foreach(type; types)
         {
-            auto tmp = replace(iStr, "{type}", typeDict[type]);
+            auto tmp = replace(cHeaderTemplate, "{type}", typeDict[type]);
             auto s = suffixDict[type];
             tmp = replace(tmp, "{suffix}", s);
             tmp = replace(tmp, "{Suffix}", toUpper(s));
@@ -273,7 +291,7 @@ void copyIncludes(string[] types, bool clib)
         
         std.file.write(fixSeparators("include/pfft.h"), oStr);
     }
-        
+
     mkdir("include/pfft");
     foreach(type; types)
         cp("../pfft/di/impl_"~type~".di", "include/pfft/");
@@ -431,13 +449,14 @@ void doit(string[] args)
     auto dcArgs = commonArgs(dc)
         .compileCmd(dccmd)
         .version_(versions)
+        .conditional(dbg, argList.debug_.g, optimizeFlags)
         .raw(flags.map!(a => "-"~a).array);
 
     auto buildDir = (clib && !tests) ? "generated-c" : "generated";
     if(tests)
     {
         cd("test");
-        buildTests(types, dcArgs, dc, "..", !dbg, dbg, fftw, dynamic, clib);
+        buildTests(types, dcArgs, dc, "..", fftw, dynamic, clib);
     }
     else
     {
@@ -469,9 +488,9 @@ void doit(string[] args)
             buildCObjects(dc, types, dcArgs);
         
         if(dc == Compiler.GDC && !nopgo)
-            buildLibPgo(dc, v, types, dcArgs, clib, dbg);
+            buildLibPgo(dc, v, types, dcArgs, clib);
         else 
-            buildLib(dc, v, types, dcArgs, clib, dbg);
+            buildLib(dc, v, types, dcArgs, clib);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
