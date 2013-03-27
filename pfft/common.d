@@ -1,5 +1,8 @@
 module pfft.common;
 
+T max(T)(T a, T b){ return a > b ? a : b; }
+T min(T)(T a, T b){ return a < b ? a : b; }
+
 template TypeTuple(A...)
 {
     alias A TypeTuple;

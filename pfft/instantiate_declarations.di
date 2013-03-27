@@ -12,6 +12,9 @@ mixin template Instantiate()
     struct RTableValue{};
     alias RTableValue* RTable;
 
+    struct TransposeBufferValue{};
+    alias TransposeBufferValue* TransposeBuffer;
+
     void rfft(T* re, T* im, uint log2n, Table t, RTable rt);
     void irfft(T* re, T* im, uint log2n, Table t, RTable rt);
     RTable rfft_table(uint log2n, void* p = null);
@@ -32,5 +35,15 @@ mixin template Instantiate()
     void deinterleave(T* p, uint log2n, ITable table);
 
     void set_implementation(int);
+    
+    size_t transpose_buffer_size_bytes(int log2n, int log2m);
+    void fft_transposed(
+        T* re,
+        T* im,
+        int log2stride, 
+        int log2n,
+        int log2m,
+        Table tables,
+        TransposeBuffer buffer);
 }
 

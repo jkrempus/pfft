@@ -29,9 +29,6 @@ version(DontUseTwoPasses)
 else
     enum useTwoPasses = true;
 
-T max(T)(T a, T b){ return a > b ? a : b; }
-T min(T)(T a, T b){ return a < b ? a : b; }
-
 version(GNU)
     version(Windows)
         version = MinGW;  
@@ -167,6 +164,7 @@ template FFT(alias V, alias Options)
     import core.bitop, core.stdc.stdlib;
    
     alias BitReverse!(V, Options) BR;
+    alias Columns!(V) Col;
     
     alias V.vec_size vec_size;
     alias V.T T;
@@ -348,6 +346,7 @@ template FFT(alias V, alias Options)
     }
 
     alias void* Table;
+    alias void* TransposeBuffer;
 
     size_t twiddle_table_size_bytes(int log2n)
     {
@@ -368,8 +367,7 @@ template FFT(alias V, alias Options)
             Options.log2_recursive_passes_chunk_size + 
             Options.passes_per_recursive_call + 1);
 
-        enum br = 
-            T.sizeof << (2 * Options.log2_bitreverse_large_chunk_size);
+        auto br = BR.tmp_buffer_size_bytes(log2n);
 
         return 
             disable_large || log2n < Options.large_limit ? 0 :
@@ -482,7 +480,8 @@ template FFT(alias V, alias Options)
         pi[k3] = i3;
     };
  
-    void fft_pass_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
+    void fft_pass_bit_reversed()(
+        vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend; pr += m, pi += m)
@@ -503,7 +502,8 @@ template FFT(alias V, alias Options)
         }
     }
  
-    void fft_two_passes_bit_reversed()(vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
+    void fft_two_passes_bit_reversed()(
+        vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
         size_t m4 = m2 / 2;
@@ -641,8 +641,8 @@ template FFT(alias V, alias Options)
         }
     }
 
-    void fft_passes_bit_reversed()(vec* re, vec* im, size_t N , 
-        vec* table, size_t start_stride)
+    void fft_passes_bit_reversed()(
+        vec* re, vec* im, size_t N, vec* table, size_t start_stride)
     {
         //version(DigitalMars)
             // prevent inlining of this function to avoid stack alignment
@@ -721,8 +721,8 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
     
-    void fft_passes_fractional()
-    (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
+    void fft_passes_fractional()(
+        vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
         {
@@ -766,11 +766,16 @@ template FFT(alias V, alias Options)
                 tableI *= 2;
             }
     }
-  
-    void fft_passes_strided
-    (int l, int chunk_size)
-    (vec * pr, vec * pi, size_t N , ref T * table, ref size_t tableI, 
-        void* tmp_buffer, size_t stride, int nPasses)
+
+    void fft_passes_strided(int l, int chunk_size)(
+        vec * pr,
+        vec * pi, 
+        size_t N , 
+        ref T * table, 
+        ref size_t tableI, 
+        void* tmp_buffer,
+        size_t stride,
+        int nPasses)
     {
         auto rbuf = cast(vec*) tmp_buffer;
         auto ibuf = rbuf + l * chunk_size;
@@ -817,8 +822,8 @@ template FFT(alias V, alias Options)
         profStop(Action.strided_copy2);
     }
 
-    void fft_passes_recursive_last()
-    (vec * pr, vec *  pi, size_t N, T * table, size_t tableI)
+    void fft_passes_recursive_last()(
+        vec* pr, vec*  pi, size_t N, T* table, size_t tableI)
     {
         profStart(Action.passes_last);
         size_t m2 = N >> 1;
@@ -837,8 +842,8 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
 
-    void fft_passes_recursive()
-    (vec * pr, vec *  pi, size_t N, T * table, size_t tableI, void* tmp_buffer)
+    void fft_passes_recursive()(
+        vec* pr, vec*  pi, size_t N, T* table, size_t tableI, void* tmp_buffer)
     {
         enum log2l =  Options.passes_per_recursive_call, l = 1 << log2l;
         enum chunk_size = st!1 << Options.log2_recursive_passes_chunk_size;
@@ -877,9 +882,8 @@ template FFT(alias V, alias Options)
 
     }
   
-    void bit_reverse_small_two
-    (int minLog2n)
-    (T* re, T* im, int log2n, uint* brTable)
+    void bit_reverse_small_two(int minLog2n)(
+        T* re, T* im, int log2n, uint* brTable)
     {
         enum l = V.log2_bitreverse_chunk_size;
         
@@ -981,6 +985,40 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, tables);
     }
 
+    size_t transpose_buffer_size_bytes()(int log2n, int log2m)
+    {
+        return Col.buffer_size(st!1 << log2n, st!1 << log2m) * 2 * T.sizeof;
+    }
+
+    void fft_transposed()(
+        T* re,
+        T* im,
+        int log2stride, 
+        int log2n,
+        int log2m,
+        Table tables,
+        TransposeBuffer buffer)
+    {
+        auto n = st!1 << log2n;
+        auto m = st!1 << log2m;
+        auto stride = st!1 << log2stride;
+        auto nbuf = Col.buffer_size(n, m);
+        
+        auto cr = Col.create(re, stride, n, m, cast(T*) buffer);
+        auto ci = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
+
+        foreach(i; 0 .. m)
+        {
+            cr.load();
+            ci.load();
+
+            fft(cr.column, ci.column, log2n, tables);
+
+            cr.save();
+            ci.save();
+        }
+    }
+
     alias T* RTable;
  
     auto rtable_size_bytes()(int log2n)
@@ -1001,10 +1039,10 @@ template FFT(alias V, alias Options)
         if(log2n < 2)
             return cast(RTable) p;
         else if(st!1 << log2n < 4 * vec_size)
-	{
+        {
             static if(!isScalar)
                 return SFFT.rfft_table(log2n, p);
-	}
+        }
 
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
 
@@ -1214,6 +1252,9 @@ mixin template Instantiate()
     struct ITableValue{};
     alias ITableValue* ITable;
 
+    struct TransposeBufferValue{};
+    alias TransposeBufferValue* TransposeBuffer;
+
     template selected(string func_name, Ret...)
     {
         auto selected(A...)(A args)
@@ -1330,5 +1371,24 @@ mixin template Instantiate()
     {
         static if(is(typeof(implementation.set)))
             implementation.set(i);
+    }
+    
+    size_t transpose_buffer_size_bytes(int log2n, int log2m)
+    {
+        return selected!"transpose_buffer_size_bytes"(log2n, log2m);
+    }
+
+    void fft_transposed(
+        T* re,
+        T* im,
+        int log2stride, 
+        int log2n,
+        int log2m,
+        Table tables,
+        TransposeBuffer buffer)
+    {
+        selected!"fft_transposed"(
+            re, im, log2stride, log2n, log2m,
+            cast(FFT0.Table) tables, cast(FFT0.TransposeBuffer) buffer);
     }
 }

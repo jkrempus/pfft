@@ -101,6 +101,32 @@ void bit_reverse_step(size_t chunk_size, T)(T* p, size_t nchunks)
     }
 }
 
+template BRChunks(alias V, bool br_rows_columns)
+{
+    enum log2l = V.log2_bitreverse_chunk_size;
+    enum l = 1u << log2l;
+    enum vec_per_chunk = l / V.vec_size;
+    alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
+    
+    void copy(bool load)(ref Chunks c, V.T* p, size_t m)
+    {
+        foreach(i; ints_up_to!l)
+            foreach(j; ints_up_to!vec_per_chunk)
+            {
+                enum ic = br_rows_columns ? reverse_bits!(i, log2l) : i;
+                
+                static if(load)
+                    c[ic * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
+                else
+                    *(cast(V.vec*)(p + m * ic) + j) = c[i * vec_per_chunk + j];
+            }
+    }
+
+    alias copy!true load;
+    alias copy!false save;
+}
+
+
 template BitReverse(alias V, alias Options)
 {
     alias V.T T;
@@ -134,56 +160,33 @@ template BitReverse(alias V, alias Options)
             }
     }
    
-    mixin template BRChunks()
-    {
-        enum l = 1u << V.log2_bitreverse_chunk_size;
-        enum vec_per_chunk = l / V.vec_size;
-        alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
-        
-        static void load(ref Chunks c, T* p, size_t m)
-        {
-            foreach(i; ints_up_to!l)
-                foreach(j; ints_up_to!vec_per_chunk)
-                    c[i * vec_per_chunk + j] = *(cast(V.vec*)(p + m * i) + j);
-        }
-
-        static void save(ref Chunks c, T* p, size_t m)
-        {
-            foreach(i; ints_up_to!l)
-                foreach(j; ints_up_to!vec_per_chunk)
-                    *(cast(V.vec*)(p + m * i) + j) = c[i * vec_per_chunk + j];
-        }
-    }
-
     void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
-        enum log2l = V.log2_bitreverse_chunk_size;
-        
-        uint tmp = log2n - log2l - log2l;
+        alias BRChunks!(V, false) C;
+
+        uint tmp = log2n - C.log2l - C.log2l;
         uint n1 = 1u << ((tmp + 1) >> 1);
         uint n2 = 1u << tmp;
-        uint m = 1u << (log2n - log2l);
+        uint m = 1u << (log2n - C.log2l);
       
         uint* t1 = table + n1, t2 = table + n2;
 
-        mixin BRChunks!();
-
         for(; table < t1; table++)
         {
-            Chunks c;
-            load(c, p + table[0], m);
+            C.Chunks c;
+            C.load(c, p + table[0], m);
             V.bit_reverse(c);
-            save(c, p + table[0], m);
+            C.save(c, p + table[0], m);
         }
         for(; table < t2; table += 2)
         {
-            Chunks c0, c1;
-            load(c0, p + table[0], m);
+            C.Chunks c0, c1;
+            C.load(c0, p + table[0], m);
             V.bit_reverse(c0);
-            load(c1, p + table[1], m);
-            save(c0, p + table[1], m);
+            C.load(c1, p + table[1], m);
+            C.save(c0, p + table[1], m);
             V.bit_reverse(c1);
-            save(c1, p + table[0], m);
+            C.save(c1, p + table[0], m);
         }
     }
 
@@ -272,6 +275,12 @@ template BitReverse(alias V, alias Options)
         }
     } 
 
+    size_t tmp_buffer_size_bytes(int log2n)
+    {
+        return log2n < Options.large_limit ? 
+            0 : T.sizeof << (2 * Options.log2_bitreverse_large_chunk_size);
+    }
+
     void bit_reverse_large()
     (T* p, int log2n, uint * table, void* tmp_buffer)
     {
@@ -311,10 +320,82 @@ template BitReverse(alias V, alias Options)
     }
 }
 
-private struct Scalar(TT, alias V)
+struct Columns(alias V)
 {
-    static:
+    alias BRChunks!(V, true) C;
 
+    size_t l;
+    V.T* p;
+    size_t stride;
+    size_t n;
+    V.T* buffer;
+    size_t icolumn;
+
+    @property column(){ return buffer + n * icolumn; }
+
+    void load()
+    {
+        if(icolumn == 0)
+            transposed_copy(p, stride, n, l, buffer, n);
+    }
+
+    void save()
+    {
+        icolumn++;
+        if(icolumn == l)
+        {
+            icolumn = 0;
+            transposed_copy(buffer, n, l, n, p, stride);
+            p += l; 
+        } 
+    }
+
+    private static void transposed_copy(
+            V.T* src, size_t sstride, size_t n, size_t m, V.T* dst, size_t dstride)
+    {
+        if(n < C.l || m < C.l)
+        {
+            foreach(i; 0 .. n)
+                foreach(j; 0 .. m)
+                    dst[i * dstride + j] = src[j * sstride + i];
+
+            return;
+        }
+
+        auto nn = n / C.l;
+        auto mm = m / C.l;
+        auto block_size = min(nn, mm);
+        for(size_t i0 = 0; i0 < nn; i0 += block_size)
+        for(size_t j0 = 0; j0 < mm; j0 += block_size)
+        foreach(i; i0 .. i0 + block_size)
+        foreach(j; j0 .. j0 + block_size)
+        {
+            C.Chunks c;
+            C.load(c, src + sstride * C.l * i + C.l * j, sstride);
+            V.bit_reverse(c);
+            C.save(c, dst + dstride * C.l * j + C.l * i, dstride);
+        }
+    }
+
+    private static size_t block_size(size_t nrows, size_t ncolumns)
+    {
+        return nrows.min(ncolumns).min(st!32);
+    }
+
+    static size_t buffer_size(size_t nrows, size_t ncolumns)
+    {
+        return block_size(nrows, ncolumns) * nrows;
+    }
+    
+    static Columns create(
+        V.T* p, size_t stride, size_t n, size_t m, V.T* buffer)
+    {
+        return Columns(Columns.block_size(n, m), p, stride, n, buffer, 0);
+    }
+}
+
+private template Scalar(TT, alias V)
+{
     alias TT T;
     alias TT vec;
     enum vec_size = 1;
