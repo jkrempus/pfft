@@ -336,7 +336,7 @@ struct Columns(alias V)
     void load()
     {
         if(icolumn == 0)
-            transposed_copy(p, stride, n, l, buffer, n);
+            transposed_copy!false(p, stride, n, l, buffer);
     }
 
     void save()
@@ -345,35 +345,48 @@ struct Columns(alias V)
         if(icolumn == l)
         {
             icolumn = 0;
-            transposed_copy(buffer, n, l, n, p, stride);
+            transposed_copy!true(p, stride, n, l, buffer);
             p += l; 
         } 
     }
 
-    private static void transposed_copy(
-            V.T* src, size_t sstride, size_t n, size_t m, V.T* dst, size_t dstride)
+    private static void transposed_copy(bool inverse)(
+        V.T* src, size_t sstride, size_t n, size_t m, V.T* dst)
     {
+        alias n dstride;
+         
         if(n < C.l || m < C.l)
         {
             foreach(i; 0 .. n)
-                foreach(j; 0 .. m)
+            foreach(j; 0 .. m)
+                static if(inverse) 
+                    src[j * sstride + i] = dst[i * dstride + j];
+                else
                     dst[i * dstride + j] = src[j * sstride + i];
 
             return;
         }
-
+        
         auto nn = n / C.l;
         auto mm = m / C.l;
-        auto block_size = min(nn, mm);
-        for(size_t i0 = 0; i0 < nn; i0 += block_size)
-        for(size_t j0 = 0; j0 < mm; j0 += block_size)
-        foreach(i; i0 .. i0 + block_size)
-        foreach(j; j0 .. j0 + block_size)
+
+        for(size_t i0 = 0; i0 < nn; i0 += mm)
+        foreach(i; i0 .. i0 + mm)
+        foreach(j; 0 .. mm)
         {
             C.Chunks c;
-            C.load(c, src + sstride * C.l * i + C.l * j, sstride);
-            V.bit_reverse(c);
-            C.save(c, dst + dstride * C.l * j + C.l * i, dstride);
+            static if(inverse)
+            {
+                C.load(c, dst + dstride * C.l * j + C.l * i, dstride);
+                V.bit_reverse(c);
+                C.save(c, src + sstride * C.l * i + C.l * j, sstride);
+            }
+            else
+            {
+                C.load(c, src + sstride * C.l * i + C.l * j, sstride);
+                V.bit_reverse(c);
+                C.save(c, dst + dstride * C.l * j + C.l * i, dstride);
+            }
         }
     }
 
