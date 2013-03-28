@@ -122,6 +122,14 @@ template BRChunks(alias V, bool br_rows_columns)
             }
     }
 
+    void prefetch(V.T* p, size_t stride, size_t m)
+    {
+        enum elements_per_cache_line = 64 / V.T.sizeof;
+        for(size_t j = 0; j < m; j += elements_per_cache_line)
+            foreach(i; ints_up_to!l)
+                pfft.common.prefetch!(true, true)(p + i * stride + j);
+    }
+
     alias copy!true load;
     alias copy!false save;
 }
@@ -370,29 +378,33 @@ struct Columns(alias V)
         auto nn = n / C.l;
         auto mm = m / C.l;
 
-        for(size_t i0 = 0; i0 < nn; i0 += mm)
-        foreach(i; i0 .. i0 + mm)
-        foreach(j; 0 .. mm)
+        foreach(i; 0 .. nn)
         {
-            C.Chunks c;
-            static if(inverse)
+            static if(!inverse)
+                C.prefetch(src + sstride * C.l * (i + 1), sstride, m);
+
+            foreach(j; 0 .. mm)
             {
-                C.load(c, dst + dstride * C.l * j + C.l * i, dstride);
-                V.bit_reverse(c);
-                C.save(c, src + sstride * C.l * i + C.l * j, sstride);
-            }
-            else
-            {
-                C.load(c, src + sstride * C.l * i + C.l * j, sstride);
-                V.bit_reverse(c);
-                C.save(c, dst + dstride * C.l * j + C.l * i, dstride);
+                C.Chunks c;
+                static if(inverse)
+                {
+                    C.load(c, dst + dstride * C.l * j + C.l * i, dstride);
+                    V.bit_reverse(c);
+                    C.save(c, src + sstride * C.l * i + C.l * j, sstride);
+                }
+                else
+                {
+                    C.load(c, src + sstride * C.l * i + C.l * j, sstride);
+                    V.bit_reverse(c);
+                    C.save(c, dst + dstride * C.l * j + C.l * i, dstride);
+                }
             }
         }
     }
 
     private static size_t block_size(size_t nrows, size_t ncolumns)
     {
-        return nrows.min(ncolumns).min(st!32);
+        return nrows.min(ncolumns).min(st!16);
     }
 
     static size_t buffer_size(size_t nrows, size_t ncolumns)

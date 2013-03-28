@@ -110,11 +110,21 @@ void buildTests(
                 .linkTo("fftw3"~fftwSuffixes[type]))
             .conditional(isLinux, argList.linkTo("dl"))
             .run(c);
+
+    dcArgs
+        .src(baseDir~"/tmp.d")
+        .output("tmp")
+        .ipath(baseDir~"/generated/include")
+        .lib(baseDir~"/generated/lib/pfft") 
+        .conditional(isLinux, argList.linkTo("dl"))
+        .run(c);
 }
 
 void runBenchmarks(string[] types, Version v, string api = "")
 {
     import std.parallelism;
+
+    vshell("./tmp 8 8 8");
 
     foreach(isReal; [false])        // only profile complex transforms for now
     foreach(impl; 0 .. 1 + v.additionalSIMD.length)

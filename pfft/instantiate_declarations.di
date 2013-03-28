@@ -36,7 +36,8 @@ mixin template Instantiate()
 
     void set_implementation(int);
     
-    size_t transpose_buffer_size_bytes(int log2n, int log2m);
+    size_t transpose_buffer_size_bytes(int[] log2n);
+
     void fft_transposed(
         T* re,
         T* im,
@@ -45,5 +46,12 @@ mixin template Instantiate()
         int log2m,
         Table tables,
         TransposeBuffer buffer);
+
+    void multidim_fft(
+        T* re,
+        T* im,
+        int[] log2n,
+        Table[] table, 
+        TransposeBuffer buf);
 }
 

@@ -985,11 +985,6 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, tables);
     }
 
-    size_t transpose_buffer_size_bytes()(int log2n, int log2m)
-    {
-        return Col.buffer_size(st!1 << log2n, st!1 << log2m) * 2 * T.sizeof;
-    }
-
     void fft_transposed()(
         T* re,
         T* im,
@@ -1017,6 +1012,43 @@ template FFT(alias V, alias Options)
             cr.save();
             ci.save();
         }
+    }
+
+    size_t transpose_buffer_size_bytes()(int[] log2n)
+    {
+        auto lnmax = int.min;
+        auto lmmax = int.min;
+        auto lm = 0;
+        foreach(i; 1 .. log2n.length)
+        {
+            lm += log2n[$ - i];
+            lmmax = lmmax > lm ? lmmax : lm;
+            lnmax = lnmax > log2n[$ - (i + 1)] ? lnmax : log2n[$ - (i + 1)];
+        }
+
+        return Col.buffer_size(st!1 << lnmax, st!1 << lmmax) * 2 * T.sizeof;
+    }
+
+    void multidim_fft()(
+        T* re,
+        T* im,
+        int[] log2n,
+        Table[] table, 
+        TransposeBuffer buf)
+    {
+        if(log2n.length == 1)
+            return fft(re, im, log2n[0], table[0]);
+
+        int log2m = 0;
+        foreach(e; log2n[1 .. $])
+            log2m += e;
+
+        fft_transposed(re, im, log2m, log2n[0], log2m, table[0], buf); 
+
+        auto m = cast(size_t) 1 << log2m;
+        foreach(i; 0 .. cast(size_t) 1 << log2n[0])
+            multidim_fft(
+                re + i * m, im + i * m, log2n[1 .. $], table[1 .. $], buf);
     }
 
     alias T* RTable;
@@ -1373,9 +1405,9 @@ mixin template Instantiate()
             implementation.set(i);
     }
     
-    size_t transpose_buffer_size_bytes(int log2n, int log2m)
+    size_t transpose_buffer_size_bytes(int[] log2n)
     {
-        return selected!"transpose_buffer_size_bytes"(log2n, log2m);
+        return selected!"transpose_buffer_size_bytes"(log2n);
     }
 
     void fft_transposed(
@@ -1390,5 +1422,17 @@ mixin template Instantiate()
         selected!"fft_transposed"(
             re, im, log2stride, log2n, log2m,
             cast(FFT0.Table) tables, cast(FFT0.TransposeBuffer) buffer);
+    }
+
+    void multidim_fft(
+        T* re,
+        T* im,
+        int[] log2n,
+        Table[] table, 
+        TransposeBuffer buf)
+    {
+        selected!"multidim_fft"(
+            re, im, log2n,
+            cast(FFT0.Table[]) table, cast(FFT0.TransposeBuffer) buf);
     }
 }
