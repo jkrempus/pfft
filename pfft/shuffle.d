@@ -366,11 +366,11 @@ struct Columns(alias V)
         if(n < C.l || m < C.l)
         {
             foreach(i; 0 .. n)
-            foreach(j; 0 .. m)
-                static if(inverse) 
-                    src[j * sstride + i] = dst[i * dstride + j];
-                else
-                    dst[i * dstride + j] = src[j * sstride + i];
+                foreach(j; 0 .. m)
+                    static if(inverse) 
+                        src[j * sstride + i] = dst[i * dstride + j];
+                    else
+                        dst[i * dstride + j] = src[j * sstride + i];
 
             return;
         }

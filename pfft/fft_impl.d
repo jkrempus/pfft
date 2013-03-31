@@ -998,19 +998,20 @@ template FFT(alias V, alias Options)
         auto m = st!1 << log2m;
         auto stride = st!1 << log2stride;
         auto nbuf = Col.buffer_size(n, m);
-        
-        auto cr = Col.create(re, stride, n, m, cast(T*) buffer);
-        auto ci = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
+       
+        Col[2] col = void; 
+        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
+        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
 
-        foreach(i; 0 .. m)
+        foreach(_; 0 .. m)
         {
-            cr.load();
-            ci.load();
+            foreach(i; 0 .. 2)
+                col[i].load();
 
-            fft(cr.column, ci.column, log2n, tables);
+            fft(col[0].column, col[1].column, log2n, tables);
 
-            cr.save();
-            ci.save();
+            foreach(i; 0 .. 2)
+                col[i].save();
         }
     }
 
