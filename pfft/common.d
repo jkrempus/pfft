@@ -1,5 +1,9 @@
 module pfft.common;
 
+import core.bitop;
+
+alias bsr log2;
+
 template TypeTuple(A...)
 {
     alias A TypeTuple;
@@ -21,14 +25,16 @@ void swap(T)(ref T a, ref T b)
     a = bb;
 }
 
-template ints_up_to(int n, T...)
+template ints_up_to(arg...)
 {
-    static if(n)
-    {
-        alias ints_up_to!(n-1, n-1, T) ints_up_to;
-    }
+    static if(arg.length == 1)
+        alias ints_up_to!(0, arg[0], 1) ints_up_to;
+    else static if(arg[0] < arg[1])
+        alias 
+            TypeTuple!(arg[0], ints_up_to!(arg[0] + arg[2], arg[1], arg[2])) 
+            ints_up_to;
     else
-        alias T ints_up_to;
+        alias TypeTuple!() ints_up_to;
 }
 
 template powers_up_to(int n, T...)

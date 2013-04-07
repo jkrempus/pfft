@@ -55,7 +55,7 @@ template Scalar(_T, A...)
     {
         swap(arg[1], arg[2]);
     }
-
+    
     T unaligned_load(T* p){ return *p; }
     void unaligned_store(T* p, T a){ *p = a; }
     T reverse(T a){ return a; }           
@@ -149,8 +149,6 @@ template FFT(alias V, alias Options)
             }
         }
     }
-
-    alias bsr log2;
 
     int n_bit_reversed_passes(int log2n)
     {
@@ -862,13 +860,11 @@ template FFT(alias V, alias Options)
             foreach(j; ints_up_to!(n / m))
             {
                 enum offset = m * j;
-                static if (j >= 4)
+                static if (j >= 2)
                 {
                     vec wr = table[2 * j];
                     vec wi = table[2 * j + 1];
                 }
-                else static if(j >= 2)
-                    vec sqrt2 = table[4];
 
                 foreach(k1; ints_up_to!(m / 2))
                 {
@@ -887,25 +883,12 @@ template FFT(alias V, alias Options)
                     {
                         vec tmpr = ar[offset + k2], ti = ai[offset + k2];
                         vec ur = ar[offset + k1], ui = ai[offset + k1];
-                        static if(j == 2)
-                        {
-                            vec tr = sqrt2 * (tmpr + ti);
-                            ti = sqrt2 * (ti - tmpr); 
-                        }
-                        else static if(j == 3)
-                        {
-                            vec tr = sqrt2 * (ti - tmpr);
-                            ti = sqrt2 * (-tmpr - ti);
-                        }
-                        else
-                        {
-                            vec tr = tmpr*wr - ti*wi;
-                            ti = tmpr*wi + ti*wr;
-                        }
+                        vec tr = tmpr*wr - ti*wi;
+                        ti = tmpr*wi + ti*wr;
                     }
                     ar[offset + k2] = ur - tr;
-                    ar[offset + k1] = ur + tr;                                                    
-                    ai[offset + k2] = ui - ti;                                                    
+                    ar[offset + k1] = ur + tr;
+                    ai[offset + k2] = ui - ti;
                     ai[offset + k1] = ui + ti;
                 }
             }
@@ -913,28 +896,33 @@ template FFT(alias V, alias Options)
 
         static if(!isScalar)
         {
-            foreach(i2; ints_up_to!(n / 2))
+            foreach(i; ints_up_to!(0, n, 2))
+                fractional_inner(ar[i], ai[i], ar[i + 1], ai[i + 1], table, i * 2);
+        
+            enum fastBR = is(typeof(BR.bit_reverse_static_size(ar)));
+            static if(fastBR)
             {
-                enum i = i2 * 2;
-                fractional_inner(
-                    ar[i], ai[i], ar[i + 1], ai[i + 1], table, i * 2);
+                BR.bit_reverse_static_size(ar);
+                BR.bit_reverse_static_size(ai);
+            }
 
+            foreach(i; ints_up_to!(n))
+            {
                 pr[i] = ar[i];
-                pr[i + 1] = ar[i + 1];
                 pi[i] = ai[i];
-                pi[i + 1] = ai[i + 1]; 
             }
 
-            foreach(j; 0 .. 2)            
-            {
-                auto sp = cast(T*) (j == 0 ? pr : pi);
-                RepeatType!(T, n * vec_size) s;
-                
-                foreach(i; ints_up_to!(n * vec_size))
-                    s[i] = sp[i];
-                foreach(i; ints_up_to!(n * vec_size))
-                    sp[i] = s[reverse_bits!(i, log2n_elem)];
-            }
+            static if(!fastBR)
+                foreach(j; 0 .. 2)            
+                {
+                    auto sp = cast(T*) (j == 0 ? pr : pi);
+                    RepeatType!(T, n * vec_size) s;
+                    
+                    foreach(i; ints_up_to!(n * vec_size))
+                        s[i] = sp[i];
+                    foreach(i; ints_up_to!(n * vec_size))
+                        sp[i] = s[reverse_bits!(i, log2n_elem)];
+                }
         }
         else
             foreach(i; ints_up_to!n)
@@ -1017,25 +1005,15 @@ template FFT(alias V, alias Options)
     {
         switch(log2n)
         {
-            foreach(i; ints_up_to!(log2(vec_size) + 1))
-            {
-                case i:
-                    return SFFT.static_size_fft!i(
-                        re, im, twiddle_table_ptr(tables, i));
-                break;
-            }
+            case 0: break;
 
-            foreach(i; ints_up_to!(log2(vec_size - 1)))
-            {
-                enum j = log2(vec_size) + 1 + i;
-                case j:
-                    return static_size_fft!j(
-                        cast(vec*) re, 
-                        cast(vec*) im, 
-                        twiddle_table_ptr(tables, j));
+            foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
+                case i: return SFFT.static_size_fft!i(
+                    re, im, twiddle_table_ptr(tables, i));
 
-                break;
-            }
+            foreach(i; ints_up_to!(log2(vec_size) + 1, 2 * log2(vec_size), 1))
+                case i: return static_size_fft!i(
+                    cast(vec*) re, cast(vec*) im, twiddle_table_ptr(tables, i));
             
             default:
         }

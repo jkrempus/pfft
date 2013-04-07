@@ -124,9 +124,9 @@ void runBenchmarks(string[] types, Version v, string api = "")
             writefln("Running benchmarks for type %s.", type);
 
         version(Windows)
-            auto r = iota(4, 21);
+            auto r = iota(2, 21);
         else
-            auto r = taskPool.parallel(iota(4,21));
+            auto r = taskPool.parallel(iota(2,21));
 
         foreach(i; r)
         {

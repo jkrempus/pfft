@@ -105,7 +105,25 @@ template BitReverse(alias V, alias Options)
 {
     alias V.T T;
     alias V.vec vec;
-    
+
+    void bit_reverse_static_size(A...)(ref A a)
+    {
+        enum n = a.length;
+        foreach(i; ints_up_to!(log2(n)))
+        {
+            enum m = n >> i;
+            foreach(j; ints_up_to!(0, n, m))
+                foreach(k; ints_up_to!(j, j + m /2, 1))
+                    V.transpose!(V.vec_size >> i)(
+                        a[k], a[k + m /2], a[k], a[k + m /2]);
+        }
+
+        enum elem_per_vec = V.vec_size >> log2(n);
+        static if(elem_per_vec > 2)
+            foreach(i; ints_up_to!(0, n, 2))
+                V.bit_reverse_each!(elem_per_vec)(a[i], a[i + 1]);
+    }
+
     size_t br_table_size()(int log2n)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
