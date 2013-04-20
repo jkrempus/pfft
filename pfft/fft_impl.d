@@ -648,14 +648,16 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
    
-    void fractional_inner()(
+    void fractional_inner(bool do_prefetch)(
         ref vec ar, ref vec ai, ref vec br, ref vec bi, T* table, size_t tableI)
     {
         foreach(i; ints_up_to!(log2(vec_size)))
         {
             vec wr, wi, ur, ui;
 
-            prefetch!(true, false)(table + ((tableI + 4) << i));
+            static if(do_prefetch && i < log2(vec_size))
+                prefetch!(true, false)(table + ((tableI + 4) << i));
+
             V.complex_array_to_real_imag_vec!(2 << i)(
                 table + (tableI << i), wr, wi);
 
@@ -687,7 +689,7 @@ template FFT(alias V, alias Options)
                 auto br = pr[1];
                 auto bi = pi[1];
                 
-                fractional_inner(ar, ai, br, bi, table, tableI);
+                fractional_inner!true(ar, ai, br, bi, table, tableI);
                             
                 pr[0] = ar;
                 pi[0] = ai;
@@ -815,30 +817,11 @@ template FFT(alias V, alias Options)
 
     }
   
-    void bit_reverse_small_two
-    (int minLog2n)
+    void bit_reverse_small_two()
     (T* re, T* im, int log2n, uint* brTable)
     {
-        enum l = V.log2_bitreverse_chunk_size;
-        
-        static if(minLog2n < 2 * l)
-        {
-            if(log2n < 2 * l)
-            {
-                // only works for log2n < 2 * l
-                foreach(i; 0 .. 2)
-                    bit_reverse_tiny!(2 * l)(i ? im : re, log2n);
-            }
-            else
-                foreach(i; 0 .. 2)
-                    BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
-        }
-        else                                                            
-        {
-            //we already know that log2n >= 2 * l here.
-            foreach(i; 0 .. 2)
-                BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
-        }   
+        foreach(i; 0 .. 2)
+            BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
     }
 
     void static_size_fft(int log2n_elem)(vec* pr, vec* pi, T* table)
@@ -897,7 +880,8 @@ template FFT(alias V, alias Options)
         static if(!isScalar)
         {
             foreach(i; ints_up_to!(0, n, 2))
-                fractional_inner(ar[i], ai[i], ar[i + 1], ai[i + 1], table, i * 2);
+                fractional_inner!false(
+                    ar[i], ai[i], ar[i + 1], ai[i + 1], table, i * 2);
         
             enum fastBR = is(typeof(BR.bit_reverse_static_size(ar)));
             static if(fastBR)
@@ -934,29 +918,6 @@ template FFT(alias V, alias Options)
 
     auto v(T* p){ return cast(vec*) p; }
 
-    void fft_tiny()(T * re, T * im, int log2n, Table tables)
-    {
-        // assert(log2n > log2(vec_size));
-        
-        auto N = st!1 << log2n;
-        fft_passes!(true)(v(re), v(im), N / vec_size, 1, 
-            twiddle_table_ptr(tables, log2n));
-      
-        profStart(Action.fract_passes);
-
-        static if(!isScalar) 
-            fft_passes_fractional(
-                v(re), v(im), v(re) + N / vec_size,
-                twiddle_table_ptr(tables, log2n), 0);
-        
-        profStopStart(Action.fract_passes, Action.bit_reverse);
-
-        bit_reverse_small_two!(log2(vec_size) + 1)(
-            re, im, log2n, br_table_ptr(tables, log2n));
-        
-        profStop(Action.bit_reverse);
-    }
-
     void fft_small()(T * re, T * im, int log2n, Table tables)
     {
         // assert(log2n >= 2*log2(vec_size));
@@ -971,8 +932,7 @@ template FFT(alias V, alias Options)
 
         profStart(Action.bit_reverse);
  
-        bit_reverse_small_two!(2 * log2(vec_size))(
-            re, im, log2n, br_table_ptr(tables, log2n));
+        bit_reverse_small_two(re, im, log2n, br_table_ptr(tables, log2n));
 
         profStopStart(Action.bit_reverse, Action.br_passes);
 
@@ -1005,7 +965,7 @@ template FFT(alias V, alias Options)
     {
         switch(log2n)
         {
-            case 0: break;
+            case 0: return;
 
             foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
                 case i: return SFFT.static_size_fft!i(
@@ -1018,9 +978,7 @@ template FFT(alias V, alias Options)
             default:
         }
 
-        if(log2n < 2 * log2(vec_size))
-            return fft_tiny(re, im, log2n, tables);
-        else if( log2n < Options.large_limit || disable_large)
+        if( log2n < Options.large_limit || disable_large)
             return fft_small(re, im, log2n, tables);
         else 
             static if(!disable_large)
