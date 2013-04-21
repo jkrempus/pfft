@@ -767,7 +767,7 @@ template FFT(alias V, alias Options)
             }
     }
 
-    void fft_passes_strided(int l, int chunk_size)(
+    @always_inline void fft_passes_strided(int l, int chunk_size)(
         vec * pr,
         vec * pi, 
         size_t N , 
@@ -822,7 +822,7 @@ template FFT(alias V, alias Options)
         profStop(Action.strided_copy2);
     }
 
-    void fft_passes_recursive_last()(
+    @always_inline void fft_passes_recursive_last()(
         vec* pr, vec*  pi, size_t N, T* table, size_t tableI)
     {
         profStart(Action.passes_last);
