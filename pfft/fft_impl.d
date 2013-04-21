@@ -480,7 +480,7 @@ template FFT(alias V, alias Options)
         pi[k3] = i3;
     };
  
-    void fft_pass_bit_reversed()(
+    @always_inline void fft_pass_bit_reversed()(
         vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -502,7 +502,7 @@ template FFT(alias V, alias Options)
         }
     }
  
-    void fft_two_passes_bit_reversed()(
+    @always_inline void fft_two_passes_bit_reversed()(
         vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -528,7 +528,7 @@ template FFT(alias V, alias Options)
         }
     }
 
-    void first_fft_passes()(vec* pr, vec* pi, size_t n)
+    @always_inline void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
 
@@ -560,7 +560,7 @@ template FFT(alias V, alias Options)
         }
     }
         
-    void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    @always_inline void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend ; pr += m, pi += m)
@@ -582,7 +582,7 @@ template FFT(alias V, alias Options)
         }
     }
 
-    void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+    @always_inline void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
         // sometimes gives an incorrect result (for example when building with 
@@ -641,7 +641,7 @@ template FFT(alias V, alias Options)
         }
     }
 
-    void fft_passes_bit_reversed()(
+    @always_inline void fft_passes_bit_reversed()(
         vec* re, vec* im, size_t N, vec* table, size_t start_stride)
     {
         //version(DigitalMars)
@@ -667,7 +667,7 @@ template FFT(alias V, alias Options)
         }
     }
     
-    void fft_passes(bool compact_table)(
+    @always_inline void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, T* table)
     {
         vec * pend = re + N;
@@ -721,7 +721,7 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
     
-    void fft_passes_fractional()(
+    @always_inline void fft_passes_fractional()(
         vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
@@ -970,7 +970,7 @@ template FFT(alias V, alias Options)
         profStop(Action.bit_reverse);
     }
 
-    void fft()(T * re, T * im, int log2n, Table tables)
+    @noinline void fft()(T * re, T * im, int log2n, Table tables)
     {
         foreach(i; ints_up_to!(log2(vec_size) + 1))
             if(i == log2n)
@@ -985,7 +985,7 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, tables);
     }
 
-    void fft_transposed()(
+    @always_inline void fft_transposed()(
         T* re,
         T* im,
         int log2stride, 
@@ -1046,8 +1046,8 @@ template FFT(alias V, alias Options)
 
         fft_transposed(re, im, log2m, log2n[0], log2m, table[0], buf); 
 
-        auto m = cast(size_t) 1 << log2m;
-        foreach(i; 0 .. cast(size_t) 1 << log2n[0])
+        auto m = st!1 << log2m;
+        foreach(i; 0 .. st!1 << log2n[0])
             multidim_fft(
                 re + i * m, im + i * m, log2n[1 .. $], table[1 .. $], buf);
     }

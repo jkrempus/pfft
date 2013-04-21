@@ -16,6 +16,18 @@ struct Tuple(A...)
     alias a this;
 }
 
+version(GNU)
+{
+    public import gcc.attribute;
+    enum noinline = attribute("noinline");
+    enum always_inline = attribute("always_inline");
+}
+else
+{
+    alias TypeTuple!() noinline;
+    alias TypeTuple!() always_inline;
+}
+
 void swap(T)(ref T a, ref T b)
 {
     auto aa = a;

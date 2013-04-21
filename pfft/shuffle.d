@@ -168,7 +168,7 @@ template BitReverse(alias V, alias Options)
             }
     }
    
-    void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+    @always_inline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         alias BRChunks!(V, false) C;
 
@@ -341,13 +341,13 @@ struct Columns(alias V)
 
     @property column(){ return buffer + n * icolumn; }
 
-    void load()
+    @always_inline void load()
     {
         if(icolumn == 0)
             transposed_copy!false(p, stride, n, l, buffer);
     }
 
-    void save()
+    @always_inline void save()
     {
         icolumn++;
         if(icolumn == l)
@@ -358,7 +358,7 @@ struct Columns(alias V)
         } 
     }
 
-    private static void transposed_copy(bool inverse)(
+    @always_inline private static void transposed_copy(bool inverse)(
         V.T* src, size_t sstride, size_t n, size_t m, V.T* dst)
     {
         alias n dstride;

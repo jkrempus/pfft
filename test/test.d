@@ -2,9 +2,11 @@
 //    (See accompanying file LICENSE_1_0.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
-import std.stdio, std.conv, std.complex, std.getopt, 
+import std.range, std.stdio, std.conv, std.complex, std.getopt, 
     std.random, std.numeric, std.math, std.algorithm,
     std.exception, std.typetuple, std.traits, std.string : toUpper, toStringz;
+
+import core.bitop;
 
 import core.time;
 
@@ -21,6 +23,10 @@ void bloat(int n, int m = 0)()
 }
 
 //alias bloat!12 B_L_O_A_T;
+
+auto sum(A, B)(A a, B b){ return a + b; }
+auto prod(A, B)(A a, B b){ return a * b; }
+auto len(A)(A a){ return a.length; }
 
 template st(alias a){ enum st = cast(size_t) a; }
 
@@ -234,25 +240,31 @@ if(transfer == Transfer.fft)
 
     T[] _re;
     T[] _im;
-    d.Table table;
+    d.Table[] tables;
+    d.TransposeBuffer tbuf;
     int log2n;
+    int[] log2ns;
     
-    this(int _log2n)
+    this(int[] log2ns)
     {
-        log2n = _log2n;
+        this.log2ns = log2ns;
+        log2n = log2ns.reduce!sum;
         _re = gc_aligned_array!T(1 << log2n);
         _im = gc_aligned_array!T(1 << log2n);
         _re[] = 0;
         _im[] = 0;
-        table = d.fft_table(log2n, GC.malloc(d.table_size_bytes(log2n))); 
+        tbuf = cast(d.TransposeBuffer) GC.malloc(d.transpose_buffer_size_bytes(log2ns));
+        tables = new d.Table[](log2ns.length);
+        foreach(i, e; log2ns)
+            tables[i] = d.fft_table(e, GC.malloc(d.table_size_bytes(e))); 
     }
     
     void compute()
     {
         static if(isInverse)
-            d.fft(_im.ptr, _re.ptr, log2n, table);
+            d.multidim_fft(_im.ptr, _re.ptr, log2ns, tables, tbuf);
         else 
-            d.fft(_re.ptr, _im.ptr, log2n, table); 
+            d.multidim_fft(_re.ptr, _im.ptr, log2ns, tables, tbuf); 
     }
 
     mixin splitElementAccess!();
@@ -270,8 +282,10 @@ if(transfer == Transfer.rfft)
     direct.Table table;
     int log2n;
     
-    this(int log2n)
+    this(int[] log2ns)
     {
+        enforce(log2ns.length == 1);
+        auto log2n = log2ns.front;
         auto n = st!1 << log2n;
         data = gc_aligned_array!T(n);
         data[] = 0;
@@ -401,9 +415,10 @@ if(transfer == Transfer.fft)
     Impl.Table* table;
     int log2n;
     
-    this(int _log2n)
+    this(int[] log2ns)
     {
-        log2n = _log2n;
+        enforce(log2ns.length == 1);
+        log2n = log2ns.front;
         _re = Impl.allocate(1 << log2n);
         _im = Impl.allocate(1 << log2n);
         _re[0 .. 1 << log2n] = 0;
@@ -438,9 +453,10 @@ if(transfer == Transfer.rfft)
     Impl.RTable* table;
     T* data;
     
-    this(int log2n)
+    this(int[] log2ns)
     {
-        this.log2n = log2n;
+        enforce(log2ns.length == 1);
+        log2n = log2ns.front;
         data = Impl.allocate(1 << log2n);
         data[0 .. 1 << log2n] = 0;
         table = Impl.rtable(1 << log2n, null); 
@@ -474,9 +490,10 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
     F.Array _im;
     int log2n;
     
-    this(int log2n)
+    this(int[] log2ns)
     {
-        this.log2n = log2n;
+        enforce(log2ns.length == 1);
+        log2n = log2ns.front;
         size_t n = 1U << log2n; 
         f = new F(n);
         _re = F.Array(n);
@@ -505,9 +522,10 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
     F f;
     F.Array data;
     
-    this(int log2n)
+    this(int[] log2ns)
     {
-        this.log2n = log2n;
+        enforce(log2ns.length == 1);
+        log2n = log2ns.front;
         size_t n = 1U << log2n; 
         f = new F(n);
         data = F.Array(n);
@@ -531,8 +549,9 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
     Complex!(T)[] a;
     Complex!(T)[] w;
     int log2n;
+    int[] log2ns;
     
-    static void bit_reverse(int log2n, Complex!(T)[] a)
+    private static void bit_reverse(A)(int log2n, A a)
     {
         import core.bitop;
 
@@ -547,13 +566,9 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
         }
     }
 
-    this(int _log2n)
+    private static auto table(int log2n)
     {
-        log2n = _log2n;
-        
-        a = gc_aligned_array!(Complex!T)(st!1 << log2n);
-        a[] = Complex!T(0, 0);
-        w = gc_aligned_array!(Complex!T)(st!1 << (log2n - 1));
+        auto w = gc_aligned_array!(Complex!T)(st!1 << (log2n - 1));
 
         size_t n = 1 << log2n;
         T dphi = 4.0 * asin(to!T(1.0)) / n;
@@ -565,23 +580,25 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
 
         if(log2n != 0)
             bit_reverse(log2n - 1, w[0 .. n / 2]);
+
+        return w;
     }
-    
-    void compute()
+
+    private static void fft(A, W)(A a, W w)
     {
         static if(isInverse)
             foreach(ref e; a)
                 swap(e.re, e.im);
 
-        for (size_t m2 = (st!1 << log2n) / 2; m2; m2 >>= 1)
+        for (size_t m2 = a.length / 2; m2; m2 >>= 1)
         {
-            auto table = w.ptr;
+            auto table = w.save;
             size_t m = m2 + m2;
-            for(auto p = a.ptr; p < a.ptr + (st!1 << log2n); p += m )
+            for(auto p = a.save; !p.empty; p = p[m .. $])
             {
-                T wr = table[0].re;
-                T wi = table[0].im;
-                table++;
+                T wr = table.front.re;
+                T wi = table.front.im;
+                table.popFront;
                 for (size_t k1 = 0, k2 = m2; k1<m2; k1++, k2++) 
                 { 
                     T tmpr = p[k2].re, ti = p[k2].im;
@@ -595,12 +612,43 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
                 }
             }
         }
-        bit_reverse(log2n, a);
-
+        bit_reverse(bsr(a.length), a);
         
         static if(isInverse)
             foreach(ref e; a)
                 swap(e.re, e.im);
+    }
+
+    private static void multidim()(
+        Complex!(T)[] a,
+        Complex!(T)[] w,
+        int[] log2ns)
+    {
+        if(log2ns.length == 1)
+            return fft(a, w);
+
+        size_t m = st!1 << log2ns[1 .. $].reduce!sum;
+        foreach(i; 0 .. m)
+            fft(a[i .. $].stride(m), w);
+
+        foreach(i; 0 .. st!1 << log2ns.front)
+            multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
+    }
+
+    this(int[] log2ns)
+    {
+        this.log2ns = log2ns;
+        log2n = log2ns.reduce!sum;
+        
+        a = gc_aligned_array!(Complex!T)(st!1 << log2n);
+        a[] = Complex!T(0, 0);
+
+        w = table(log2ns.reduce!max);
+    }
+   
+    void compute()
+    {
+        multidim(a, w, log2ns);
     }
     
     alias T delegate(size_t) Dg;
@@ -648,8 +696,10 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
     
     Fft fft;
     
-    this(int log2n)
+    this(int[] log2ns)
     {
+        enforce(log2ns.length == 1);
+        auto log2n = log2ns.front;
         a = gc_aligned_array!(typeof(a[0]))(st!1 << log2n);
         r = gc_aligned_array!(Complex!T)(st!1 << log2n);
 
@@ -707,12 +757,14 @@ static if(benchFftw)
         
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
+        extern(C) void* fftwf_plan_dft(int, int*, Complex!(float)*, Complex!(float)*, int, uint);
         extern(C) void* fftwf_plan_dft_r2c_1d(int, float*, Complex!(float)*, uint);
         extern(C) void* fftwf_plan_dft_c2r_1d(int, Complex!(float)*, float*, uint);
         extern(C) void fftwf_execute(void *);
         
         alias fftwf_malloc fftw_malloc;
         alias fftwf_plan_dft_1d fftw_plan_dft_1d;
+        alias fftwf_plan_dft fftw_plan_dft;
         alias fftwf_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
         alias fftwf_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
         alias fftwf_execute fftw_execute;
@@ -723,6 +775,7 @@ static if(benchFftw)
         
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
+        extern(C) void* fftw_plan_dft(int, int*, Complex!(double)*, Complex!(double)*, int, uint);
         extern(C) void* fftw_plan_dft_r2c_1d(int, double*, Complex!(double)*, uint);
         extern(C) void* fftw_plan_dft_c2r_1d(int, Complex!(double)*, double*, uint);
         extern(C) void fftw_execute(void *);
@@ -733,12 +786,14 @@ static if(benchFftw)
         
         extern(C) void* fftwl_malloc(size_t);
         extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
+        extern(C) void* fftwl_plan_dft(int, int*, Complex!(real)*, Complex!(real)*, int, uint);
         extern(C) void* fftwl_plan_dft_r2c_1d(int, real*, Complex!(real)*, uint);
         extern(C) void* fftwl_plan_dft_c2r_1d(int, Complex!(real)*, real*, uint);
         extern(C) void fftwl_execute(void *);
         
         alias fftwl_malloc fftw_malloc;
         alias fftwl_plan_dft_1d fftw_plan_dft_1d;
+        alias fftwl_plan_dft fftw_plan_dft;
         alias fftwl_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
         alias fftwl_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
         alias fftwl_execute fftw_execute;
@@ -765,14 +820,15 @@ static if(benchFftw)
         
         void* p;
         
-        this(int log2n)
+        this(int[] log2ns)
         {
-            auto n = st!1 << log2n;
+            auto n = st!1 << log2ns.reduce!sum;
             a = fftw_array!(Complex!T)(n);
             a[] = Complex!T(0, 0);
             r = fftw_array!(Complex!T)(n);
             auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
-            p = fftw_plan_dft_1d(1 << log2n, a.ptr, r.ptr, dir, flags);
+            auto ns = log2ns.map!(a => 1 << a).array;
+            p = fftw_plan_dft(ns.length.to!int, ns.ptr, a.ptr, r.ptr, dir, flags);
         }
         
         void compute(){ fftw_execute(p); }
@@ -788,9 +844,10 @@ static if(benchFftw)
         void* p;
         int log2n;
         
-        this(int log2n)
+        this(int[] log2ns)
         {
-            this.log2n = log2n;
+            enforce(log2ns.length == 1);
+            log2n = log2ns.front;
             auto n = st!1 << log2n;
             a = fftw_array!T(n);
             a[] = 0;
@@ -813,7 +870,7 @@ static if(benchFftw)
 }
 
 
-void speed(F, Transfer transfer, bool isInverse)(int log2n, long flops)
+void speed(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
 {    
     auto f = F(log2n);
    
@@ -821,7 +878,7 @@ void speed(F, Transfer transfer, bool isInverse)(int log2n, long flops)
  
     f.fill(zero, zero);
 
-    ulong flopsPerIter = 5UL * log2n * (1UL << log2n) / 
+    ulong flopsPerIter = 5UL * log2n.reduce!sum * (1UL << log2n.reduce!sum) / 
         (transfer == Transfer.fft ? 1 : 2); 
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
@@ -835,30 +892,30 @@ void speed(F, Transfer transfer, bool isInverse)(int log2n, long flops)
     writefln("%f", to!double(niter * flopsPerIter) / tick.nsecs());
 }
 
-void initialization(F, Transfer transfer, bool isInverse)(int log2n, long flops)
-{    
-    auto niter = 100_000_000 / (1 << log2n);
-    niter = niter ? niter : 1;
+//void initialization(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
+//{    
+//    auto niter = 100_000_000 / (1 << log2n);
+//    niter = niter ? niter : 1;
+//
+//    auto tick = TickDuration.currSystemTick;
+//    
+//    foreach(i; 0 .. niter)
+//    {
+//        auto f = F(log2n);
+//        f.compute();
+//    }
+//    
+//    tick = TickDuration.currSystemTick - tick;
+//    writefln("%.3e", tick.nsecs() * 1e-9 / niter);
+//}
 
-    auto tick = TickDuration.currSystemTick;
-    
-    foreach(i; 0 .. niter)
-    {
-        auto f = F(log2n);
-        f.compute();
-    }
-    
-    tick = TickDuration.currSystemTick - tick;
-    writefln("%.3e", tick.nsecs() * 1e-9 / niter);
-}
-
-void precision(F, Transfer transfer, bool isInverse)(int log2n, long flops)
+void precision(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
 {
     alias SimpleFft!(real, transfer, isInverse) S;
     alias typeof(S.init.inRe(0)) ST;
     alias typeof(F.init.inRe(0)) FT;
 
-    auto n = st!1 << log2n;
+    auto n = st!1 << log2n.reduce!sum;
     auto tested = F(log2n);
     auto simple = S(log2n);
     
@@ -899,7 +956,7 @@ void precision(F, Transfer transfer, bool isInverse)(int log2n, long flops)
 }
 
 void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
-    int log2n, string impl, long mflops)
+    int[] log2n, string impl, long mflops)
 {
     static if(testSpeed)
         alias speed f;
@@ -1073,15 +1130,15 @@ void main(string[] args)
             if(impl != -1)
                 direct.set_implementation(impl);
 
-        enforce(args.length == 3, 
-            "There must be exactly two non option arguments.");
+        enforce(args.length >= 3, 
+            "There must be at least two non option arguments.");
 
         auto transfer = 
             r ? Transfer.rfft : 
             /*st ? Transfer.fst :*/ Transfer.fft;
 
-        callInstance!(runTest, 3)(
-            s, transfer, i, to!int(args[2]), args[1], mflops);
+        auto log2n = args[2 .. $].map!(to!int).array;
+        callInstance!(runTest, 3)(s, transfer, i, log2n, args[1], mflops);
     }
     catch(Exception e)
     {
