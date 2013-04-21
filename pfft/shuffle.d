@@ -108,7 +108,7 @@ template BRChunks(alias V, bool br_rows_columns)
     enum vec_per_chunk = l / V.vec_size;
     alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
     
-    void copy(bool load)(ref Chunks c, V.T* p, size_t m)
+    @always_inline void copy(bool load)(ref Chunks c, V.T* p, size_t m)
     {
         foreach(i; ints_up_to!l)
             foreach(j; ints_up_to!vec_per_chunk)
@@ -168,7 +168,7 @@ template BitReverse(alias V, alias Options)
             }
     }
    
-    @always_inline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+    @noinline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         alias BRChunks!(V, false) C;
 
@@ -206,7 +206,7 @@ template BitReverse(alias V, alias Options)
         return maxpower;     
     }
 
-    void swap_some(int n, TT)(TT* a, TT* b)
+    @always_inline void swap_some(int n, TT)(TT* a, TT* b)
     {
         RepeatType!(TT, 2 * n) tmp;
         
@@ -221,7 +221,7 @@ template BitReverse(alias V, alias Options)
             a[i] = tmp[i + n];
     }
 
-    void swap_array(int len, TT)(TT *  a, TT *  b)
+    @always_inline void swap_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert(len*TT.sizeof % vec.sizeof == 0);
         
@@ -231,7 +231,7 @@ template BitReverse(alias V, alias Options)
             swap_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
    
-    void copy_some(int n, TT)(TT* dst, TT* src)
+    @always_inline void copy_some(int n, TT)(TT* dst, TT* src)
     {
         RepeatType!(TT, n) a;
         
@@ -241,20 +241,7 @@ template BitReverse(alias V, alias Options)
             dst[i] = a[i];
     }
 
-    template hex_string(int a)
-    {
-        static if(a == 0)
-            enum hex_string = "0x0";
-        else
-        {
-            enum r = (a & 0xf);
-            enum hex_string = 
-                hex_string!(a >> 4) ~ 
-                (r <= 9 ? '0' + r : 'a' + r - 10);
-        }
-    }
-
-    void copy_array(int len, TT)(TT *  a, TT *  b)
+    @always_inline void copy_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert((len * TT.sizeof % vec.sizeof == 0));
         
@@ -264,7 +251,7 @@ template BitReverse(alias V, alias Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    void strided_copy
+    @always_inline void strided_copy
     (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
     {

@@ -110,21 +110,11 @@ void buildTests(
                 .linkTo("fftw3"~fftwSuffixes[type]))
             .conditional(isLinux, argList.linkTo("dl"))
             .run(c);
-
-    dcArgs
-        .src(baseDir~"/tmp.d")
-        .output("tmp")
-        .ipath(baseDir~"/generated/include")
-        .lib(baseDir~"/generated/lib/pfft") 
-        .conditional(isLinux, argList.linkTo("dl"))
-        .run(c);
 }
 
 void runBenchmarks(string[] types, Version v, string api = "")
 {
     import std.parallelism;
-
-    vshell("./tmp 8 8 8");
 
     foreach(isReal; [false])        // only profile complex transforms for now
     foreach(impl; 0 .. 1 + v.additionalSIMD.length)
@@ -133,16 +123,21 @@ void runBenchmarks(string[] types, Version v, string api = "")
         if(verbose)
             writefln("Running benchmarks for type %s.", type);
 
+        auto sizes = 
+            iota(4, 21).map!(a => [a]).array ~ 
+            iota(4, 11).map!(a => [a, a]).array ~
+            iota(4, 7).map!(a => [a, a, a]).array;
+
         version(Windows)
-            auto r = iota(4, 21);
+            auto r = sizes;
         else
-            auto r = taskPool.parallel(iota(4,21));
+            auto r = taskPool.parallel(sizes);
 
         foreach(i; r)
         {
             auto fn = absolutePath("test") ~ "_" ~ type.to!string;
             auto rFlag = when(isReal, "-r");
-            auto iStr = i.to!string;
+            auto iStr = format("%(%s %)", i);
             auto implStr = impl.to!string;
             vshell(fn~" -s -m 1000 "~api~" "~iStr~" --impl "~implStr~" "~rFlag);
         }
