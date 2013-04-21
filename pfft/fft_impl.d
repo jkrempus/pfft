@@ -14,6 +14,7 @@ enum Action
     passes_last, 
     bit_reverse, 
     br_passes,
+    fract_passes,
     strided_copy1,
     strided_copy2
 }
@@ -83,80 +84,6 @@ template ParamTypeTuple(alias f)
     alias typeof(params_struct(&f_instance).tupleof) type;
 }
 
-void static_size_fft(int log2n, T)(T *pr, T *pi, T *table)
-{ 
-    enum n = 1 << log2n;
-    RepeatType!(T, n) ar, ai;
-
-    foreach(i; ints_up_to!n)
-    {
-        ar[i] = pr[i];
-        ai[i] = pi[i];
-    }
-    
-    foreach(i; powers_up_to!n)
-    {
-        enum m = n / i;
-        
-        foreach(j; ints_up_to!(n / m))
-        {
-            enum offset = m * j;
-            static if (j >= 4)
-            {
-                T wr = table[2 * j];
-                T wi = table[2 * j + 1];
-            }
-            else static if(j >= 2)
-                T sqrt2 = table[4];
-
-            foreach(k1; ints_up_to!(m / 2))
-            {
-                enum k2 = k1 + m / 2;
-                static if(j == 0)
-                {
-                    T tr = ar[offset + k2], ti = ai[offset + k2];
-                    T ur = ar[offset + k1], ui = ai[offset + k1];
-                }
-                else static if(j == 1)
-                {
-                    T tr = ai[offset + k2], ti = -ar[offset + k2];
-                    T ur = ar[offset + k1], ui = ai[offset + k1];
-                }
-                else
-                {
-                    T tmpr = ar[offset + k2], ti = ai[offset + k2];
-                    T ur = ar[offset + k1], ui = ai[offset + k1];
-                    static if(j == 2)
-                    {
-                        T tr = sqrt2 * (tmpr + ti);
-                        ti = sqrt2 * (ti - tmpr); 
-                    }
-                    else static if(j == 3)
-                    {
-                        T tr = sqrt2 * (ti - tmpr);
-                        ti = sqrt2 * (-tmpr - ti);
-                    }
-                    else
-                    {
-                        T tr = tmpr*wr - ti*wi;
-                        ti = tmpr*wi + ti*wr;
-                    }
-                }
-                ar[offset + k2] = ur - tr;
-                ar[offset + k1] = ur + tr;                                                    
-                ai[offset + k2] = ui - ti;                                                    
-                ai[offset + k1] = ui + ti;
-            }
-        }
-    }
-
-    foreach(i; ints_up_to!n)
-    {
-        pr[i] = ar[reverse_bits!(i, log2n)];
-        pi[i] = ai[reverse_bits!(i, log2n)];
-    }
-}
-
 template FFT(alias V, alias Options)
 {
     static assert(!(Options.passes_per_recursive_call & 1));
@@ -218,8 +145,6 @@ template FFT(alias V, alias Options)
             }
         }
     }
-
-    alias bsr log2;
 
     int n_bit_reversed_passes(int log2n)
     {
@@ -346,7 +271,6 @@ template FFT(alias V, alias Options)
     }
 
     alias void* Table;
-    alias void* TransposeBuffer;
 
     size_t twiddle_table_size_bytes(int log2n)
     {
@@ -720,9 +644,38 @@ template FFT(alias V, alias Options)
 
         profStop(Action.passes_last);
     }
-    
-    @always_inline void fft_passes_fractional()(
-        vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
+   
+    void fractional_inner(bool do_prefetch)(
+        ref vec ar, ref vec ai, ref vec br, ref vec bi, T* table, size_t tableI)
+    {
+        foreach(i; ints_up_to!(log2(vec_size)))
+        {
+            vec wr, wi, ur, ui;
+
+            static if(do_prefetch && i < log2(vec_size))
+                prefetch!(true, false)(table + ((tableI + 4) << i));
+
+            V.complex_array_to_real_imag_vec!(2 << i)(
+                table + (tableI << i), wr, wi);
+
+            V.transpose!(2 << i)(ar, br, ur, br);
+            V.transpose!(2 << i)(ai, bi, ui, bi);
+
+            auto tr = br * wr - bi * wi;
+            auto ti = bi * wr + br * wi;
+
+            ar = ur + tr;
+            br = ur - tr;
+            ai = ui + ti;
+            bi = ui - ti;
+        }  
+
+        V.interleave(ar, br, ar, br); 
+        V.interleave(ai, bi, ai, bi);
+    }
+
+    @always_inline void fft_passes_fractional()
+    (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
         {
@@ -733,28 +686,12 @@ template FFT(alias V, alias Options)
                 auto br = pr[1];
                 auto bi = pi[1];
                 
-                foreach(i; ints_up_to!(log2(vec_size)))
-                {
-                    vec wr, wi, ur, ui;
-
-                    prefetch!(true, false)(table + ((tableI + 4) << i));
-                    V.complex_array_to_real_imag_vec!(2 << i)(
-                        table + (tableI << i), wr, wi);
-                    
-                    V.transpose!(2 << i)(ar, br, ur, br);
-                    V.transpose!(2 << i)(ai, bi, ui, bi);
-
-                    auto tr = br * wr - bi * wi;
-                    auto ti = bi * wr + br * wi;
-
-                    ar = ur + tr;
-                    br = ur - tr;
-                    ai = ui + ti;
-                    bi = ui - ti;
-                }  
-                
-                V.interleave(ar, br, pr[0], pr[1]); 
-                V.interleave(ai, bi, pi[0], pi[1]); 
+                fractional_inner!true(ar, ai, br, bi, table, tableI);
+                            
+                pr[0] = ar;
+                pi[0] = ai;
+                pr[1] = br;
+                pi[1] = bi;
             }
         }
         else
@@ -882,49 +819,106 @@ template FFT(alias V, alias Options)
 
     }
   
-    void bit_reverse_small_two(int minLog2n)(
-        T* re, T* im, int log2n, uint* brTable)
+    void bit_reverse_small_two()
+    (T* re, T* im, int log2n, uint* brTable)
     {
-        enum l = V.log2_bitreverse_chunk_size;
-        
-        static if(minLog2n < 2 * l)
+        foreach(i; 0 .. 2)
+            BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
+    }
+
+    void static_size_fft(int log2n_elem)(vec* pr, vec* pi, T* table)
+    {
+        enum log2n = log2n_elem - log2(vec_size);  
+        enum n = 1 << log2n;
+        RepeatType!(vec, n) ar, ai;
+
+        foreach(i; ints_up_to!n)
         {
-            if(log2n < 2 * l)
-            {
-                // only works for log2n < 2 * l
-                foreach(i; 0 .. 2)
-                    bit_reverse_tiny!(2 * l)(i ? im : re, log2n);
-            }
-            else
-                foreach(i; 0 .. 2)
-                    BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
+            ar[i] = pr[i];
+            ai[i] = pi[i];
         }
-        else                                                            
+
+        foreach(i; powers_up_to!n)
         {
-            //we already know that log2n >= 2 * l here.
-            foreach(i; 0 .. 2)
-                BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
-        }   
+            enum m = n / i;
+
+            foreach(j; ints_up_to!(n / m))
+            {
+                enum offset = m * j;
+                static if (j >= 2)
+                {
+                    vec wr = table[2 * j];
+                    vec wi = table[2 * j + 1];
+                }
+
+                foreach(k1; ints_up_to!(m / 2))
+                {
+                    enum k2 = k1 + m / 2;
+                    static if(j == 0)
+                    {
+                        vec tr = ar[offset + k2], ti = ai[offset + k2];
+                        vec ur = ar[offset + k1], ui = ai[offset + k1];
+                    }
+                    else static if(j == 1)
+                    {
+                        vec tr = ai[offset + k2], ti = -ar[offset + k2];
+                        vec ur = ar[offset + k1], ui = ai[offset + k1];
+                    }
+                    else
+                    {
+                        vec tmpr = ar[offset + k2], ti = ai[offset + k2];
+                        vec ur = ar[offset + k1], ui = ai[offset + k1];
+                        vec tr = tmpr*wr - ti*wi;
+                        ti = tmpr*wi + ti*wr;
+                    }
+                    ar[offset + k2] = ur - tr;
+                    ar[offset + k1] = ur + tr;
+                    ai[offset + k2] = ui - ti;
+                    ai[offset + k1] = ui + ti;
+                }
+            }
+        }
+
+        static if(!isScalar)
+        {
+            foreach(i; ints_up_to!(0, n, 2))
+                fractional_inner!false(
+                    ar[i], ai[i], ar[i + 1], ai[i + 1], table, i * 2);
+        
+            enum fastBR = is(typeof(BR.bit_reverse_static_size(ar)));
+            static if(fastBR)
+            {
+                BR.bit_reverse_static_size(ar);
+                BR.bit_reverse_static_size(ai);
+            }
+
+            foreach(i; ints_up_to!(n))
+            {
+                pr[i] = ar[i];
+                pi[i] = ai[i];
+            }
+
+            static if(!fastBR)
+                foreach(j; 0 .. 2)            
+                {
+                    auto sp = cast(T*) (j == 0 ? pr : pi);
+                    RepeatType!(T, n * vec_size) s;
+                    
+                    foreach(i; ints_up_to!(n * vec_size))
+                        s[i] = sp[i];
+                    foreach(i; ints_up_to!(n * vec_size))
+                        sp[i] = s[reverse_bits!(i, log2n_elem)];
+                }
+        }
+        else
+            foreach(i; ints_up_to!n)
+            {
+                pr[i] = ar[reverse_bits!(i, log2n)];
+                pi[i] = ai[reverse_bits!(i, log2n)];
+            }
     }
 
     auto v(T* p){ return cast(vec*) p; }
-
-    void fft_tiny()(T * re, T * im, int log2n, Table tables)
-    {
-        // assert(log2n > log2(vec_size));
-        
-        auto N = st!1 << log2n;
-        fft_passes!(true)(v(re), v(im), N / vec_size, 1, 
-            twiddle_table_ptr(tables, log2n));
-       
-        static if(!isScalar) 
-            fft_passes_fractional(
-                v(re), v(im), v(re) + N / vec_size,
-                twiddle_table_ptr(tables, log2n), 0);
-
-        bit_reverse_small_two!(log2(vec_size) + 1)(
-            re, im, log2n, br_table_ptr(tables, log2n));
-    }
 
     void fft_small()(T * re, T * im, int log2n, Table tables)
     {
@@ -940,8 +934,7 @@ template FFT(alias V, alias Options)
 
         profStart(Action.bit_reverse);
  
-        bit_reverse_small_two!(2 * log2(vec_size))(
-            re, im, log2n, br_table_ptr(tables, log2n));
+        bit_reverse_small_two(re, im, log2n, br_table_ptr(tables, log2n));
 
         profStopStart(Action.bit_reverse, Action.br_passes);
 
@@ -970,86 +963,28 @@ template FFT(alias V, alias Options)
         profStop(Action.bit_reverse);
     }
 
-    @noinline void fft()(T * re, T * im, int log2n, Table tables)
+    void fft()(T * re, T * im, int log2n, Table tables)
     {
-        foreach(i; ints_up_to!(log2(vec_size) + 1))
-            if(i == log2n)
-                return static_size_fft!i(re, im, twiddle_table_ptr(tables, i));
+        switch(log2n)
+        {
+            case 0: return;
 
-        if(log2n < 2 * log2(vec_size))
-            return fft_tiny(re, im, log2n, tables);
-        else if( log2n < Options.large_limit || disable_large)
+            foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
+                case i: return SFFT.static_size_fft!i(
+                    re, im, twiddle_table_ptr(tables, i));
+
+            foreach(i; ints_up_to!(log2(vec_size) + 1, 2 * log2(vec_size), 1))
+                case i: return static_size_fft!i(
+                    cast(vec*) re, cast(vec*) im, twiddle_table_ptr(tables, i));
+            
+            default:
+        }
+
+        if( log2n < Options.large_limit || disable_large)
             return fft_small(re, im, log2n, tables);
         else 
             static if(!disable_large)
                 fft_large(re, im, log2n, tables);
-    }
-
-    @always_inline void fft_transposed()(
-        T* re,
-        T* im,
-        int log2stride, 
-        int log2n,
-        int log2m,
-        Table tables,
-        TransposeBuffer buffer)
-    {
-        auto n = st!1 << log2n;
-        auto m = st!1 << log2m;
-        auto stride = st!1 << log2stride;
-        auto nbuf = Col.buffer_size(n, m);
-       
-        Col[2] col = void; 
-        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
-        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
-
-        foreach(_; 0 .. m)
-        {
-            foreach(i; 0 .. 2)
-                col[i].load();
-
-            fft(col[0].column, col[1].column, log2n, tables);
-
-            foreach(i; 0 .. 2)
-                col[i].save();
-        }
-    }
-
-    size_t transpose_buffer_size_bytes()(int[] log2n)
-    {
-        auto lnmax = int.min;
-        auto lmmax = int.min;
-        auto lm = 0;
-        foreach(i; 1 .. log2n.length)
-        {
-            lm += log2n[$ - i];
-            lmmax = lmmax > lm ? lmmax : lm;
-            lnmax = lnmax > log2n[$ - (i + 1)] ? lnmax : log2n[$ - (i + 1)];
-        }
-
-        return Col.buffer_size(st!1 << lnmax, st!1 << lmmax) * 2 * T.sizeof;
-    }
-
-    void multidim_fft()(
-        T* re,
-        T* im,
-        int[] log2n,
-        Table[] table, 
-        TransposeBuffer buf)
-    {
-        if(log2n.length == 1)
-            return fft(re, im, log2n[0], table[0]);
-
-        int log2m = 0;
-        foreach(e; log2n[1 .. $])
-            log2m += e;
-
-        fft_transposed(re, im, log2m, log2n[0], log2m, table[0], buf); 
-
-        auto m = st!1 << log2m;
-        foreach(i; 0 .. st!1 << log2n[0])
-            multidim_fft(
-                re + i * m, im + i * m, log2n[1 .. $], table[1 .. $], buf);
     }
 
     alias T* RTable;

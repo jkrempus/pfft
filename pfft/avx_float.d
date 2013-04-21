@@ -241,6 +241,21 @@ template Vector()
             return reverse128(v);
         }
     }
+
+    void bit_reverse_each(int elements_per_vector)(ref vec a0, ref vec a1)
+    {
+        static if(elements_per_vector == 4)
+        {
+            vec b0 = interleave128_lo(a0, a1);
+            vec b1 = interleave128_hi(a0, a1);
+            vec c0 = shufps!(1, 0, 1, 0)(b0, b1);
+            vec c1 = shufps!(3, 2, 3, 2)(b0, b1);
+            a0 = interleave128_lo(c0, c1);
+            a1 = interleave128_hi(c0, c1);
+        }
+        else
+            static assert(0);
+    }
 }
 
 template Options()
