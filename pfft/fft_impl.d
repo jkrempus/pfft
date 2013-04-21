@@ -271,6 +271,7 @@ template FFT(alias V, alias Options)
     }
 
     alias void* Table;
+    alias void* TransposeBuffer;
 
     size_t twiddle_table_size_bytes(int log2n)
     {
@@ -645,7 +646,7 @@ template FFT(alias V, alias Options)
         profStop(Action.passes_last);
     }
    
-    void fractional_inner(bool do_prefetch)(
+    @always_inline void fractional_inner(bool do_prefetch)(
         ref vec ar, ref vec ai, ref vec br, ref vec bi, T* table, size_t tableI)
     {
         foreach(i; ints_up_to!(log2(vec_size)))
@@ -986,6 +987,74 @@ template FFT(alias V, alias Options)
             static if(!disable_large)
                 fft_large(re, im, log2n, tables);
     }
+
+    @always_inline void fft_transposed()(
+        T* re,
+        T* im,
+        int log2stride, 
+        int log2n,
+        int log2m,
+        Table tables,
+        TransposeBuffer buffer)
+    {
+        auto n = st!1 << log2n;
+        auto m = st!1 << log2m;
+        auto stride = st!1 << log2stride;
+        auto nbuf = Col.buffer_size(n, m);
+       
+        Col[2] col = void; 
+        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
+        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
+
+        foreach(_; 0 .. m)
+        {
+            foreach(i; 0 .. 2)
+                col[i].load();
+
+            fft(col[0].column, col[1].column, log2n, tables);
+
+            foreach(i; 0 .. 2)
+                col[i].save();
+        }
+    }
+
+    size_t transpose_buffer_size_bytes()(int[] log2n)
+    {
+        auto lnmax = int.min;
+        auto lmmax = int.min;
+        auto lm = 0;
+        foreach(i; 1 .. log2n.length)
+        {
+            lm += log2n[$ - i];
+            lmmax = lmmax > lm ? lmmax : lm;
+            lnmax = lnmax > log2n[$ - (i + 1)] ? lnmax : log2n[$ - (i + 1)];
+        }
+
+        return Col.buffer_size(st!1 << lnmax, st!1 << lmmax) * 2 * T.sizeof;
+    }
+
+    void multidim_fft()(
+        T* re,
+        T* im,
+        int[] log2n,
+        Table[] table, 
+        TransposeBuffer buf)
+    {
+        if(log2n.length == 1)
+            return fft(re, im, log2n[0], table[0]);
+
+        int log2m = 0;
+        foreach(e; log2n[1 .. $])
+            log2m += e;
+
+        fft_transposed(re, im, log2m, log2n[0], log2m, table[0], buf); 
+
+        auto m = st!1 << log2m;
+        foreach(i; 0 .. st!1 << log2n[0])
+            multidim_fft(
+                re + i * m, im + i * m, log2n[1 .. $], table[1 .. $], buf);
+    }
+
 
     alias T* RTable;
  

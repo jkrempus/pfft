@@ -1,5 +1,8 @@
 module pfft.common;
 
+T max(T)(T a, T b){ return a > b ? a : b; }
+T min(T)(T a, T b){ return a < b ? a : b; }
+
 import core.bitop;
 
 alias bsr log2;
@@ -15,6 +18,18 @@ struct Tuple(A...)
 {
     A a;
     alias a this;
+}
+
+version(GNU)
+{
+    public import gcc.attribute;
+    enum noinline = attribute("noinline");
+    enum always_inline = attribute("always_inline");
+}
+else
+{
+    alias TypeTuple!() noinline;
+    alias TypeTuple!() always_inline;
 }
 
 void swap(T)(ref T a, ref T b)
