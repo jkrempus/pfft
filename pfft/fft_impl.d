@@ -928,9 +928,8 @@ template FFT(alias V, alias Options)
 
         profStart(Action.bit_reverse);
  
-        auto brtable = br_table_ptr(tables, log2n);
         foreach(i; 0 .. 2)
-            BR.bit_reverse_small(i ?  im : re, log2n, brtable); 
+            BR.bit_reverse_small(i ?  im : re, log2n); 
 
         profStopStart(Action.bit_reverse, Action.br_passes);
 

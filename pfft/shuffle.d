@@ -11,30 +11,43 @@ public import pfft.common;
 //nothrow:
 //pure:
 
-struct BitReversedPairs
+struct BitReversedPairs(int shift)
 {
-    int mask;
+    uint n;
     uint i1;
     uint i2;
 
-    @property front(){ return Tuple!(uint, uint)(i1, i2); }
+    @always_inline:
 
-    void popFront()
+    @property front()(){ return Tuple!(uint, uint)(i1, i2); }
+
+    void popFront()()
     {
-        i2 = mask ^ (i2 ^ (mask>>(bsf(i1)+1)));
-        --i1;
+        i1 += (1 << shift);
+        auto high = n;
+
+        high >>= 1; 
+        i2 ^= high;
+        if(i1 & (1 << shift)) return;
+
+        high >>= 1; 
+        i2 ^= high;
+        for(auto i = i1 >> 1; !(i & (1 << shift)); i >>= 1)
+        {
+            high >>= 1;
+            i2 ^= high;
+        }
     }
 
-    @property empty(){ return i1 == 0u - 1u; } 
+    @property empty()(){ return i1 == n; } 
 }
-    
-auto bit_reversed_pairs(int log2n)
-{
-    int mask = (0xffffffff<<(log2n));
-    uint i2 = ~mask; 
-    uint i1 = i2;
 
-    return BitReversedPairs(mask, i1, i2);
+@always_inline auto bit_reversed_pairs(int shift = 0)(int log2n)
+{
+    uint i2 = 0; 
+    uint i1 = 0;
+
+    return BitReversedPairs!shift(1 << (shift + log2n), i1, i2);
 }
 
 void bit_reverse_simple(T)(T* p, int log2n)
@@ -186,33 +199,61 @@ template BitReverse(alias V, alias Options)
             }
     }
    
-    @always_inline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+    @always_inline void bit_reverse_small()(T*  p, uint log2n)
     {
         alias BRChunks!(V, false) C;
 
-        uint tmp = log2n - C.log2l - C.log2l;
-        uint n1 = 1u << ((tmp + 1) >> 1);
-        uint n2 = 1u << tmp;
         uint m = 1u << (log2n - C.log2l);
       
-        uint* t1 = table + n1, t2 = table + n2;
+//        uint tmp = log2n - C.log2l - C.log2l;
+//        uint n1 = 1u << ((tmp + 1) >> 1);
+//        uint n2 = 1u << tmp;
+//        uint* t1 = table + n1, t2 = table + n2;
+//
+//        for(; table < t1; table++)
+//        {
+//            C.Chunks c;
+//            C.load(c, p + table[0], m);
+//            V.bit_reverse(c);
+//            C.save(c, p + table[0], m);
+//        }
+//        for(; table < t2; table += 2)
+//        {
+//            C.Chunks c0, c1;
+//            C.load(c0, p + table[0], m);
+//            V.bit_reverse(c0);
+//            C.load(c1, p + table[1], m);
+//            C.save(c0, p + table[1], m);
+//            V.bit_reverse(c1);
+//            C.save(c1, p + table[0], m);
+//        }
+//        foreach(i; bit_reversed_pairs(log2n - 2 * C.log2l))
+//            if(i[1] == i[0])
+//        foreach(i; bit_reversed_pairs((log2n - 2 * C.log2l) / 2))
+//        {
+//            C.Chunks c;
+//            C.load(c, p + (((i[0] << C.log2l) | i[1]) << C.log2l), m);
+//            V.bit_reverse(c);
+//            C.save(c, p + (((i[0] << C.log2l) | i[1]) << C.log2l), m);
+//        }
+        foreach(i; bit_reversed_pairs!(C.log2l)(log2n - 2 * C.log2l))
+        {
+            if(i[1] < i[0])
+                continue;
 
-        for(; table < t1; table++)
-        {
-            C.Chunks c;
-            C.load(c, p + table[0], m);
-            V.bit_reverse(c);
-            C.save(c, p + table[0], m);
-        }
-        for(; table < t2; table += 2)
-        {
             C.Chunks c0, c1;
-            C.load(c0, p + table[0], m);
+            C.load(c0, p + i[0], m);
             V.bit_reverse(c0);
-            C.load(c1, p + table[1], m);
-            C.save(c0, p + table[1], m);
-            V.bit_reverse(c1);
-            C.save(c1, p + table[0], m);
+            
+            if(i[1] == i[0])
+                C.save(c0, p + i[0], m);
+            else
+            {
+                C.load(c1, p + i[1], m);
+                C.save(c0, p + i[1], m);
+                V.bit_reverse(c1);
+                C.save(c1, p + i[0], m);
+            }
         }
     }
 
@@ -306,20 +347,20 @@ template BitReverse(alias V, alias Options)
         size_t m = 1<<log2m, n = 1<<log2n;
         T * pend = p + n;
        
-        foreach(i; bit_reversed_pairs(log2m - log2l))
+        foreach(i; bit_reversed_pairs!(log2l)(log2m - log2l))
             if(i[1] >= i[0])
             {
-                strided_copy!(l, true)(buffer, p + i[0] * l, l, m, l);
+                strided_copy!(l, true)(buffer, p + i[0], l, m, l);
          
                 for(int j = 0; ; j++)
                 { 
-                    bit_reverse_small(buffer,log2l+log2l, table);
+                    bit_reverse_small(buffer,log2l+log2l);
 
                     if(i[1] == i[0] || j == 1)
                         break;
 
                     for(
-                        T* pp = p + i[1] * l, pb = buffer;
+                        T* pp = p + i[1], pb = buffer;
                         pp < pend; 
                         pb += l, pp += m)
                     {
@@ -328,7 +369,7 @@ template BitReverse(alias V, alias Options)
                     }
                 }
 
-                strided_copy!(l, false)(p + i[0] * l, buffer, m, l, l);
+                strided_copy!(l, false)(p + i[0], buffer, m, l, l);
             }
     }
 }
