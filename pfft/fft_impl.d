@@ -820,13 +820,6 @@ template FFT(alias V, alias Options)
 
     }
   
-    void bit_reverse_small_two()
-    (T* re, T* im, int log2n, uint* brTable)
-    {
-        foreach(i; 0 .. 2)
-            BR.bit_reverse_small(i ?  im : re, log2n, brTable); 
-    }
-
     void static_size_fft(int log2n_elem)(vec* pr, vec* pi, T* table)
     {
         enum log2n = log2n_elem - log2(vec_size);  
@@ -935,7 +928,9 @@ template FFT(alias V, alias Options)
 
         profStart(Action.bit_reverse);
  
-        bit_reverse_small_two(re, im, log2n, br_table_ptr(tables, log2n));
+        auto brtable = br_table_ptr(tables, log2n);
+        foreach(i; 0 .. 2)
+            BR.bit_reverse_small(i ?  im : re, log2n, brtable); 
 
         profStopStart(Action.bit_reverse, Action.br_passes);
 
@@ -964,7 +959,7 @@ template FFT(alias V, alias Options)
         profStop(Action.bit_reverse);
     }
 
-    void fft()(T * re, T * im, int log2n, Table tables)
+    @noinline void fft()(T * re, T * im, int log2n, Table tables)
     {
         switch(log2n)
         {
@@ -1324,11 +1319,6 @@ mixin template Instantiate()
     alias FFTs[0] FFT0;
     alias FFT0.T T;
 
-    void fft(T* re, T* im, uint log2n, Table t)
-    {
-        selected!"fft"(re, im, log2n, cast(FFT0.Table) t);
-    }
-
     Table fft_table(uint log2n, void* p = null)
     {
         return selected!("fft_table", Table)(log2n, p);
@@ -1413,20 +1403,6 @@ mixin template Instantiate()
     size_t transpose_buffer_size_bytes(int[] log2n)
     {
         return selected!"transpose_buffer_size_bytes"(log2n);
-    }
-
-    void fft_transposed(
-        T* re,
-        T* im,
-        int log2stride, 
-        int log2n,
-        int log2m,
-        Table tables,
-        TransposeBuffer buffer)
-    {
-        selected!"fft_transposed"(
-            re, im, log2stride, log2n, log2m,
-            cast(FFT0.Table) tables, cast(FFT0.TransposeBuffer) buffer);
     }
 
     void multidim_fft(

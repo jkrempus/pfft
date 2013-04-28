@@ -186,7 +186,7 @@ template BitReverse(alias V, alias Options)
             }
     }
    
-    @noinline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+    @always_inline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         alias BRChunks!(V, false) C;
 

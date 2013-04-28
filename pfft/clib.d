@@ -145,12 +145,16 @@ private template code(string type, string suffix, string Suffix)
 
         void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
         {
-            impl_`~type~`.fft(re, im, cast(uint) table.log2n, table.p);
+            auto log2n = cast(int) table.log2n;
+            impl_`~type~`.multidim_fft(
+                re, im, (&log2n)[0 .. 1], (&table.p)[0 .. 1], null);
         }
 
         void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
         {
-            impl_`~type~`.fft(im, re, cast(uint) table.log2n, table.p);
+            auto log2n = cast(int) table.log2n;
+            impl_`~type~`.multidim_fft(
+                im, re, (&log2n)[0 .. 1], (&table.p)[0 .. 1], null);
         }
 
         align(1) struct PfftRTable`~Suffix~`

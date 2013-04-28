@@ -112,7 +112,8 @@ operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
         assert(re.length == im.length); 
         assert(re.length == (st!1 << log2n));
         
-        impl.fft(re.ptr, im.ptr, log2n, table);
+        impl.multidim_fft(
+            re.ptr, im.ptr, (&log2n)[0 .. 1], (&table)[0 .. 1], null);
     }
 
 /**
