@@ -50,6 +50,32 @@ struct BitReversedPairs(int shift)
     return BitReversedPairs!shift(1 << (shift + log2n), i1, i2);
 }
 
+@always_inline auto bit_reversed_ordered_pairs(
+    alias f, int shift, int maxlog2n = 16, Args...)(
+    int log2n, Args args)
+{
+    auto low_bits = log2n / 2;
+    auto low_mask = ((1 << low_bits) - 1);
+    auto high_shift = (log2n + 1) / 2 + shift;
+
+    uint[1 << (maxlog2n / 2)] br = void;
+    
+    foreach(i; bit_reversed_pairs(low_bits))
+        br[i[0]] = i[1] << shift;
+
+    foreach(uint i; 0 .. 1 << (high_shift - shift))
+    {
+        auto i0_low = i << shift;
+        auto i0_low_br = br[i & low_mask];
+        auto i1_high = 
+            (i0_low_br << (high_shift - shift)) | 
+            ((i & ~low_mask) << shift);
+
+        foreach(uint j; 0 .. i0_low_br >> shift)
+            f((j << high_shift) | i0_low, i1_high | br[j], args);
+    }
+}
+
 void bit_reverse_simple(T)(T* p, int log2n)
 {
     foreach(i0, i1; bit_reversed_pairs(log2n))
@@ -236,24 +262,49 @@ template BitReverse(alias V, alias Options)
 //            V.bit_reverse(c);
 //            C.save(c, p + (((i[0] << C.log2l) | i[1]) << C.log2l), m);
 //        }
-        foreach(i; bit_reversed_pairs!(C.log2l)(log2n - 2 * C.log2l))
+        
+        
+//        foreach(i; bit_reversed_pairs!(C.log2l)(log2n - 2 * C.log2l))
+//        {
+//            if(i[1] < i[0])
+//                continue;
+//
+//            C.Chunks c0, c1;
+//            C.load(c0, p + i[0], m);
+//            V.bit_reverse(c0);
+//            
+//            if(i[1] == i[0])
+//                C.save(c0, p + i[0], m);
+//            else
+//            {
+//                C.load(c1, p + i[1], m);
+//                C.save(c0, p + i[1], m);
+//                V.bit_reverse(c1);
+//                C.save(c1, p + i[0], m);
+//            }
+//        }
+        
+        static @always_inline loop(uint i0, uint i1, T* p, uint m)
         {
-            if(i[1] < i[0])
-                continue;
-
             C.Chunks c0, c1;
-            C.load(c0, p + i[0], m);
+            C.load(c0, p + i0, m);
             V.bit_reverse(c0);
-            
-            if(i[1] == i[0])
-                C.save(c0, p + i[0], m);
-            else
-            {
-                C.load(c1, p + i[1], m);
-                C.save(c0, p + i[1], m);
-                V.bit_reverse(c1);
-                C.save(c1, p + i[0], m);
-            }
+            C.load(c1, p + i1, m);
+            C.save(c0, p + i1, m);
+            V.bit_reverse(c1);
+            C.save(c1, p + i0, m);
+        }
+        bit_reversed_ordered_pairs!(loop, C.log2l)(log2n - 2 * C.log2l, p, m);
+       
+        auto log2k = log2n - 2 * C.log2l;
+        auto low_bits = log2k / 2;
+        foreach(i; bit_reversed_pairs!(C.log2l)((log2k + 1) / 2))
+        {
+            auto ii = i[0] | (i[1] << low_bits); 
+            C.Chunks c;
+            C.load(c, p + ii, m);
+            V.bit_reverse(c);
+            C.save(c, p + ii, m);
         }
     }
 
