@@ -243,11 +243,9 @@ if(transfer == Transfer.fft)
     d.Table[] tables;
     d.TransposeBuffer tbuf;
     int log2n;
-    int[] log2ns;
     
     this(int[] log2ns)
     {
-        this.log2ns = log2ns;
         log2n = log2ns.reduce!sum;
         _re = gc_aligned_array!T(1 << log2n);
         _im = gc_aligned_array!T(1 << log2n);
@@ -256,15 +254,15 @@ if(transfer == Transfer.fft)
         tbuf = cast(d.TransposeBuffer) GC.malloc(d.transpose_buffer_size_bytes(log2ns));
         tables = new d.Table[](log2ns.length);
         foreach(i, e; log2ns)
-            tables[i] = d.fft_table(e, GC.malloc(d.table_size_bytes(e))); 
+            tables[i] = d.fft_table(e, GC.malloc(d.fft_table_size_bytes(e))); 
     }
     
     void compute()
     {
         static if(isInverse)
-            d.multidim_fft(_im.ptr, _re.ptr, log2ns, tables, tbuf);
+            d.multidim_fft(_im.ptr, _re.ptr, tables, tbuf);
         else 
-            d.multidim_fft(_re.ptr, _im.ptr, log2ns, tables, tbuf); 
+            d.multidim_fft(_re.ptr, _im.ptr, tables, tbuf); 
     }
 
     mixin splitElementAccess!();
@@ -292,21 +290,21 @@ if(transfer == Transfer.rfft)
     
         this.log2n = log2n;
         itable = d.interleave_table(log2n, GC.malloc(d.itable_size_bytes(log2n))); 
-        rtable = d.rfft_table(log2n, GC.malloc(d.table_size_bytes(log2n))); 
-        table = d.fft_table(log2n - 1, GC.malloc(d.table_size_bytes(log2n - 1)));
+        rtable = d.rfft_table(log2n, GC.malloc(d.fft_table_size_bytes(log2n)));
+        table = d.fft_table(log2n - 1, GC.malloc(d.fft_table_size_bytes(log2n - 1)));
     }
     
     void compute()
     {
         static if(isInverse)
         {
-            d.irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
+            d.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
             d.interleave(data.ptr, log2n, itable);    
         }
         else
         {
             d.deinterleave(data.ptr, log2n, itable);    
-            d.rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, table, rtable); 
+            d.rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
         }
     }
     

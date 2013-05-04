@@ -198,7 +198,7 @@ struct Cached
         auto e = entry!T(log2n);
         if(!e.table)
         {
-            auto mem = GC.malloc(impl!(T).table_size_bytes(log2n));
+            auto mem = GC.malloc(impl!(T).fft_table_size_bytes(log2n));
             e.table = cast(void*) impl!(T).fft_table(log2n, mem);
         }
         
@@ -324,12 +324,12 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         static if(inverse)
         {
-            impl!(T).multidim_fft(im, re, (&log2n)[0 .. 1], (&table)[0 .. 1], null);
+            impl!(T).multidim_fft(im, re, (&table)[0 .. 1], null);
             impl!(T).scale(re, n, cast(T) 1 / n);
             impl!(T).scale(im, n, cast(T) 1 / n);
         }
         else
-            impl!(T).multidim_fft(re, im, (&log2n)[0 .. 1], (&table)[0 .. 1], null);
+            impl!(T).multidim_fft(re, im, (&table)[0 .. 1], null);
 
         interleave_array(log2n, ret, re, im);
     }
@@ -365,7 +365,7 @@ have the same number of elements and that number must be a power of two.
         auto rtable = cached.rtable!T(log2n + 1);
 
         deinterleave_array(log2n, r, re, im);
-        impl!(T).rfft(re, im, log2n + 1, table, rtable);
+        impl!(T).rfft(re, im, table, rtable);
         interleave_array(log2n, ret, re, im);
 
         ret[n] = complex(ret[0].im, 0);

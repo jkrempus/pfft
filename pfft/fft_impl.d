@@ -124,8 +124,6 @@ template FFT(alias V, alias Options)
     else
         static assert(0);
 
-    template st(alias a){ enum st = cast(size_t) a; }
-
     alias Tuple!(T,T) Pair;
    
     void complex_array_to_vector()(Pair * pairs, size_t n)
@@ -270,7 +268,15 @@ template FFT(alias V, alias Options)
         }
     }
 
-    alias void* Table;
+    struct TableValue
+    {
+        T* twiddle;
+        void* buffer; 
+        uint* br;
+        uint log2n;
+    }
+
+    alias TableValue* Table;
     alias void* TransposeBuffer;
 
     size_t twiddle_table_size_bytes(int log2n)
@@ -281,11 +287,6 @@ template FFT(alias V, alias Options)
         return Pair.sizeof << (compact ? log2n - 1 : log2n); 
     }
  
-    T* twiddle_table_ptr(void* p, int log2n)
-    { 
-        return cast(T*)p;
-    }
-    
     size_t tmp_buffer_size_bytes(int log2n)
     {
         enum rec = vec.sizeof << (
@@ -296,55 +297,50 @@ template FFT(alias V, alias Options)
 
         return 
             disable_large || log2n < Options.large_limit ? 0 :
-            rec > br ? rec : br;
-    }
-
-    void* tmp_buffer_ptr(void* p, int log2n)
-    {
-        return p + twiddle_table_size_bytes(log2n);
+            rec > br ? rec : 
+            br;
     }
  
-    uint* br_table_ptr(void* p, int log2n)
+    uint br_table_log2n()(uint log2n)
     {
-        return cast(uint*)(
-            p + twiddle_table_size_bytes(log2n) + 
-            tmp_buffer_size_bytes(log2n));
-    }
-    
-    size_t table_size_bytes()(uint log2n)
-    {
-        uint log2nbr = log2n < Options.large_limit ? 
+        return disable_large || log2n < Options.large_limit ? 
             log2n : 2 * Options.log2_bitreverse_large_chunk_size;
-        
+    }
+
+    // TODO: make sure all sizes are aligned at least to pointer size 
+    size_t fft_table_size_bytes()(uint log2n)
+    {
         return 
             twiddle_table_size_bytes(log2n) + 
             tmp_buffer_size_bytes(log2n) + 
-            BR.br_table_size(log2nbr) * uint.sizeof;
+            BR.table_size_bytes(br_table_log2n(log2n)) +
+            TableValue.sizeof;
     }
+
     
-    Table fft_table()(int log2n, void * p)
+    Table fft_table()(uint log2n, void * p)
     {   
-        if(log2n == 0)
-            return p;
-       
-        Table tables = p;
+        auto twiddle = p;
+        auto buf = twiddle + twiddle_table_size_bytes(log2n);
+        auto br = buf + tmp_buffer_size_bytes(log2n);
         
-        twiddle_table(log2n, cast(Pair *)(twiddle_table_ptr(tables, log2n)));
+        auto r = cast(Table)(br + BR.table_size_bytes(br_table_log2n(log2n)));
+        *r = TableValue(cast(T*) twiddle, buf, cast(uint*) br, log2n);
+
+        if(log2n > 0)
+        { 
+            twiddle_table(log2n, cast(Pair *) r.twiddle);
+            
+            if(log2n >= V.log2_bitreverse_chunk_size * 2)
+                BR.init_table(br_table_log2n(log2n), r.br);
+        }
         
-        if(log2n < V.log2_bitreverse_chunk_size * 2)
-        {
-        }
-        else if(log2n < Options.large_limit)
-        {
-            BR.init_br_table(br_table_ptr(tables, log2n), log2n);
-        }
-        else
-        {
-            enum log2size = 2*Options.log2_bitreverse_large_chunk_size;
-            BR.init_br_table(br_table_ptr(tables, log2n), log2size);
-        }
-        return tables;
+        return r;
     }
+
+    uint fft_table_log2n(Table table){ return table.log2n; }
+
+    void* fft_table_memory(Table table){ return cast(void*) table.twiddle; }
 
     /*static void two_passes_inner(
         vec* pr, vec* pi, size_t k0, size_t k1, size_t k2, size_t k3,
@@ -914,7 +910,7 @@ template FFT(alias V, alias Options)
 
     auto v(T* p){ return cast(vec*) p; }
 
-    void fft_small()(T * re, T * im, int log2n, Table tables)
+    void fft_small()(T * re, T * im, uint log2n, Table table)
     {
         // assert(log2n >= 2*log2(vec_size));
 
@@ -924,63 +920,63 @@ template FFT(alias V, alias Options)
         fft_passes!false(
             v(re), v(im), N / vec_size, 
             1 << (n_br - log2(vec_size)),
-            twiddle_table_ptr(tables, log2n) + 2);
+            table.twiddle + 2);
 
         profStart(Action.bit_reverse);
  
-        auto brtable = br_table_ptr(tables, log2n);
         foreach(i; 0 .. 2)
-            BR.bit_reverse_small(i ?  im : re, log2n, brtable); 
+            BR.bit_reverse_small(i ? im : re, log2n, table.br); 
 
         profStopStart(Action.bit_reverse, Action.br_passes);
 
         static if(vec_size > 1) 
             fft_passes_bit_reversed(
                 v(re), v(im) , N / vec_size, 
-                cast(vec*) twiddle_table_ptr(tables, log2n), 
+                cast(vec*) table.twiddle, 
                 (N / vec_size) >> n_br);
 
         profStop(Action.br_passes);
     }
 
-    void fft_large()(T * re, T * im, int log2n, Table tables)
+    void fft_large()(T * re, T * im, uint log2n, Table table)
     {
         size_t N = (1<<log2n);
-        auto tmp_buf = tmp_buffer_ptr(tables, log2n);
  
         fft_passes_recursive(
-            v(re), v(im), N / vec_size, 
-            twiddle_table_ptr(tables, log2n), 0, tmp_buf);
+            v(re), v(im), N / vec_size, table.twiddle, 0, table.buffer);
 
         profStart(Action.bit_reverse);
-        BR.bit_reverse_large(re, log2n, br_table_ptr(tables, log2n), tmp_buf); 
-        BR.bit_reverse_large(im, log2n, br_table_ptr(tables, log2n), tmp_buf); 
+        BR.bit_reverse_large(re, log2n, table.br, table.buffer); 
+        BR.bit_reverse_large(im, log2n, table.br, table.buffer); 
         
         profStop(Action.bit_reverse);
     }
 
-    @noinline void fft()(T * re, T * im, int log2n, Table tables)
+    @noinline void fft()(T * re, T * im, Table table)
     {
+        uint log2n = table.log2n;
         switch(log2n)
         {
             case 0: return;
 
             foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
-                case i: return SFFT.static_size_fft!i(
-                    re, im, twiddle_table_ptr(tables, i));
+                case i: return SFFT.static_size_fft!i(re, im, table.twiddle);
 
-            foreach(i; ints_up_to!(log2(vec_size) + 1, 2 * log2(vec_size), 1))
+            enum static_size_limit = 
+                2 * max(log2(vec_size), V.log2_bitreverse_chunk_size);
+
+            foreach(i; ints_up_to!(log2(vec_size) + 1, static_size_limit, 1))
                 case i: return static_size_fft!i(
-                    cast(vec*) re, cast(vec*) im, twiddle_table_ptr(tables, i));
+                    cast(vec*) re, cast(vec*) im, table.twiddle);
             
             default:
         }
 
         if( log2n < Options.large_limit || disable_large)
-            return fft_small(re, im, log2n, tables);
+            return fft_small(re, im, log2n, table);
         else 
             static if(!disable_large)
-                fft_large(re, im, log2n, tables);
+                fft_large(re, im, log2n, table);
     }
 
     @always_inline void fft_transposed()(
@@ -989,7 +985,7 @@ template FFT(alias V, alias Options)
         int log2stride, 
         int log2n,
         int log2m,
-        Table tables,
+        Table table,
         TransposeBuffer buffer)
     {
         auto n = st!1 << log2n;
@@ -1006,7 +1002,7 @@ template FFT(alias V, alias Options)
             foreach(i; 0 .. 2)
                 col[i].load();
 
-            fft(col[0].column, col[1].column, log2n, tables);
+            fft(col[0].column, col[1].column, table);
 
             foreach(i; 0 .. 2)
                 col[i].save();
@@ -1031,23 +1027,22 @@ template FFT(alias V, alias Options)
     void multidim_fft()(
         T* re,
         T* im,
-        int[] log2n,
         Table[] table, 
         TransposeBuffer buf)
     {
-        if(log2n.length == 1)
-            return fft(re, im, log2n[0], table[0]);
+        if(table.length == 1)
+            return fft(re, im, table[0]);
 
         int log2m = 0;
-        foreach(e; log2n[1 .. $])
-            log2m += e;
+        foreach(e; table[1 .. $])
+            log2m += e.log2n;
 
-        fft_transposed(re, im, log2m, log2n[0], log2m, table[0], buf); 
+        fft_transposed(re, im, log2m, table[0].log2n, log2m, table[0], buf); 
 
         auto m = st!1 << log2m;
-        foreach(i; 0 .. st!1 << log2n[0])
+        foreach(i; 0 .. st!1 << table[0].log2n)
             multidim_fft(
-                re + i * m, im + i * m, log2n[1 .. $], table[1 .. $], buf);
+                re + i * m, im + i * m, table[1 .. $], buf);
     }
 
 
@@ -1091,9 +1086,9 @@ template FFT(alias V, alias Options)
         return SFFT.rfft_table(log2n, p);
     }
 
-    void rfft()(
-        T* rr, T* ri, int log2n, Table table, RTable rtable) 
+    void rfft()( T* rr, T* ri, Table table, RTable rtable) 
     {
+        auto log2n = table.log2n + 1;
         if(log2n == 0)
             return;
         else if(log2n == 1)
@@ -1104,13 +1099,14 @@ template FFT(alias V, alias Options)
             return;
         }
 
-        fft(rr, ri, log2n - 1, table);
+        fft(rr, ri, table);
         rfft_last_pass!false(rr, ri, log2n, rtable);
     }
 
     void irfft()(
-        T* rr, T* ri, int log2n, Table table, RTable rtable) 
+        T* rr, T* ri, Table table, RTable rtable) 
     {
+        auto log2n = table.log2n + 1;
         if(log2n == 0)
             return;
         else if(log2n == 1)
@@ -1125,7 +1121,7 @@ template FFT(alias V, alias Options)
         }
 
         rfft_last_pass!true(rr, ri, log2n, rtable);
-        fft(ri, rr, log2n - 1, table);
+        fft(ri, rr, table);
     }
 
     void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
@@ -1323,10 +1319,20 @@ mixin template Instantiate()
     {
         return selected!("fft_table", Table)(log2n, p);
     }
+    
+    void* fft_table_memory(Table table)
+    { 
+        return selected!("fft_table_memory", Table)(table);
+    }
 
-    size_t table_size_bytes(uint log2n)
+    size_t fft_table_size_bytes(uint log2n)
     {
-        return selected!"table_size_bytes"(log2n);
+        return selected!"fft_table_size_bytes"(log2n);
+    }
+    
+    uint fft_table_log2n(Table table)
+    {
+        return selected!"fft_table_log2n"(table);
     }
 
     /*void cmul(T* dr, T* di, T* sr, T* si, size_t n)
@@ -1344,14 +1350,14 @@ mixin template Instantiate()
         return selected!"alignment"(n);
     }
 
-    void rfft(T* re, T* im, uint log2n, Table t, RTable rt)
+    void rfft(T* re, T* im, Table t, RTable rt)
     {
-        selected!"rfft"(re, im, log2n, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
+        selected!"rfft"(re, im, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
     }
 
-    void irfft(T* re, T* im, uint log2n, Table t, RTable rt)
+    void irfft(T* re, T* im, Table t, RTable rt)
     {
-        selected!"irfft"(re, im, log2n, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
+        selected!"irfft"(re, im, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
     }
 
     RTable rfft_table(uint log2n, void* p = null)
@@ -1408,12 +1414,10 @@ mixin template Instantiate()
     void multidim_fft(
         T* re,
         T* im,
-        int[] log2n,
         Table[] table, 
         TransposeBuffer buf)
     {
         selected!"multidim_fft"(
-            re, im, log2n,
-            cast(FFT0.Table[]) table, cast(FFT0.TransposeBuffer) buf);
+            re, im, cast(FFT0.Table[]) table, cast(FFT0.TransposeBuffer) buf);
     }
 }

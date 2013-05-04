@@ -7,7 +7,9 @@ mixin template Instantiate()
 
     void fft(T* re, T* im, uint log2n, Table t);
     Table fft_table(uint log2n, void* p = null);
-    size_t table_size_bytes(uint log2n);
+    void* fft_table_memory(Table table);
+    uint fft_table_log2n(Table table);
+    size_t fft_table_size_bytes(uint log2n);
 
     struct RTableValue{};
     alias RTableValue* RTable;
@@ -15,8 +17,8 @@ mixin template Instantiate()
     struct TransposeBufferValue{};
     alias TransposeBufferValue* TransposeBuffer;
 
-    void rfft(T* re, T* im, uint log2n, Table t, RTable rt);
-    void irfft(T* re, T* im, uint log2n, Table t, RTable rt);
+    void rfft(T* re, T* im, Table t, RTable rt);
+    void irfft(T* re, T* im, Table t, RTable rt);
     RTable rfft_table(uint log2n, void* p = null);
     size_t rtable_size_bytes(int log2n);
 
@@ -50,7 +52,6 @@ mixin template Instantiate()
     void multidim_fft(
         T* re,
         T* im,
-        int[] log2n,
         Table[] table, 
         TransposeBuffer buf);
 }

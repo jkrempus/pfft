@@ -98,7 +98,7 @@ constructor.
     {
         assert((n & (n - 1)) == 0);
         log2n  = bsf(n);
-        auto mem = GC.malloc( impl.table_size_bytes(log2n));
+        auto mem = GC.malloc( impl.fft_table_size_bytes(log2n));
         table = impl.fft_table(log2n, mem);
     }
 
@@ -112,8 +112,7 @@ operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
         assert(re.length == im.length); 
         assert(re.length == (st!1 << log2n));
         
-        impl.multidim_fft(
-            re.ptr, im.ptr, (&log2n)[0 .. 1], (&table)[0 .. 1], null);
+        impl.multidim_fft(re.ptr, im.ptr, (&table)[0 .. 1], null);
     }
 
 /**
@@ -223,7 +222,7 @@ The length of the array must be equal to n.
         assert(data.length == (st!1 << log2n));
         
         impl.deinterleave(data.ptr, log2n, itable);
-        impl.rfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
+        impl.rfft(data.ptr, data[$ / 2 .. $].ptr, _complex.table, rtable);
     }
 
 /**
@@ -242,7 +241,7 @@ The length of the array must be equal to n.
     {
         assert(data.length == (st!1 << log2n));
      
-        impl.irfft(data.ptr, data[$ / 2 .. $].ptr, log2n, _complex.table, rtable);
+        impl.irfft(data.ptr, data[$ / 2 .. $].ptr, _complex.table, rtable);
         impl.interleave(data.ptr, log2n, itable);
     }
 
