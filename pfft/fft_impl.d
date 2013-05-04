@@ -278,22 +278,22 @@ template FFT(alias V, alias Options)
 
     alias TableValue* Table;
     alias void* TransposeBuffer;
-
-    size_t twiddle_table_size_bytes(int log2n)
+    
+    size_t twiddle_table_size()(int log2n)
     {
         auto compact = log2n >= Options.large_limit || 
             log2n < 2 * log2(vec_size);
 
-        return Pair.sizeof << (compact ? log2n - 1 : log2n); 
+        return st!2 << (compact ? log2n - 1 : log2n); 
     }
  
-    size_t tmp_buffer_size_bytes(int log2n)
+    size_t tmp_buffer_size()(int log2n)
     {
         enum rec = vec.sizeof << (
             Options.log2_recursive_passes_chunk_size + 
             Options.passes_per_recursive_call + 1);
 
-        auto br = BR.tmp_buffer_size_bytes(log2n);
+        auto br = BR.tmp_buffer_size(log2n) * T.sizeof;
 
         return 
             disable_large || log2n < Options.large_limit ? 0 :
@@ -307,35 +307,45 @@ template FFT(alias V, alias Options)
             log2n : 2 * Options.log2_bitreverse_large_chunk_size;
     }
 
-    // TODO: make sure all sizes are aligned at least to pointer size 
-    size_t fft_table_size_bytes()(uint log2n)
+    void fft_table_add_pointers(
+        Table table, Table* table_ptr, Allocate!4* alloc, uint log2n)
     {
-        return 
-            twiddle_table_size_bytes(log2n) + 
-            tmp_buffer_size_bytes(log2n) + 
-            BR.table_size_bytes(br_table_log2n(log2n)) +
-            TableValue.sizeof;
+        alloc.add(&table.twiddle, twiddle_table_size(log2n));
+        alloc.add(&table.buffer, tmp_buffer_size(log2n));
+        alloc.add(&table.br, BR.table_size(br_table_log2n(log2n)));
+        alloc.add(table_ptr, 1);
     }
 
-    
+    size_t fft_table_size_bytes()(uint log2n)
+    {
+        Allocate!4 alloc = void; alloc.initialize();
+        TableValue tv;
+        fft_table_add_pointers(&tv, null, &alloc, log2n);
+        return alloc.size(); 
+    }
+  
+    void init_fft_table(uint log2n, Table t)
+    {
+        t.log2n = log2n;
+        if(log2n > 0)
+        {
+            twiddle_table(log2n, cast(Pair *) t.twiddle);
+
+            if(log2n >= V.log2_bitreverse_chunk_size * 2)
+                BR.init_table(br_table_log2n(log2n), t.br);
+        }
+    }
+
     Table fft_table()(uint log2n, void * p)
     {   
-        auto twiddle = p;
-        auto buf = twiddle + twiddle_table_size_bytes(log2n);
-        auto br = buf + tmp_buffer_size_bytes(log2n);
-        
-        auto r = cast(Table)(br + BR.table_size_bytes(br_table_log2n(log2n)));
-        *r = TableValue(cast(T*) twiddle, buf, cast(uint*) br, log2n);
-
-        if(log2n > 0)
-        { 
-            twiddle_table(log2n, cast(Pair *) r.twiddle);
-            
-            if(log2n >= V.log2_bitreverse_chunk_size * 2)
-                BR.init_table(br_table_log2n(log2n), r.br);
-        }
-        
-        return r;
+        Allocate!4 alloc = void; alloc.initialize();
+        TableValue tv;
+        Table t;
+        fft_table_add_pointers(&tv, &t, &alloc, log2n);
+        alloc.allocate(p);
+        *t = tv;
+        init_fft_table(log2n, t); 
+        return t;
     }
 
     uint fft_table_log2n(Table table){ return table.log2n; }
@@ -979,6 +989,98 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, table);
     }
 
+    size_t transpose_buffer_size_bytes()(uint[] log2n)
+    {
+        auto lnmax = int.min;
+        auto lmmax = int.min;
+        auto lm = 0;
+        foreach(i; 1 .. log2n.length)
+        {
+            lm += log2n[$ - i];
+            lmmax = lmmax > lm ? lmmax : lm;
+            lnmax = lnmax > log2n[$ - (i + 1)] ? lnmax : log2n[$ - (i + 1)];
+        }
+
+        return Col.buffer_size(st!1 << lnmax, st!1 << lmmax) * 2 * T.sizeof;
+    }
+
+    struct MultidimTableValue
+    {
+        TableValue[] tables;
+        TransposeBuffer buffer;
+    }
+
+    alias MultidimTableValue* MultidimTable;
+
+    template MultidimTableImpl()
+    {
+        enum max_distinct_sizes = 10;
+        alias Allocate!(3 * max_distinct_sizes + 3) Alloc;
+        alias TableValue[8 * size_t.sizeof] TableMap; 
+
+        void add_pointers()(
+            TableMap* table_map,
+            Table* tables,
+            MultidimTable* mt,
+            TransposeBuffer* buf,
+            Alloc* alloc,
+            uint[] log2n)
+        {
+            size_t already_added = 0;
+            size_t n_sizes = 0;
+            foreach(i; log2n)
+            {
+                auto ith_bit = st!1 << i;
+                if((ith_bit & already_added) == 0)
+                {
+                    already_added |= ith_bit;
+                    alloc.add(&(*table_map)[i].twiddle, twiddle_table_size(i));
+                    alloc.add(&(*table_map)[i].buffer, tmp_buffer_size(i));
+                    alloc.add(&(*table_map)[i].br, BR.table_size(br_table_log2n(i)));
+                }
+            }
+
+            alloc.add(buf, transpose_buffer_size_bytes(log2n));
+            alloc.add(tables, log2n.length);
+            alloc.add(mt, 1);
+        }
+
+        size_t size(uint[] log2n)
+        {
+            Alloc alloc = void; alloc.initialize();
+            TableMap table_map;
+            Table tables;
+            MultidimTable mt;
+            TransposeBuffer buf;
+            add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
+            return alloc.size();
+        }
+
+        MultidimTable table(uint[] log2n, void* ptr)
+        {
+            Alloc alloc = void; alloc.initialize();
+            TableMap table_map;
+            Table tables;
+            MultidimTable mt;
+            TransposeBuffer buf;
+            add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
+            alloc.allocate(ptr);
+
+            foreach(i; 0 .. log2n.length)
+            {
+                tables[i] = table_map[log2n[i]];
+                init_fft_table(log2n[i], tables + i);
+            }
+
+            mt.tables = tables[0 .. log2n.length];
+            mt.buffer = buf;
+            return mt;
+        }
+    }
+
+    alias MultidimTableImpl!().table multidim_fft_table;
+    alias MultidimTableImpl!().size multidim_fft_table_size_bytes;
+
     @always_inline void fft_transposed()(
         T* re,
         T* im,
@@ -1009,35 +1111,16 @@ template FFT(alias V, alias Options)
         }
     }
 
-    size_t transpose_buffer_size_bytes()(int[] log2n)
-    {
-        auto lnmax = int.min;
-        auto lmmax = int.min;
-        auto lm = 0;
-        foreach(i; 1 .. log2n.length)
-        {
-            lm += log2n[$ - i];
-            lmmax = lmmax > lm ? lmmax : lm;
-            lnmax = lnmax > log2n[$ - (i + 1)] ? lnmax : log2n[$ - (i + 1)];
-        }
-
-        return Col.buffer_size(st!1 << lnmax, st!1 << lmmax) * 2 * T.sizeof;
-    }
-
-    void multidim_fft()(
-        T* re,
-        T* im,
-        Table[] table, 
-        TransposeBuffer buf)
+    void multidim_fft()( T* re, T* im, TableValue[] table, TransposeBuffer buf)
     {
         if(table.length == 1)
-            return fft(re, im, table[0]);
+            return fft(re, im, &table[0]);
 
         int log2m = 0;
         foreach(e; table[1 .. $])
             log2m += e.log2n;
 
-        fft_transposed(re, im, log2m, table[0].log2n, log2m, table[0], buf); 
+        fft_transposed(re, im, log2m, table[0].log2n, log2m, &table[0], buf); 
 
         auto m = st!1 << log2m;
         foreach(i; 0 .. st!1 << table[0].log2n)
@@ -1045,6 +1128,10 @@ template FFT(alias V, alias Options)
                 re + i * m, im + i * m, table[1 .. $], buf);
     }
 
+    void multidim_fft2()(T* re, T* im, MultidimTable table)
+    {
+        multidim_fft(re, im, table.tables, table.buffer);
+    }
 
     alias T* RTable;
  
@@ -1274,6 +1361,9 @@ mixin template Instantiate()
     struct TableValue{};
     alias TableValue* Table;
 
+    struct MultidimTableValue{};
+    alias MultidimTableValue* MultidimTable;
+
     struct RTableValue{};
     alias RTableValue* RTable;
     
@@ -1406,18 +1496,29 @@ mixin template Instantiate()
             implementation.set(i);
     }
     
-    size_t transpose_buffer_size_bytes(int[] log2n)
+    size_t transpose_buffer_size_bytes(uint[] log2n)
     {
         return selected!"transpose_buffer_size_bytes"(log2n);
     }
 
-    void multidim_fft(
-        T* re,
-        T* im,
-        Table[] table, 
-        TransposeBuffer buf)
+    size_t multidim_fft_table_size_bytes(uint[] log2n)
+    {
+        return selected!"multidim_fft_table_size_bytes"(log2n); 
+    }
+
+    MultidimTable multidim_fft_table(uint[] log2n, void* ptr)
+    {
+        return selected!("multidim_fft_table", MultidimTable)(log2n, ptr);
+    }
+
+    void multidim_fft( T* re, T* im, TableValue[] table, TransposeBuffer buf)
     {
         selected!"multidim_fft"(
             re, im, cast(FFT0.Table[]) table, cast(FFT0.TransposeBuffer) buf);
+    }
+    
+    void multidim_fft2( T* re, T* im, MultidimTable table)
+    {
+        selected!"multidim_fft2"(re, im, cast(FFT0.MultidimTable) table);
     }
 }

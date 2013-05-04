@@ -7,6 +7,8 @@ import core.bitop;
 
 alias bsr log2;
 
+uint first_set_bit(size_t a) { return a == 0 ? 64 : bsf(a); }
+
 template TypeTuple(A...)
 {
     alias A TypeTuple;
@@ -114,6 +116,8 @@ void insertion_sort(alias less, T)(T[] arr)
     }
 }
 
+auto power2_or_zero(T)(T a) { return a && (a & (a - 1)) == 0; }
+
 struct Allocate(int max_num_ptr)
 {
     struct Entry
@@ -126,34 +130,44 @@ struct Allocate(int max_num_ptr)
     Entry[max_num_ptr] buf;
     size_t end;
 
+    void initialize(){ end = 0; }
+
     void add(T)(T** ptr, size_t n)
     {
-        buf[end] = Entry(cast(void**) ptr, T.alignof, n * T.sizeof);
+        buf[end] = Entry(cast(void**) ptr, n * T.sizeof, (1 << T.alignof) - 1);
         end++;
     }
 
     void iter(alias f, Args...)(Args args)
     {
-        insertion_sort!((a, b) => a.size > b.size)(buf[0 .. end]);
-        auto start_offset = 0;
+        insertion_sort!((a, b) => 
+            first_set_bit(a.size) > first_set_bit(b.size))(buf[0 .. end]);
+
+        size_t istart = 0;
         foreach(i; 0 ..end)
         {
-            start_offset = (offset + buf[i].align_mask) & buf[i].align_mask;
-            auto end_offset = start_offset + buf[i].size; 
-            f(i, start_offset, end_offset, args);
-            start_offset = end_offset;
+            istart = (istart + buf[i].align_mask) & ~buf[i].align_mask;
+            auto iend = istart + buf[i].size;
+            f(i, istart, iend, args);
+            istart = iend;
         }
     }
 
-    void size()
+    size_t size()
     {
         size_t r;
-        iter!((i, s, e, p) => *p = e)(&r);
+        static void f(size_t i, size_t s, size_t e, size_t* p){ *p = e; }
+        iter!f(&r);
         return r;
     }
 
     void allocate(void* ptr)
     {
-        iter!((i, s, e, p) => *buf[i].ptr = p + s)(ptr);
+        static void f(S)(size_t i, size_t s, size_t e, void* p, S self)
+        { 
+            *self.buf[i].ptr = p + s; 
+        }
+
+        iter!f(ptr, &this);
     }
 }

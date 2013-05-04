@@ -240,11 +240,11 @@ if(transfer == Transfer.fft)
 
     T[] _re;
     T[] _im;
-    d.Table[] tables;
+    d.TableValue[] tables;
     d.TransposeBuffer tbuf;
     int log2n;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         log2n = log2ns.reduce!sum;
         _re = gc_aligned_array!T(1 << log2n);
@@ -252,9 +252,9 @@ if(transfer == Transfer.fft)
         _re[] = 0;
         _im[] = 0;
         tbuf = cast(d.TransposeBuffer) GC.malloc(d.transpose_buffer_size_bytes(log2ns));
-        tables = new d.Table[](log2ns.length);
+        tables = new d.TableValue[](log2ns.length);
         foreach(i, e; log2ns)
-            tables[i] = d.fft_table(e, GC.malloc(d.fft_table_size_bytes(e))); 
+            tables[i] = *d.fft_table(e, GC.malloc(d.fft_table_size_bytes(e))); 
     }
     
     void compute()
@@ -280,7 +280,7 @@ if(transfer == Transfer.rfft)
     direct.Table table;
     int log2n;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
         auto log2n = log2ns.front;
@@ -413,7 +413,7 @@ if(transfer == Transfer.fft)
     Impl.Table* table;
     int log2n;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
@@ -451,7 +451,7 @@ if(transfer == Transfer.rfft)
     Impl.RTable* table;
     T* data;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
@@ -488,7 +488,7 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
     F.Array _im;
     int log2n;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
@@ -520,7 +520,7 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
     F f;
     F.Array data;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
@@ -547,7 +547,7 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
     Complex!(T)[] a;
     Complex!(T)[] w;
     int log2n;
-    int[] log2ns;
+    uint[] log2ns;
     
     private static void bit_reverse(A)(int log2n, A a)
     {
@@ -620,7 +620,7 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
     private static void multidim()(
         Complex!(T)[] a,
         Complex!(T)[] w,
-        int[] log2ns)
+        uint[] log2ns)
     {
         if(log2ns.length == 1)
             return fft(a, w);
@@ -633,7 +633,7 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
             multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
     }
 
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         this.log2ns = log2ns;
         log2n = log2ns.reduce!sum;
@@ -694,7 +694,7 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
     
     Fft fft;
     
-    this(int[] log2ns)
+    this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
         auto log2n = log2ns.front;
@@ -818,7 +818,7 @@ static if(benchFftw)
         
         void* p;
         
-        this(int[] log2ns)
+        this(uint[] log2ns)
         {
             auto n = st!1 << log2ns.reduce!sum;
             a = fftw_array!(Complex!T)(n);
@@ -842,7 +842,7 @@ static if(benchFftw)
         void* p;
         int log2n;
         
-        this(int[] log2ns)
+        this(uint[] log2ns)
         {
             enforce(log2ns.length == 1);
             log2n = log2ns.front;
@@ -868,7 +868,7 @@ static if(benchFftw)
 }
 
 
-void speed(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
+void speed(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
 {    
     auto f = F(log2n);
    
@@ -907,7 +907,7 @@ void speed(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
 //    writefln("%.3e", tick.nsecs() * 1e-9 / niter);
 //}
 
-void precision(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
+void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
 {
     alias SimpleFft!(real, transfer, isInverse) S;
     alias typeof(S.init.inRe(0)) ST;
@@ -954,7 +954,7 @@ void precision(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
 }
 
 void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
-    int[] log2n, string impl, long mflops)
+    uint[] log2n, string impl, long mflops)
 {
     static if(testSpeed)
         alias speed f;
@@ -1135,7 +1135,7 @@ void main(string[] args)
             r ? Transfer.rfft : 
             /*st ? Transfer.fst :*/ Transfer.fft;
 
-        auto log2n = args[2 .. $].map!(to!int).array;
+        auto log2n = args[2 .. $].map!(to!uint).array;
         callInstance!(runTest, 3)(s, transfer, i, log2n, args[1], mflops);
     }
     catch(Exception e)

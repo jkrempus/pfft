@@ -324,12 +324,12 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         static if(inverse)
         {
-            impl!(T).multidim_fft(im, re, (&table)[0 .. 1], null);
+            impl!(T).multidim_fft(im, re, table[0 .. 1], null);
             impl!(T).scale(re, n, cast(T) 1 / n);
             impl!(T).scale(im, n, cast(T) 1 / n);
         }
         else
-            impl!(T).multidim_fft(re, im, (&table)[0 .. 1], null);
+            impl!(T).multidim_fft(re, im, table[0 .. 1], null);
 
         interleave_array(log2n, ret, re, im);
     }

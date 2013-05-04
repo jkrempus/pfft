@@ -120,11 +120,11 @@ template BitReverse(alias V, alias Options)
                 V.bit_reverse_each!(elem_per_vec)(a[i], a[i + 1]);
     }
 
-    size_t table_size_bytes()(int log2n)
+    size_t table_size()(int log2n)
     {
         enum log2l = V.log2_bitreverse_chunk_size;
  
-        return log2n < log2l * 2 ? 0 : (1 << (log2n - 2 * log2l)) * uint.sizeof;
+        return log2n < log2l * 2 ? 0 : (1 << (log2n - 2 * log2l));
     }
    
     void init_table()(int log2n, uint* table)
@@ -248,10 +248,10 @@ template BitReverse(alias V, alias Options)
         }
     } 
 
-    size_t tmp_buffer_size_bytes(int log2n)
+    size_t tmp_buffer_size(int log2n)
     {
         return log2n < Options.large_limit ? 
-            0 : T.sizeof << (2 * Options.log2_bitreverse_large_chunk_size);
+            0 : st!1 << (2 * Options.log2_bitreverse_large_chunk_size);
     }
 
     void bit_reverse_large()

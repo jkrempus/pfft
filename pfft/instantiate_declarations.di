@@ -38,7 +38,7 @@ mixin template Instantiate()
 
     void set_implementation(int);
     
-    size_t transpose_buffer_size_bytes(int[] log2n);
+    size_t transpose_buffer_size_bytes(uint[] log2n);
 
     void fft_transposed(
         T* re,
@@ -49,10 +49,12 @@ mixin template Instantiate()
         Table tables,
         TransposeBuffer buffer);
 
-    void multidim_fft(
-        T* re,
-        T* im,
-        Table[] table, 
-        TransposeBuffer buf);
+    struct MultidimTableValue{};
+    alias MultidimTableValue* MultidimTable;
+
+    size_t multidim_fft_table_size_bytes(uint[] log2n);
+    MultidimTable multidim_fft_table(uint[] log2n, void* ptr);
+    void multidim_fft( T* re, T* im, TableValue[] table, TransposeBuffer buf);
+    void multidim_fft2( T* re, T* im, MultidimTable table);
 }
 

@@ -59,8 +59,9 @@ final class Fft(T)
 {
     mixin Import!T;
 
-    int log2n;
+    uint log2n;
     impl.Table table;
+    impl.MultidimTable table2;
 
 /**
 A struct that wraps an array of T. The reason behind this struct is
@@ -98,8 +99,11 @@ constructor.
     {
         assert((n & (n - 1)) == 0);
         log2n  = bsf(n);
-        auto mem = GC.malloc( impl.fft_table_size_bytes(log2n));
+        auto mem = GC.malloc(impl.fft_table_size_bytes(log2n));
         table = impl.fft_table(log2n, mem);
+        auto size = impl.multidim_fft_table_size_bytes((&log2n)[0 .. 1]);
+        mem = GC.malloc(size);
+        table2 = impl.multidim_fft_table((&log2n)[0 .. 1], mem);
     }
 
 /**
@@ -111,8 +115,9 @@ operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
     {
         assert(re.length == im.length); 
         assert(re.length == (st!1 << log2n));
-        
-        impl.multidim_fft(re.ptr, im.ptr, (&table)[0 .. 1], null);
+       
+        impl.multidim_fft2(re.ptr, im.ptr, table2); 
+        //impl.multidim_fft(re.ptr, im.ptr, (&table)[0 .. 1], null);
     }
 
 /**
