@@ -181,37 +181,52 @@ struct Cached
     {
         void* table;
         void* rtable;
-        void* re;
-        void* im;
+    }
+
+    struct MemoryBlock
+    {
+        void[] mem;
+
+        void* get(size_t size)
+        {
+            if(mem.length < size)
+                mem = GC.malloc(size)[0 .. size];
+
+            return mem.ptr;
+        }
     }
 
     enum nsizes = size_t.sizeof * 8;
     Entry[nsizes * 3] entries;
+    MemoryBlock _transposeBuffer;
+    MemoryBlock _multidimMemory;
+    MemoryBlock _re;
+    MemoryBlock _im;
 
     Entry* entry(T)(uint log2n)
     {
         return entries.ptr + nsizes * typeIndex!T + log2n;
     }
 
-    impl!(T).Table table(T)(uint log2n)
+    impl!T.Table table(T)(uint log2n)
     {
         auto e = entry!T(log2n);
         if(!e.table)
         {
-            auto mem = GC.malloc(impl!(T).fft_table_size_bytes(log2n));
-            e.table = cast(void*) impl!(T).fft_table(log2n, mem);
+            auto mem = GC.malloc(impl!T.fft_table_size_bytes(log2n));
+            e.table = cast(void*) impl!T.fft_table(log2n, mem);
         }
-        
+
         return cast(typeof(return)) e.table; 
     }
     
-    impl!(T).RTable rtable(T)(uint log2n)
+    impl!T.RTable rtable(T)(uint log2n)
     {
         auto e = entry!T(log2n);
         if(!e.rtable)
         {
-            auto mem = GC.malloc(impl!(T).rtable_size_bytes(log2n));
-            e.rtable = cast(void*) impl!(T).rfft_table(log2n, mem);
+            auto mem = GC.malloc(impl!T.rtable_size_bytes(log2n));
+            e.rtable = cast(void*) impl!T.rfft_table(log2n, mem);
         }
         
         return cast(typeof(return)) e.rtable; 
@@ -219,21 +234,25 @@ struct Cached
     
     T* re(T)(uint log2n)
     {
-        auto e = entry!T(log2n);
-        if(!e.re)
-            e.re = GC.malloc(T.sizeof << log2n);
-        
-        return cast(typeof(return)) e.re; 
+        return cast(typeof(return)) _re.get(T.sizeof << log2n); 
     }
     
     T* im(T)(uint log2n)
     {
-        auto e = entry!T(log2n);
-        if(!e.im)
-            e.im = GC.malloc(T.sizeof << log2n);
-        
-        return cast(typeof(return)) e.im; 
+        return cast(typeof(return)) _im.get(T.sizeof << log2n); 
     }
+
+    impl!T.TransposeBuffer transposeBuffer(T)(uint[] log2n)
+    {
+        return cast(typeof(return)) _transposeBuffer
+            .get(impl!T.transpose_buffer_size_bytes(log2n)); 
+    } 
+
+    void* multidimMemory(T)(size_t ndim)
+    {
+        return cast(typeof(return)) _multidimMemory
+            .get(impl!T.multidim_fft_table2_size_bytes(cast(uint) ndim));
+    } 
 }
 
 /**
@@ -304,14 +323,25 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
-        auto log2n = bsr(n);
+        uint log2nVal = bsr(n);
+        auto log2n = (&log2nVal)[0 .. 1];
 
-        auto re = cached.re!T(log2n);
-        auto im = cached.im!T(log2n);
-        auto table = cached.table!T(log2n);
+        auto re = cached.re!T(log2n[0]);
+        auto im = cached.im!T(log2n[0]);
+        auto multidim_table = impl!T.multidim_fft_table2(
+            1, 
+            cached.multidimMemory!T(log2n.length),
+            cached.transposeBuffer!T(log2n));
+
+        // TODO: make this function support multidim 
+        foreach(i; 0 .. log2n.length)
+            impl!T.multidim_fft_table_set(
+                multidim_table, 
+                i, 
+                cached.table!T(log2n[i]));
 
         static if(isComplex!(ElementType!R))
-            deinterleave_array(log2n, r, re, im);
+            deinterleave_array(log2n[0], r, re, im);
         else
         {
             im[0 .. n] = 0;
@@ -324,14 +354,16 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         static if(inverse)
         {
-            impl!(T).multidim_fft(im, re, (&table)[0 .. 1], null);
+            impl!(T).multidim_fft(im, re, multidim_table);
             impl!(T).scale(re, n, cast(T) 1 / n);
             impl!(T).scale(im, n, cast(T) 1 / n);
         }
         else
-            impl!(T).multidim_fft(re, im, (&table)[0 .. 1], null);
+        {
+            impl!(T).multidim_fft(re, im, multidim_table);
+        }
 
-        interleave_array(log2n, ret, re, im);
+        interleave_array(log2n[0], ret, re, im);
     }
 
 /**

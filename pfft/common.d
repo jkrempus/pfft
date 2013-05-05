@@ -103,13 +103,11 @@ void prefetch_array(int len, TT)(TT* a)
         prefetch!(true, true)(a + i * elements_per_cache_line);
 }
 
-void* align_ptr(T)(void* ptr)
+size_t align_size(T)(size_t size)
 {
     enum mask = T.alignof - 1;
-    return cast(void*)((cast(size_t)ptr + mask) & mask); 
+    return (size + mask) & ~mask; 
 }
-
-void* align_size(T)(size_t size){ return size + T.algignof - 1; }
 
 void insertion_sort(alias less, T)(T[] arr)
 {
@@ -142,7 +140,6 @@ struct Allocate(int max_num_ptr)
 
     void add(T)(T** ptr, size_t n)
     {
-        import std.stdio; writefln("Adding ptr=%s size = %s, align = %s", ptr, n * T.sizeof, T.alignof);
         buf[end] = Entry(cast(void**) ptr, n * T.sizeof, T.alignof - 1);
         end++;
     }

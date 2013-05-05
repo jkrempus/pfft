@@ -261,9 +261,9 @@ if(transfer == Transfer.fft)
     void compute()
     {
         static if(isInverse)
-            d.multidim_fft2(_im.ptr, _re.ptr, table2);
+            d.multidim_fft(_im.ptr, _re.ptr, table2);
         else 
-            d.multidim_fft2(_re.ptr, _im.ptr, table2);
+            d.multidim_fft(_re.ptr, _im.ptr, table2);
     }
 
     mixin splitElementAccess!();
@@ -487,20 +487,25 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
     F f;
     F.Array _re;
     F.Array _im;
-    int log2n;
+    uint log2n;
     
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        size_t n = 1U << log2n; 
-        f = new F(n);
+        auto ns = new size_t[](log2ns.length);
+        log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        auto n = st!1 << log2n;
+        f = new F(ns);
         _re = F.Array(n);
         _im = F.Array(n);
         _re[] = 0;
         _im[] = 0;
     }
-    
+
     void compute()
     {
         static if(isInverse)

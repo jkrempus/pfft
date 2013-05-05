@@ -109,38 +109,40 @@ private template code(string type, string suffix, string Suffix)
         {
             assert_power2(n);
 
-            return impl_`~type~`.fft_table_size_bytes(bsf(n));
+            uint log2n = bsf(n);
+            return impl_`~type~`.multidim_fft_table_size_bytes((&log2n)[0 .. 1]);
         }
 
         auto pfft_table_`~suffix~`(size_t n, void* mem)
         {
             assert_power2(n);
 
-            auto log2n = bsf(n);
+            uint log2n = bsf(n);
 
             if(mem is null)
                 mem = allocate_aligned(
                     alignment!(impl_`~type~`)(n), 
                     pfft_table_size_bytes_`~suffix~`(n));
 
-            return cast(PfftTable`~Suffix~`*) impl_`~type~`.fft_table(bsf(n), mem);
+            return cast(PfftTable`~Suffix~`*) impl_`~type~`.
+                multidim_fft_table((&log2n)[0 .. 1], mem);
         }
 
         void pfft_table_free_`~suffix~`(PfftTable`~Suffix~`* table)
         {
-            free_aligned(impl_`~type~`.fft_table_memory(cast(impl_`~type~`.Table) table));
+            free_aligned(impl_`~type~`.multidim_fft_table_memory(
+                cast(impl_`~type~`.MultidimTable) table));
         }
 
         void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
         {
-            auto p = cast(impl_`~type~`.Table) table;
-            impl_`~type~`.multidim_fft(re, im, (&p)[0 .. 1], null);
+            auto p = cast(impl_`~type~`.MultidimTable) table;
+            impl_`~type~`.multidim_fft(re, im, p);
         }
 
         void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
         {
-            auto p = cast(impl_`~type~`.Table) table;
-            impl_`~type~`.multidim_fft(im, re, (&p)[0 .. 1], null);
+            pfft_fft_`~suffix~`(im, re, table);
         }
 
         align(1) struct PfftRTable`~Suffix~`
@@ -218,7 +220,7 @@ private template code(string type, string suffix, string Suffix)
 
         `~type~`* pfft_allocate_`~suffix~`(size_t n)
         {
-            //assert_power2(n);
+            assert_power2(n);
 
             auto p = allocate_aligned(alignment!(impl_`~type~`)(n), `~type~`.sizeof * n);
 

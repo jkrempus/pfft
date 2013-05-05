@@ -59,9 +59,8 @@ final class Fft(T)
 {
     mixin Import!T;
 
-    uint log2n;
-    impl.Table table;
-    impl.MultidimTable table2;
+    uint log2size;
+    impl.MultidimTable table;
 
 /**
 A struct that wraps an array of T. The reason behind this struct is
@@ -95,15 +94,20 @@ $(D ifft) will operate on. I will refer to this number as n in the rest of the
 documentation for this class.Tables used in fft and ifft are calculated in the 
 constructor.
  */
-    this(size_t n)
+    this(size_t[] n...)
     {
-        assert((n & (n - 1)) == 0);
-        log2n  = bsf(n);
-        auto mem = GC.malloc(impl.fft_table_size_bytes(log2n));
-        table = impl.fft_table(log2n, mem);
-        auto size = impl.multidim_fft_table_size_bytes((&log2n)[0 .. 1]);
-        mem = GC.malloc(size);
-        table2 = impl.multidim_fft_table((&log2n)[0 .. 1], mem);
+        assert((n[0] & (n[0] - 1)) == 0);
+        auto log2n = new uint[n.length];
+        log2size = 0;
+        foreach(i; 0 .. log2n.length)
+        {
+            assert((n[i] & (n[i] - 1)) == 0);
+            log2n[i] = bsf(n[i]);
+            log2size += log2n[i];
+        }
+
+        auto size = impl.multidim_fft_table_size_bytes(log2n);
+        table = impl.multidim_fft_table(log2n, GC.malloc(size));
     }
 
 /**
@@ -114,10 +118,9 @@ operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
     void fft(Array re, Array im)
     {
         assert(re.length == im.length); 
-        assert(re.length == (st!1 << log2n));
+        assert(re.length == (st!1 << log2size));
        
-        impl.multidim_fft2(re.ptr, im.ptr, table2); 
-        //impl.multidim_fft(re.ptr, im.ptr, (&table)[0 .. 1], null);
+        impl.multidim_fft(re.ptr, im.ptr, table); 
     }
 
 /**
@@ -178,7 +181,7 @@ final class Rfft(T)
     mixin Import!T;
 
     int log2n;
-    Fft!T _complex;
+    impl.Table table;
     impl.RTable rtable;
     impl.ITable itable;
 
@@ -195,9 +198,10 @@ for this class. All tables used in rfft are calculated in the constructor.
         assert((n & (n - 1)) == 0);
         log2n  = bsf(n);
     
-        _complex = new Fft!T(n / 2);
-
-        auto mem = GC.malloc( impl.rtable_size_bytes(log2n));
+        auto mem = GC.malloc(impl.fft_table_size_bytes(log2n - 1));
+        table = impl.fft_table(log2n - 1, mem);
+        
+        mem = GC.malloc( impl.rtable_size_bytes(log2n));
         rtable = impl.rfft_table(log2n, mem);
 
         mem = GC.malloc( impl.itable_size_bytes(log2n));
@@ -227,7 +231,7 @@ The length of the array must be equal to n.
         assert(data.length == (st!1 << log2n));
         
         impl.deinterleave(data.ptr, log2n, itable);
-        impl.rfft(data.ptr, data[$ / 2 .. $].ptr, _complex.table, rtable);
+        impl.rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
     }
 
 /**
@@ -246,12 +250,12 @@ The length of the array must be equal to n.
     {
         assert(data.length == (st!1 << log2n));
      
-        impl.irfft(data.ptr, data[$ / 2 .. $].ptr, _complex.table, rtable);
+        impl.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
         impl.interleave(data.ptr, log2n, itable);
     }
 
 /// An alias for Fft!T.scale
     alias Fft!(T).scale scale;
      
-    @property complex(){ return _complex; }
+//    @property complex(){ return _complex; }
 }

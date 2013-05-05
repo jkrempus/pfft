@@ -321,7 +321,6 @@ template FFT(alias V, alias Options)
         Allocate!4 alloc = void; alloc.initialize();
         TableValue tv;
         fft_table_add_pointers(&tv, null, &alloc, log2n);
-        import std.stdio; writefln("size %s", alloc.size());
         return alloc.size(); 
     }
   
@@ -343,25 +342,9 @@ template FFT(alias V, alias Options)
         TableValue tv;
         Table t;
         fft_table_add_pointers(&tv, &t, &alloc, log2n);
-        import std.stdio;    
-        writefln("alloc buffer %s", alloc.buf[0 .. alloc.end]);
         alloc.allocate(p);
-        writefln("alloc buffer after %s", alloc.buf[0 .. alloc.end]);
         *t = tv;
         init_fft_table(log2n, t); 
-        
-        void print(T)(string prefix, T* ptr)
-        {
-            writefln("%s\t%s", prefix, cast(size_t) ptr - cast(size_t) p);
-        }
-
-        writefln("log2n %s", t.log2n);
-        writefln("ptr %s", p);
-        print("t", t);
-        print("twiddle", t.twiddle);
-        print("buffer", t.buffer);
-        print("br", t.br);
-
         return t;
     }
 
@@ -1010,6 +993,7 @@ template FFT(alias V, alias Options)
     {
         TableValue[] tables;
         TransposeBuffer buffer;
+        void* memory;
     }
 
     alias MultidimTableValue* MultidimTable;
@@ -1055,7 +1039,6 @@ template FFT(alias V, alias Options)
             MultidimTable mt;
             TransposeBuffer buf;
             add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
-            import std.stdio; writefln("size %s", alloc.size());
             return alloc.size();
         }
 
@@ -1067,9 +1050,7 @@ template FFT(alias V, alias Options)
             MultidimTable mt;
             TransposeBuffer buf;
             add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
-            import std.stdio; writeln(alloc.buf[0 .. alloc.end]);
             alloc.allocate(ptr);
-            writeln(alloc.buf[0 .. alloc.end]);
 
             foreach(i; 0 .. log2n.length)
             {
@@ -1079,29 +1060,43 @@ template FFT(alias V, alias Options)
 
             mt.tables = tables[0 .. log2n.length];
             mt.buffer = buf;
-
-            void print(T)(string prefix, T* p)
-            {
-                writefln("%s\t%s", prefix, cast(size_t) p - cast(size_t) ptr);
-            }
-            
-            writefln("ptr %s", ptr);
-            print("mt", mt); 
-            print("mt.buffer", mt.buffer); 
-            print("tables", tables);
-            foreach(e; mt.tables)
-            {
-                print("twiddle", e.twiddle);
-                print("buffer", e.buffer);
-                print("br", e.br);
-            }
-
+            mt.memory = ptr;
             return mt;
+        }
+
+        void* memory(MultidimTable table) { return table.memory; }
+
+        size_t size2(uint ndim)
+        {
+            return 
+                align_size!TableValue(MultidimTableValue.sizeof) + 
+                ndim * TableValue.sizeof;
+        }
+
+        MultidimTable table2(size_t ndim, void* ptr, TransposeBuffer buf)
+        {
+            auto mt = cast(MultidimTable) ptr;
+            auto t = cast(Table)(
+                ptr + align_size!TableValue(MultidimTableValue.sizeof));
+
+            mt.tables = t[0 .. ndim];
+            mt.buffer = buf;
+            mt.memory = ptr;
+            return mt;
+        }
+
+        void set(MultidimTable mt, size_t dim_index, Table table)
+        {
+            mt.tables[dim_index] = *table;
         }
     }
 
     alias MultidimTableImpl!().table multidim_fft_table;
     alias MultidimTableImpl!().size multidim_fft_table_size_bytes;
+    alias MultidimTableImpl!().memory multidim_fft_table_memory;
+    alias MultidimTableImpl!().table2 multidim_fft_table2;
+    alias MultidimTableImpl!().size2 multidim_fft_table2_size_bytes;
+    alias MultidimTableImpl!().set multidim_fft_table_set;
 
     @always_inline void fft_transposed()(
         T* re,
@@ -1146,7 +1141,7 @@ template FFT(alias V, alias Options)
         return Col.buffer_size(st!1 << lnmax, st!1 << lm) * 2 * T.sizeof;
     }
 
-    void multidim_fft2()( T* re, T* im, MultidimTable multidim_table)
+    void multidim_fft()( T* re, T* im, MultidimTable multidim_table)
     {
         auto table = multidim_table.tables;
         if(table.length == 1)
@@ -1160,9 +1155,9 @@ template FFT(alias V, alias Options)
         fft_transposed(re, im, log2m, table[0].log2n, log2m, &table[0], buf);
 
         auto m = st!1 << log2m;
-        auto next_table = MultidimTableValue(table[1 .. $], buf);
+        auto next_table = MultidimTableValue(table[1 .. $], buf, null);
         foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_fft2(re + i * m, im + i * m, &next_table);
+            multidim_fft(re + i * m, im + i * m, &next_table);
     }
 
     alias T* RTable;
@@ -1543,14 +1538,29 @@ mixin template Instantiate()
         return selected!("multidim_fft_table", MultidimTable)(log2n, ptr);
     }
 
-    void multidim_fft( T* re, T* im, Table[] table, TransposeBuffer buf)
+    void* multidim_fft_table_memory(MultidimTable table)
     {
-//        selected!"multidim_fft"(
-//            re, im, cast(FFT0.Table[])table, cast(FFT0.TransposeBuffer) buf);
+        return selected!"multidim_fft_table_memory"(cast(FFT0.MultidimTable) table);
     }
-    
-    void multidim_fft2( T* re, T* im, MultidimTable table)
+        
+    void multidim_fft( T* re, T* im, MultidimTable table)
     {
-        selected!"multidim_fft2"(re, im, cast(FFT0.MultidimTable) table);
+        selected!"multidim_fft"(re, im, cast(FFT0.MultidimTable) table);
+    }
+        
+    size_t multidim_fft_table2_size_bytes(uint ndim)
+    {
+        return selected!"multidim_fft_table2_size_bytes"(ndim);
+    }
+
+    MultidimTable multidim_fft_table2(size_t ndim, void* ptr, TransposeBuffer buf)
+    {
+        return selected!("multidim_fft_table2", MultidimTable)(ndim, ptr, buf);
+    }
+
+    void multidim_fft_table_set(MultidimTable mt, size_t dim_index, Table table)
+    {
+        selected!"multidim_fft_table_set"(
+            cast(FFT0.MultidimTable) mt, dim_index, table);
     }
 }
