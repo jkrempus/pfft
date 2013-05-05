@@ -7,7 +7,10 @@ import core.bitop;
 
 alias bsr log2;
 
-uint first_set_bit(size_t a) { return a == 0 ? 64 : bsf(a); }
+uint first_set_bit(size_t a)
+{ 
+    return a == 0 ? 8 * size_t.sizeof : bsf(a); 
+}
 
 template TypeTuple(A...)
 {
@@ -72,6 +75,11 @@ template RepeatType(T, int n, R...)
         alias RepeatType!(T, n - 1, T, R) RepeatType;
 }
 
+U[] array_cast(U, T)(T[] arr)
+{
+    return (cast(U*) arr.ptr)[0 .. arr.length * T.sizeof / U.sizeof];
+}
+
 version(LDC)
     pragma(LDC_intrinsic, "llvm.prefetch")
         void llvm_prefetch(void*, int, int, int);
@@ -134,7 +142,8 @@ struct Allocate(int max_num_ptr)
 
     void add(T)(T** ptr, size_t n)
     {
-        buf[end] = Entry(cast(void**) ptr, n * T.sizeof, (1 << T.alignof) - 1);
+        import std.stdio; writefln("Adding ptr=%s size = %s, align = %s", ptr, n * T.sizeof, T.alignof);
+        buf[end] = Entry(cast(void**) ptr, n * T.sizeof, T.alignof - 1);
         end++;
     }
 

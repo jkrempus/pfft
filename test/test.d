@@ -55,11 +55,13 @@ else
 auto gc_aligned_array(A)(size_t n)
 {
     version(NoGC)
+    {
         return (cast(A*)PfftC!().allocate(A.sizeof*n / T.sizeof))[0..n];
+    }
     else
     {
         import core.memory;
-        return (cast(A*)GC.malloc(A.sizeof*n))[0..n];
+        return (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
     }
 }
 
@@ -240,10 +242,11 @@ if(transfer == Transfer.fft)
 
     T[] _re;
     T[] _im;
-    d.TableValue[] tables;
+    d.Table[] tables;
     d.TransposeBuffer tbuf;
+    d.MultidimTable table2;
     int log2n;
-    
+
     this(uint[] log2ns)
     {
         log2n = log2ns.reduce!sum;
@@ -251,18 +254,16 @@ if(transfer == Transfer.fft)
         _im = gc_aligned_array!T(1 << log2n);
         _re[] = 0;
         _im[] = 0;
-        tbuf = cast(d.TransposeBuffer) GC.malloc(d.transpose_buffer_size_bytes(log2ns));
-        tables = new d.TableValue[](log2ns.length);
-        foreach(i, e; log2ns)
-            tables[i] = *d.fft_table(e, GC.malloc(d.fft_table_size_bytes(e))); 
+        auto size = d.multidim_fft_table_size_bytes(log2ns);
+        table2 = d.multidim_fft_table(log2ns, GC.malloc(size));
     }
     
     void compute()
     {
         static if(isInverse)
-            d.multidim_fft(_im.ptr, _re.ptr, tables, tbuf);
+            d.multidim_fft2(_im.ptr, _re.ptr, table2);
         else 
-            d.multidim_fft(_re.ptr, _im.ptr, tables, tbuf); 
+            d.multidim_fft2(_re.ptr, _im.ptr, table2);
     }
 
     mixin splitElementAccess!();

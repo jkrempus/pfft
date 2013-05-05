@@ -218,7 +218,7 @@ private template code(string type, string suffix, string Suffix)
 
         `~type~`* pfft_allocate_`~suffix~`(size_t n)
         {
-            assert_power2(n);
+            //assert_power2(n);
 
             auto p = allocate_aligned(alignment!(impl_`~type~`)(n), `~type~`.sizeof * n);
 
