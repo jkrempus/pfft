@@ -249,7 +249,7 @@ q{
     struct PfftTable{Suffix}Struct;
     typedef struct PfftTable{Suffix}Struct* PfftTable{Suffix};
 
-    size_t pfft_table_size_bytes_{suffix}(size_t);
+    size_t pfft_table_size_{suffix}(size_t);
     PfftTable{Suffix} pfft_table_{suffix}(size_t, void*);
     void pfft_table_free_{suffix}(PfftTable{Suffix});
     void pfft_fft_{suffix}({type}*, {type}*, PfftTable{Suffix});
@@ -258,7 +258,7 @@ q{
     struct PfftRTable{Suffix}Struct;
     typedef struct PfftRTable{Suffix}Struct* PfftRTable{Suffix};
 
-    size_t pfft_rtable_size_bytes_{suffix}(size_t);
+    size_t pfft_rtable_size_{suffix}(size_t);
     PfftRTable{Suffix} pfft_rtable_{suffix}(size_t, void*);
     void pfft_rtable_free_{suffix}(PfftRTable{Suffix});
     void pfft_rfft_{suffix}({type}*, PfftRTable{Suffix});

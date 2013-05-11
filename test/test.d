@@ -254,7 +254,7 @@ if(transfer == Transfer.fft)
         _im = gc_aligned_array!T(1 << log2n);
         _re[] = 0;
         _im[] = 0;
-        auto size = d.multidim_fft_table_size_bytes(log2ns);
+        auto size = d.multidim_fft_table_size(log2ns);
         table2 = d.multidim_fft_table(log2ns, GC.malloc(size));
     }
     
@@ -290,9 +290,9 @@ if(transfer == Transfer.rfft)
         data[] = 0;
     
         this.log2n = log2n;
-        itable = d.interleave_table(log2n, GC.malloc(d.itable_size_bytes(log2n))); 
-        rtable = d.rfft_table(log2n, GC.malloc(d.fft_table_size_bytes(log2n)));
-        table = d.fft_table(log2n - 1, GC.malloc(d.fft_table_size_bytes(log2n - 1)));
+        itable = d.interleave_table(log2n, GC.malloc(d.itable_size(log2n))); 
+        rtable = d.rfft_table(log2n, GC.malloc(d.fft_table_size(log2n)));
+        table = d.fft_table(log2n - 1, GC.malloc(d.fft_table_size(log2n - 1)));
     }
     
     void compute()

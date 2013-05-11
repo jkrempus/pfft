@@ -105,12 +105,12 @@ private template code(string type, string suffix, string Suffix)
         /// A documentation comment. 
         align(1) struct PfftTable`~Suffix~` { }
 
-        size_t pfft_table_size_bytes_`~suffix~`(size_t n)
+        size_t pfft_table_size_`~suffix~`(size_t n)
         {
             assert_power2(n);
 
             uint log2n = bsf(n);
-            return impl_`~type~`.multidim_fft_table_size_bytes((&log2n)[0 .. 1]);
+            return impl_`~type~`.multidim_fft_table_size((&log2n)[0 .. 1]);
         }
 
         auto pfft_table_`~suffix~`(size_t n, void* mem)
@@ -122,7 +122,7 @@ private template code(string type, string suffix, string Suffix)
             if(mem is null)
                 mem = allocate_aligned(
                     alignment!(impl_`~type~`)(n), 
-                    pfft_table_size_bytes_`~suffix~`(n));
+                    pfft_table_size_`~suffix~`(n));
 
             return cast(PfftTable`~Suffix~`*) impl_`~type~`.
                 multidim_fft_table((&log2n)[0 .. 1], mem);
@@ -152,14 +152,14 @@ private template code(string type, string suffix, string Suffix)
             impl_`~type~`.ITable itable;
         }
 
-        size_t pfft_rtable_size_bytes_`~suffix~`(size_t n)
+        size_t pfft_rtable_size_`~suffix~`(size_t n)
         {
             assert_power2(n);
 
             return 
-                ptrsize_align(impl_`~type~`.itable_size_bytes(bsf(n)) +
-                impl_`~type~`.fft_table_size_bytes(bsf(n) - 1) +
-                impl_`~type~`.rtable_size_bytes(bsf(n))) + 
+                ptrsize_align(impl_`~type~`.itable_size(bsf(n)) +
+                impl_`~type~`.fft_table_size(bsf(n) - 1) +
+                impl_`~type~`.rtable_size(bsf(n))) + 
                 PfftRTable`~Suffix~`.sizeof;
         }
 
@@ -169,9 +169,9 @@ private template code(string type, string suffix, string Suffix)
 
             auto log2n = bsf(n);
 
-            auto rtable_size = impl_`~type~`.rtable_size_bytes(log2n);
-            auto table_size = impl_`~type~`.fft_table_size_bytes(log2n - 1);
-            auto itable_size = impl_`~type~`.itable_size_bytes(log2n);
+            auto rtable_size = impl_`~type~`.rtable_size(log2n);
+            auto table_size = impl_`~type~`.fft_table_size(log2n - 1);
+            auto itable_size = impl_`~type~`.itable_size(log2n);
 
             auto sz = ptrsize_align(table_size + rtable_size + itable_size);
             auto al = alignment!(impl_`~type~`)(n);

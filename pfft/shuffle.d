@@ -413,7 +413,7 @@ template hasInterleaving(alias V)
 template InterleaveImpl
 (alias V, int chunk_size, bool is_inverse, bool swap_even_odd) 
 {
-    size_t itable_size_bytes()(int log2n)
+    size_t itable_size()(int log2n)
     {
         return (bool.sizeof << log2n) / V.vec_size / chunk_size; 
     }

@@ -106,7 +106,7 @@ constructor.
             log2size += log2n[i];
         }
 
-        auto size = impl.multidim_fft_table_size_bytes(log2n);
+        auto size = impl.multidim_fft_table_size(log2n);
         table = impl.multidim_fft_table(log2n, GC.malloc(size));
     }
 
@@ -198,13 +198,13 @@ for this class. All tables used in rfft are calculated in the constructor.
         assert((n & (n - 1)) == 0);
         log2n  = bsf(n);
     
-        auto mem = GC.malloc(impl.fft_table_size_bytes(log2n - 1));
+        auto mem = GC.malloc(impl.fft_table_size(log2n - 1));
         table = impl.fft_table(log2n - 1, mem);
         
-        mem = GC.malloc( impl.rtable_size_bytes(log2n));
+        mem = GC.malloc( impl.rtable_size(log2n));
         rtable = impl.rfft_table(log2n, mem);
 
-        mem = GC.malloc( impl.itable_size_bytes(log2n));
+        mem = GC.malloc( impl.itable_size(log2n));
         itable = impl.interleave_table(log2n, mem);
     }
 

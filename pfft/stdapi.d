@@ -213,7 +213,7 @@ struct Cached
         auto e = entry!T(log2n);
         if(!e.table)
         {
-            auto mem = GC.malloc(impl!T.fft_table_size_bytes(log2n));
+            auto mem = GC.malloc(impl!T.fft_table_size(log2n));
             e.table = cast(void*) impl!T.fft_table(log2n, mem);
         }
 
@@ -225,7 +225,7 @@ struct Cached
         auto e = entry!T(log2n);
         if(!e.rtable)
         {
-            auto mem = GC.malloc(impl!T.rtable_size_bytes(log2n));
+            auto mem = GC.malloc(impl!T.rtable_size(log2n));
             e.rtable = cast(void*) impl!T.rfft_table(log2n, mem);
         }
         
@@ -245,13 +245,13 @@ struct Cached
     impl!T.TransposeBuffer transposeBuffer(T)(uint[] log2n)
     {
         return cast(typeof(return)) _transposeBuffer
-            .get(impl!T.transpose_buffer_size_bytes(log2n)); 
+            .get(impl!T.transpose_buffer_size(log2n)); 
     } 
 
     void* multidimMemory(T)(size_t ndim)
     {
         return cast(typeof(return)) _multidimMemory
-            .get(impl!T.multidim_fft_table2_size_bytes(cast(uint) ndim));
+            .get(impl!T.multidim_fft_table2_size(cast(uint) ndim));
     } 
 }
 
