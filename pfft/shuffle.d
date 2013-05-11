@@ -540,7 +540,7 @@ template InterleaveImpl
             interleave_static_size!chunk_size(p);
     }
 
-    void interleave()(V.T* p, int log2n, bool* table)
+    void interleave()(V.T* p, V.T* _p, int log2n, bool* table)
     {
         auto n = st!1 << log2n;
 

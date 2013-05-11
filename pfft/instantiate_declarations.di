@@ -33,8 +33,8 @@ mixin template Instantiate()
 
     size_t itable_size(uint log2n);
     ITable interleave_table(uint log2n, void* p);
-    void interleave(T* p, uint log2n, ITable table);
-    void deinterleave(T* p, uint log2n, ITable table);
+    void interleave(T* even, T* odd, uint log2n, ITable table);
+    void deinterleave(T* even, T* odd, uint log2n, ITable table);
 
     void set_implementation(int);
     

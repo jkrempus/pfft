@@ -1534,14 +1534,14 @@ mixin template Instantiate()
         return selected!("interleave_table", ITable)(log2n, p);
     }
 
-    void interleave(T* p, uint log2n, ITable table)
+    void interleave(T* even, T* odd, uint log2n, ITable table)
     {
-        selected!"interleave"(p, log2n, cast(FFT0.ITable) table);  
+        selected!"interleave"(even, odd, log2n, cast(FFT0.ITable) table);  
     }
 
-    void deinterleave(T* p, uint log2n, ITable table)
+    void deinterleave(T* even, T* odd, uint log2n, ITable table)
     {
-        selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
+        selected!"deinterleave"(even, odd, log2n, cast(FFT0.ITable) table);
     }
     
     void set_implementation(int i)
