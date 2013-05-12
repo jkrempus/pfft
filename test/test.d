@@ -317,11 +317,14 @@ if(transfer == Transfer.rfft)
         }
         else
         {
-            //d.deinterleave(data.ptr, log2n, itable);
-//            foreach(row; iota(0, st!1 << (log2n - 1), st!1 << log2lastn))
-//                d.deinterleave(data.ptr + , log2n, itable);
+            foreach(row; iota(0, st!1 << (log2n - 1), st!1 << log2lastn))
+                d.deinterleave(
+                    data.ptr + row,
+                    data[$ / 2 .. $].ptr + row,
+                    log2lastn,
+                    itable);
 
-//            d.multidim_rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
+            d.multidim_rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
         }
     }
     

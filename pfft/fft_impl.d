@@ -1260,11 +1260,12 @@ template FFT(alias V, alias Options)
         auto m = st!1 << log2m;
         auto next_table = MultidimTableValue(table[1 .. $], buf, null);
         foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_fft(re + i * m, im + i * m, &next_table, rtable);
+            multidim_rfft(re + i * m, im + i * m, &next_table, rtable);
 
-        fft_transposed(re, im, log2m, table[0].log2n, log2m, &table[0], buf);
+        fft_transposed(
+            re, im, log2m, table[0].log2n, log2m, &table[0], buf, true);
     }
-    
+
     void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
@@ -1573,6 +1574,12 @@ mixin template Instantiate()
     void multidim_fft( T* re, T* im, MultidimTable table)
     {
         selected!"multidim_fft"(re, im, cast(FFT0.MultidimTable) table);
+    }
+    
+    void multidim_rfft(T* re, T* im, MultidimTable table, RTable rtable)
+    {
+        selected!"multidim_rfft"(
+            re, im, cast(FFT0.MultidimTable) table, cast(FFT0.RTable) rtable);
     }
         
     size_t multidim_fft_table2_size(uint ndim)

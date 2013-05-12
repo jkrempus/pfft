@@ -413,6 +413,8 @@ template hasInterleaving(alias V)
 template InterleaveImpl
 (alias V, int chunk_size, bool is_inverse, bool swap_even_odd) 
 {
+    import std.stdio;
+
     size_t itable_size()(int log2n)
     {
         return (bool.sizeof << log2n) / V.vec_size / chunk_size; 
@@ -576,7 +578,10 @@ template InterleaveImpl
         auto ve= cast(V.vec*) even;
         auto vo= cast(V.vec*) odd;
         auto vn = n / V.vec_size;
- 
+
+        writeln(n);
+        writeln(vn);
+
         if(vn < 4 * chunk_size)
             interleave_tiny(ve, vo, vn / 2);
         else
