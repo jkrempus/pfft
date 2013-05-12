@@ -451,17 +451,22 @@ template InterleaveImpl
         return is_cycle_minimum;
     }
 
-    void interleave_chunks()(V.vec* a, size_t n_chunks, bool* is_cycle_minimum)
+    void interleave_chunks()(
+        V.vec* even, V.vec* odd, size_t n_chunks, bool* is_cycle_minimum)
     {
         alias RepeatType!(V.vec, chunk_size) RT;
         alias ints_up_to!chunk_size indices;        
+
+        auto ptr =  (V.vec* even, V.vec* odd, size_t n_chunks, size_t j) => 
+            (j < n_chunks / 2 ?  even : odd - n_chunks * chunk_size / 2) + 
+            j * chunk_size;
 
         for(size_t i = 1;;)
         {
             size_t j = i;
 
             RT element;
-            auto p = &a[i * chunk_size];
+            auto p = ptr(even, odd, n_chunks, i);
             foreach(k; indices)
                 element[k] = p[k];
 
@@ -475,8 +480,8 @@ template InterleaveImpl
                 if(j == i)
                     break;
 
+                p = ptr(even, odd, n_chunks, j);
                 RT tmp;
-                p = &a[j * chunk_size];
                 foreach(k; indices)
                     tmp[k] = p[k];
 
@@ -487,7 +492,7 @@ template InterleaveImpl
                     element[k] = tmp[k];
             }
 
-            p = &a[i * chunk_size];
+            p = ptr(even, odd, n_chunks, i);
             foreach(k; indices)
                 p[k] = element[k];
 
@@ -498,35 +503,51 @@ template InterleaveImpl
         }
     }
 
-    void interleave_static_size(int n)(V.vec* p)
+    void interleave_static_size(int n)(V.vec* even_, V.vec* odd_)
     {
         RepeatType!(V.vec, 2 * n) tmp;
 
-        enum even = swap_even_odd ? n : 0;
-        enum odd = swap_even_odd ? 0 : n;
+        static if(swap_even_odd)
+        {
+            alias even_ odd;
+            alias odd_ even;
+        }
+        else
+        {
+            alias even_ even;
+            alias odd_ odd;
+        }
 
         static if(is_inverse)
-            foreach(j; ints_up_to!n)
+        {
+            foreach(j; ints_up_to!(n / 2))
                 V.deinterleave(
-                    p[2 * j], p[2 * j + 1], tmp[even + j], tmp[odd + j]);
+                    even[2 * j], even[2 * j + 1], tmp[j], tmp[n + j]);
+            
+            foreach(j; ints_up_to!(n / 2))
+                V.deinterleave(
+                    odd[2 * j], odd[2 * j + 1], 
+                    tmp[n / 2 + j], tmp[n + n / 2 + j]);
+        }
         else
             foreach(j; ints_up_to!n)
-                V.interleave(
-                    p[even + j], p[odd + j], tmp[2 * j], tmp[2 * j + 1]);
+                V.interleave(even[j], odd[j], tmp[2 * j], tmp[2 * j + 1]);
 
-        foreach(j; ints_up_to!(2 * n))
-            p[j] = tmp[j];
+        foreach(j; ints_up_to!n)
+            even[j] = tmp[j];
 
+        foreach(j; ints_up_to!n)
+            odd[j] = tmp[n + j];
     }
 
-    void interleave_tiny()(V.vec* p, size_t len)
+    void interleave_tiny()(V.vec* even, V.vec* odd, size_t n)
     {
-        switch(len)
+        switch(n)
         {
-            foreach(n; powers_up_to!(2 * chunk_size))
+            foreach(i; powers_up_to!(2 * chunk_size))
             {
-                case 2 * n:
-                    interleave_static_size!n(p); 
+                case i:
+                    interleave_static_size!i(even, odd); 
                     break;
             }
 
@@ -537,10 +558,10 @@ template InterleaveImpl
     void interleave_chunk_elements()(V.vec* a, size_t n_chunks)
     {
         for(auto p = a; p < a + n_chunks * chunk_size; p += 2 * chunk_size)
-            interleave_static_size!chunk_size(p);
+            interleave_static_size!chunk_size(p, p + chunk_size);
     }
 
-    void interleave()(V.T* p, V.T* _p, int log2n, bool* table)
+    void interleave()(V.T* even, V.T* odd, int log2n, bool* table)
     {
         auto n = st!1 << log2n;
 
@@ -550,25 +571,28 @@ template InterleaveImpl
             return 
                 InterleaveImpl!(
                     Scalar!(V.T, V), V.vec_size / 2, is_inverse, swap_even_odd)
-                    .interleave_tiny(p, n);
-       
-        auto vp = cast(V.vec*) p;
+                    .interleave_tiny(even, odd, n / 2);
+
+        auto ve= cast(V.vec*) even;
+        auto vo= cast(V.vec*) odd;
         auto vn = n / V.vec_size;
  
         if(vn < 4 * chunk_size)
-            interleave_tiny(vp, vn);
+            interleave_tiny(ve, vo, vn / 2);
         else
         {
             auto n_chunks = vn / chunk_size;
             static if(is_inverse)
             {
-                interleave_chunk_elements(vp, n_chunks);
-                interleave_chunks(vp, n_chunks, table);
+                interleave_chunk_elements(ve, n_chunks / 2);
+                interleave_chunk_elements(vo, n_chunks / 2);
+                interleave_chunks(ve, vo, n_chunks, table);
             }
             else
             {
-                interleave_chunks(vp, n_chunks, table);
-                interleave_chunk_elements(vp, n_chunks);
+                interleave_chunks(ve, vo, n_chunks, table);
+                interleave_chunk_elements(ve, n_chunks / 2);
+                interleave_chunk_elements(vo, n_chunks / 2);
             }
         }  
     }
