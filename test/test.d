@@ -177,7 +177,6 @@ mixin template realSplitElementAccess()
     
     ref im(size_t i)
     {
-        auto n = st!1 << log2n;
         auto lastn = st!1 << log2lastn;
         auto row = i & ~(lastn - 1);
         auto column = i & (lastn - 1);
@@ -282,32 +281,31 @@ if(transfer == Transfer.rfft)
 {
     import core.memory; 
     alias direct d; 
-   
+
     T[] data;
     direct.ITable itable;
     direct.RTable rtable;
-//    direct.Table table;
     d.MultidimTable table;
     int log2n;
     int log2lastn;
-    
+
     this(uint[] log2ns)
     {
         log2ns = log2ns.dup;
         log2lastn = log2ns.back;
-        log2ns.back /= 2;
         log2n = log2ns.reduce!sum;
-        auto n = st!1 << log2n;
-        data = gc_aligned_array!T(n);
+        log2ns.back -= 1;
+        data = gc_aligned_array!T(st!1 << log2n);
         data[] = 0;
-    
-        itable = d.interleave_table(log2n, GC.malloc(d.itable_size(log2n))); 
-        rtable = d.rfft_table(log2n, GC.malloc(d.fft_table_size(log2n)));
-//        table = d.fft_table(log2n - 1, GC.malloc(d.fft_table_size(log2n - 1)));
+
+        auto isize = d.itable_size(log2lastn);
+        itable = d.interleave_table(log2lastn, GC.malloc(isize));
+        auto rsize = d.fft_table_size(log2lastn);
+        rtable = d.rfft_table(log2lastn, GC.malloc(rsize));
         auto size = d.multidim_fft_table_size(log2ns);
         table = d.multidim_fft_table(log2ns, GC.malloc(size));
     }
-    
+
     void compute()
     {
         static if(isInverse)
@@ -317,17 +315,18 @@ if(transfer == Transfer.rfft)
         }
         else
         {
-            foreach(row; iota(0, st!1 << (log2n - 1), st!1 << log2lastn))
+            auto stride = st!1 << log2lastn;
+            foreach(i; iota(0, st!1 << log2n, stride))
                 d.deinterleave(
-                    data.ptr + row,
-                    data[$ / 2 .. $].ptr + row,
+                    data.ptr + i,
+                    data.ptr + i + stride / 2,
                     log2lastn,
                     itable);
-
-            d.multidim_rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
+            
+            d.multidim_rfft(data.ptr, table, rtable);
         }
     }
-    
+
     mixin realSplitElementAccess!();
 }
 
@@ -655,8 +654,8 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
             return fft(a, w);
 
         size_t m = st!1 << log2ns[1 .. $].reduce!sum;
-        foreach(i; 0 .. m)
-            fft(a[i .. $].stride(m), w);
+//        foreach(i; 0 .. m)
+//            fft(a[i .. $].stride(m), w);
 
         foreach(i; 0 .. st!1 << log2ns.front)
             multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
@@ -854,7 +853,10 @@ static if(benchFftw)
             a[] = Complex!T(0, 0);
             r = fftw_array!(Complex!T)(n);
             auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
-            auto ns = log2ns.map!(a => 1 << a).array;
+            auto ns = new int[](log2ns.length); 
+            foreach(i; 0 .. ns.length)
+                ns[i] =  1 << log2ns[i];
+
             p = fftw_plan_dft(ns.length.to!int, ns.ptr, a.ptr, r.ptr, dir, flags);
         }
         
@@ -948,20 +950,27 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     auto tested = F(log2n);
     auto simple = S(log2n);
     
-    rndGen.seed(1);
-    auto rnd = delegate(size_t i){ return to!FT(uniform(0.0, 1.0)); };
+    //rndGen.seed(1);
+    auto rnd = delegate(size_t i){ return /*to!FT(i); }; /*/ to!FT(uniform(0.0, 1.0)); };
     tested.fill(rnd, rnd);
     auto re = (size_t a){ return cast(ST) tested.inRe(a); };
     auto im = (size_t a){ return cast(ST) tested.inIm(a); };
     simple.fill(re, im);
-    
+
     simple.compute();
     tested.compute();
     
-    
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
-    
+
+    static if(is(typeof(tested.data)))
+    {
+        writefln("%(%.2e  %)\n", tested.data);
+
+        writefln("%(%.2e  %)", simple.a.map!(a => a.re));
+        writefln("%(%.2e  %)\n", simple.a.map!(a => a.im));
+    }
+
     foreach(i; 0 .. n)
     {
         auto tre = tested.outRe(i);
@@ -976,7 +985,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
             sim /= n;
         }        
 
-        //writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
+        writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, sre - tre, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 
