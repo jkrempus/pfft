@@ -1183,12 +1183,12 @@ template FFT(alias V, alias Options)
         auto m = log2m.exp2;
         auto next_table = MultidimTableValue(table[1 .. $], buf, null);
         foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_fft(re + i * m, im + i * m, &next_table);
+            multidim_rfft(p + i * m, &next_table, rtable);
 
-        for(size_t i = 0; i < m; i += 2 * inner)
+        for(size_t i = 0; i < m; i += 2 * inner.exp2)
             fft_transposed(
-                p,
                 p + i,
+                p + i + inner.exp2,
                 log2m,
                 table[0].log2n,
                 inner,
@@ -1601,8 +1601,10 @@ mixin template Instantiate()
             cast(FFT0.MultidimTable) mt, dim_index, table);
     }
     
-    void multidim_rfft()(T* p, MultidimTable multidim_table, RTable rtable)
+    void multidim_rfft(T* p, MultidimTable multidim_table, RTable rtable)
     {
-        selected!"multidim_rfft"(p, cast(FFT0.MultidimTable) table, rtable);
+        selected!"multidim_rfft"(
+            p, cast(FFT0.MultidimTable) multidim_table, 
+            cast(FFT0.RTable) rtable);
     }
 }

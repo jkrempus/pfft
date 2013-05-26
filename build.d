@@ -454,7 +454,7 @@ void doit(string[] args)
     auto dcArgs = commonArgs(dc)
         .compileCmd(dccmd)
         .version_(versions)
-        .conditional(dbg, argList.debug_.g, optimizeFlags)
+        .conditional(dbg, argList.debug_, optimizeFlags)
         .raw(flags.map!(a => "-"~a).array);
 
     auto buildDir = (clib && !tests) ? "generated-c" : "generated";

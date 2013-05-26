@@ -285,40 +285,46 @@ if(transfer == Transfer.rfft)
     T[] data;
     direct.ITable itable;
     direct.RTable rtable;
-    direct.Table table;
+    d.MultidimTable table;
     int log2n;
     int log2lastn;
 
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
         log2ns = log2ns.dup;
         log2lastn = log2ns.back;
         log2n = log2ns.reduce!sum;
         log2ns.back -= 1;
         data = gc_aligned_array!T(st!1 << log2n);
         data[] = 0;
-    
-        this.log2n = log2n;
-        itable = d.interleave_table(log2n, GC.malloc(d.itable_size(log2n))); 
-        rtable = d.rfft_table(log2n, GC.malloc(d.fft_table_size(log2n)));
-        table = d.fft_table(log2n - 1, GC.malloc(d.fft_table_size(log2n - 1)));
+
+        auto isize = d.itable_size(log2lastn);
+        itable = d.interleave_table(log2lastn, GC.malloc(isize));
+        auto rsize = d.fft_table_size(log2lastn);
+        rtable = d.rfft_table(log2lastn, GC.malloc(rsize));
+        auto size = d.multidim_fft_table_size(log2ns);
+        table = d.multidim_fft_table(log2ns, GC.malloc(size));
     }
-    
+
     void compute()
     {
         static if(isInverse)
         {
-            d.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
-            d.interleave(data.ptr, log2n, itable);    
+//            d.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
+//            d.interleave(data.ptr, log2n, itable);    
         }
         else
         {
-            d.deinterleave(data.ptr, log2n, itable);    
-            d.rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
+            foreach(i; iota(0, st!1 << log2n, st!1 << log2lastn))
+                d.deinterleave(
+                    data.ptr + i,
+                    log2lastn,
+                    itable);
+            
+            d.multidim_rfft(data.ptr, table, rtable);
         }
     }
-    
+
     mixin realSplitElementAccess!();
 }
 
@@ -646,11 +652,11 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
             return fft(a, w);
 
         size_t m = st!1 << log2ns[1 .. $].reduce!sum;
-        foreach(i; 0 .. m)
-            fft(a[i .. $].stride(m), w);
-
         foreach(i; 0 .. st!1 << log2ns.front)
             multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
+
+        foreach(i; 0 .. m)
+            fft(a[i .. $].stride(m), w);
     }
 
     this(uint[] log2ns)

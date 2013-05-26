@@ -333,9 +333,9 @@ struct Columns(alias V)
             foreach(i; 0 .. n)
                 foreach(j; 0 .. m)
                     static if(inverse) 
-                        src[j * sstride + i] = dst[i * dstride + j];
+                        src[i * sstride + j] = dst[j * dstride + i];
                     else
-                        dst[i * dstride + j] = src[j * sstride + i];
+                        dst[j * dstride + i] = src[i * sstride + j];
 
             return;
         }

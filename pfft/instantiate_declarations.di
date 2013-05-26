@@ -51,6 +51,6 @@ mixin template Instantiate()
     MultidimTable multidim_fft_table2(size_t ndim, void* ptr, TransposeBuffer buf);
     void multidim_fft_table_set(MultidimTable mt, size_t dim_index, Table table);
     
-    void multidim_rfft()(T* p, MultidimTable multidim_table, RTable rtable);
+    void multidim_rfft(T* p, MultidimTable multidim_table, RTable rtable);
 }
 
