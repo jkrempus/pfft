@@ -19,17 +19,19 @@ template TypeTuple(A...)
 
 template st(alias a){ enum st = cast(size_t) a; }
 
+size_t exp2(uint a){ return st!1 << a; }
+
 struct Tuple(A...)
 {
     A a;
     alias a this;
 }
 
-version(GNU)
+version(none)
 {
     public import gcc.attribute;
     enum noinline = attribute("noinline");
-    enum always_inline = attribute("always_inline");
+    enum always_inline = attribute("forceinline");
 }
 else
 {

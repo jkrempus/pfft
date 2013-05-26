@@ -118,15 +118,19 @@ mixin template realElementAccessImpl()
     auto timeIm(size_t i){ return to!T(0); }
 
     private @property _n(){ return st!1 << log2n; } 
+    private @property _lastn(){ return st!1 << log2lastn; }
+    private auto _row(size_t i){ return i & ~(_lastn - 1); }
+    private auto _col(size_t i){ return i & (_lastn - 1); }
 
     auto freqRe(size_t i)
     {
-        return re(min(i, _n - i));
+        return re(_row(i) + min(_col(i), _lastn - _col(i)));
     }
     
     auto freqIm(size_t i)
     {
-        return i < _n / 2 ? im(i) :  -im(_n - i);
+        return _col(i) < _lastn / 2 ? 
+            im(i) :  -im(_row(i) + _lastn - _col(i));
     }
 
     static if(isInverse)
@@ -135,11 +139,12 @@ mixin template realElementAccessImpl()
 
         void fill(Dg fRe, Dg fIm) 
         {
-            foreach(i; 0 .. _n / 2 + 1)
+            foreach(row; iota(0, _lastn, _n))
+            foreach(col; 0 .. _lastn / 2 + 1)
             {
-                re(i) = fRe(i);
-                im(i) = (i == 0 || i == _n / 2) ? 0.0 : fIm(i);
-            }             
+                re(row + col) = fRe(row + col);
+                im(row + col) = (col == 0 || col == _lastn / 2) ? 0.0 : fIm(row + col);
+            } 
         }
 
         alias timeRe outRe;
@@ -154,7 +159,7 @@ mixin template realElementAccessImpl()
         void fill(Dg fRe, Dg fIm) 
         {
             foreach(i; 0 .. _n)
-                data[i] = fRe(i);     
+                re(i) = fRe(i);     
         }
         
         alias timeRe inRe;
@@ -172,11 +177,13 @@ mixin template realSplitElementAccess()
     
     ref im(size_t i)
     {
-        auto n = (st!1 << log2n);
- 
+        auto lastn = st!1 << log2lastn;
+        auto row = i & ~(lastn - 1);
+        auto column = i & (lastn - 1);
+
         return 
-            i == 0 ? _first_im : 
-            i == n / 2 ? _last_im : data[n / 2 + i];
+            column == 0 ? _first_im : 
+            column == lastn / 2 ? _last_im : data[row + lastn / 2 + column];
     }
 
     mixin realElementAccessImpl!();
@@ -274,19 +281,22 @@ if(transfer == Transfer.rfft)
 {
     import core.memory; 
     alias direct d; 
-   
+
     T[] data;
     direct.ITable itable;
     direct.RTable rtable;
     direct.Table table;
     int log2n;
-    
+    int log2lastn;
+
     this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
-        auto log2n = log2ns.front;
-        auto n = st!1 << log2n;
-        data = gc_aligned_array!T(n);
+        log2ns = log2ns.dup;
+        log2lastn = log2ns.back;
+        log2n = log2ns.reduce!sum;
+        log2ns.back -= 1;
+        data = gc_aligned_array!T(st!1 << log2n);
         data[] = 0;
     
         this.log2n = log2n;
@@ -449,6 +459,7 @@ if(transfer == Transfer.rfft)
     alias PfftC!() Impl;
    
     int log2n;
+    int log2lastn;
     Impl.RTable* table;
     T* data;
     
@@ -456,6 +467,7 @@ if(transfer == Transfer.rfft)
     {
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
+        log2lastn = log2n;
         data = Impl.allocate(1 << log2n);
         data[0 .. 1 << log2n] = 0;
         table = Impl.rtable(1 << log2n, null); 
@@ -523,6 +535,7 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
    
     alias Rfft!(T) F;
     int log2n;
+    int log2lastn;
     F f;
     F.Array data;
     
@@ -530,6 +543,7 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
     {
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
+        log2lastn = log2n;
         size_t n = 1U << log2n; 
         f = new F(n);
         data = F.Array(n);
@@ -847,11 +861,13 @@ static if(benchFftw)
         Complex!(T)[] r;
         void* p;
         int log2n;
+        int log2lastn;
         
         this(uint[] log2ns)
         {
             enforce(log2ns.length == 1);
             log2n = log2ns.front;
+            log2lastn = log2n;
             auto n = st!1 << log2n;
             a = fftw_array!T(n);
             a[] = 0;

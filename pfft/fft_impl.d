@@ -1167,6 +1167,36 @@ template FFT(alias V, alias Options)
             re, im, log2m, table[0].log2n, log2m, &table[0], buf, false);
     }
 
+    void multidim_rfft()(T* p, MultidimTable multidim_table, RTable rtable)
+    {
+        auto table = multidim_table.tables;
+        auto inner = table[$ - 1].log2n;
+        if(table.length == 1)
+            return rfft(p, p + inner.exp2, &table[0], rtable);
+
+        auto buf = multidim_table.buffer;
+        // we add one because there is a real and an imaginary part
+        int log2m = 1;
+        foreach(e; table[1 .. $])
+            log2m += e.log2n;
+
+        auto m = log2m.exp2;
+        auto next_table = MultidimTableValue(table[1 .. $], buf, null);
+        foreach(i; 0 .. st!1 << table[0].log2n)
+            multidim_fft(re + i * m, im + i * m, &next_table);
+
+        for(size_t i = 0; i < m; i += 2 * inner)
+            fft_transposed(
+                p,
+                p + i,
+                log2m,
+                table[0].log2n,
+                inner,
+                &table[0],
+                buf,
+                true);
+    }
+
     alias T* RTable;
  
     auto rtable_size()(int log2n)
@@ -1245,26 +1275,6 @@ template FFT(alias V, alias Options)
         fft(ri, rr, table);
     }
 
-    void multidim_rfft()(
-        T* re, T* im, MultidimTable multidim_table, RTable rtable)
-    {
-        auto table = multidim_table.tables;
-        if(table.length == 1)
-            return rfft(re, im, &table[0], rtable);
-
-        auto buf = multidim_table.buffer;
-        int log2m = 0;
-        foreach(e; table[1 .. $])
-            log2m += e.log2n;
-
-        auto m = st!1 << log2m;
-        auto next_table = MultidimTableValue(table[1 .. $], buf, null);
-        foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_fft(re + i * m, im + i * m, &next_table, rtable);
-
-        fft_transposed(re, im, log2m, table[0].log2n, log2m, &table[0], buf);
-    }
-    
     void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
@@ -1589,5 +1599,10 @@ mixin template Instantiate()
     {
         selected!"multidim_fft_table_set"(
             cast(FFT0.MultidimTable) mt, dim_index, table);
+    }
+    
+    void multidim_rfft()(T* p, MultidimTable multidim_table, RTable rtable)
+    {
+        selected!"multidim_rfft"(p, cast(FFT0.MultidimTable) table, rtable);
     }
 }
