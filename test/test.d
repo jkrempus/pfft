@@ -114,35 +114,47 @@ mixin template splitElementAccess()
 
 mixin template realElementAccessImpl()
 {
-    private @property _n(){ return st!1 << log2n; } 
+    size_t _n;
+    size_t[] _log2n_cumulative;
+    enum half_dim= 0;
 
-    static if(is(typeof(log2lastn)))
+    void initRealElementAccessImpl(uint[] log2n)
     {
-        private @property _colLimit(){ return st!1 << log2lastn; }
-        private auto _row(size_t i){ return i >> log2lastn; }
-        private auto _col(size_t i){ return i & (_colLimit - 1); }
-       
-        private auto _ipacked(size_t row, size_t col)
-        {
-            return row * (_colLimit / 2 + 1) + col;
-        }
-    }
-    else static if(is(typeof(log2firstn)))
-    {
-        private @property _shift(){ return log2n - log2firstn; }
-        private @property _colLimit(){ return st!1 << log2firstn; }
-        private auto _row(size_t i){ return i & ((st!1 << _shift) - 1); }
-        private auto _col(size_t i){ return i >> _shift; }
+        alias _log2n_cumulative l;
+        l = new size_t[log2n.length + 1];
+        l[$ - 1] = 0;
         
-        private auto _ipacked(size_t row, size_t col)
-        { 
-            return (row << (log2n - log2firstn)) + col;
-        }
+        foreach(i; 0 .. log2n.length)
+            l[$ - 2 - i] = l[$ - 1 - i] + log2n[i];
     }
+
+    size_t _dim_size(size_t dim)
+    {
+        return st!1 << (_log2n_cumulative[dim] - logwn_cumulative[dim + 1]);
+    }
+
+    size_t _index(size_t i, size_t dim)
+    {
+        alias _log2n_cumulative l;
+        return (i & ((st!1 << l[dim]) - 1)) >> l[dim + 1];
+    } 
 
     private auto _icomplex(size_t i)
     {
-        return _ipacked(_row(i), min(_col(i), _colLimit - _col(i)));
+        alias _log2n_cumulative l;
+        size_t r = 0;
+        auto mirrored = _index(i, half_dim) > _dim_size(half_dim) / 2;
+
+        foreach(dim; 0 .. l.length - 1)
+        {
+            r *= (dim == compressed_dim) ?
+                _dim_size(dim) : _dim_size(dim) / 2 + 1; 
+
+            auto idx = _index(i, dim);
+            r += mirrored ? _dim_size(half_dim) - idx : idx;
+        }
+
+        return r;
     }
 
     auto timeRe(size_t i){ return data[i]; }
@@ -158,16 +170,20 @@ mixin template realElementAccessImpl()
     {
         void fill(Dg fRe, Dg fIm) 
         {
-            foreach(i; 0 .. _n)
+            enforce(false, "TODO");
+            version(none)
             {
-                auto row = _row(i);
-                auto col = _col(i);
-                if(col > _colLimit / 2)
-                    continue;
+                foreach(i; 0 .. _n)
+                {
+                    auto row = _row(i);
+                    auto col = _col(i);
+                    if(col > _colLimit / 2)
+                        continue;
 
-                re(_ipacked(row, col)) = fRe(i);
-                im(_ipacked(row, col)) = (col == 0 || col == _colLimit / 2) ? 
-                    0.0 : fIm(i);
+                    re(_ipacked(row, col)) = fRe(i);
+                    im(_ipacked(row, col)) = (col == 0 || col == _colLimit / 2) ? 
+                        0.0 : fIm(i);
+                }
             }
         }
 
@@ -862,7 +878,10 @@ static if(benchFftw)
             a[] = Complex!T(0, 0);
             r = fftw_array!(Complex!T)(n);
             auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
-            auto ns = log2ns.map!(a => 1 << a).array;
+            auto ns = new int[log2ns.length]; 
+            foreach(i; 0 .. log2ns.length)
+                ns[i] = 1 << log2ns[i];
+
             p = fftw_plan_dft(ns.length.to!int, ns.ptr, a.ptr, r.ptr, dir, flags);
         }
         
@@ -957,11 +976,9 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     auto simple = S(log2n);
     
     rndGen.seed(1);
-    auto rnd = delegate(size_t i){ return to!FT(uniform(0.0, 1.0)); };
+    auto rnd = delegate (size_t i) => to!FT(uniform(0.0, 1.0));
     tested.fill(rnd, rnd);
-    auto re = (size_t a){ return cast(ST) tested.inRe(a); };
-    auto im = (size_t a){ return cast(ST) tested.inIm(a); };
-    simple.fill(re, im);
+    simple.fill(a => tested.inRe(a).to!ST, a => tested.inIm(a).to!ST);
    
     simple.compute();
     tested.compute();
@@ -988,7 +1005,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
             sim /= n;
         }        
 
-        writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
+        writefln("%s\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", i, sre, tre, sim, tim, 0.0, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 
