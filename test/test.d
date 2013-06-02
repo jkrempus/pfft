@@ -6,7 +6,7 @@ import std.range, std.stdio, std.conv, std.complex, std.getopt,
     std.random, std.numeric, std.math, std.algorithm,
     std.exception, std.typetuple, std.traits, std.string : toUpper, toStringz;
 
-import core.bitop;
+import core.bitop, core.stdc.string;
 
 import core.time;
 
@@ -114,37 +114,61 @@ mixin template splitElementAccess()
 
 mixin template realElementAccessImpl()
 {
+    private @property _n(){ return st!1 << log2n; } 
+
+    static if(is(typeof(log2lastn)))
+    {
+        private @property _colLimit(){ return st!1 << log2lastn; }
+        private auto _row(size_t i){ return i >> log2lastn; }
+        private auto _col(size_t i){ return i & (_colLimit - 1); }
+       
+        private auto _ipacked(size_t row, size_t col)
+        {
+            return row * (_colLimit / 2 + 1) + col;
+        }
+    }
+    else static if(is(typeof(log2firstn)))
+    {
+        private @property _shift(){ return log2n - log2firstn; }
+        private @property _colLimit(){ return st!1 << log2firstn; }
+        private auto _row(size_t i){ return i & ((st!1 << _shift) - 1); }
+        private auto _col(size_t i){ return i >> _shift; }
+        
+        private auto _ipacked(size_t row, size_t col)
+        { 
+            return (row << (log2n - log2firstn)) + col;
+        }
+    }
+
+    private auto _icomplex(size_t i)
+    {
+        return _ipacked(_row(i), min(_col(i), _colLimit - _col(i)));
+    }
+
     auto timeRe(size_t i){ return data[i]; }
     auto timeIm(size_t i){ return to!T(0); }
-
-    private @property _n(){ return st!1 << log2n; } 
-    private @property _lastn(){ return st!1 << log2lastn; }
-    private auto _row(size_t i){ return i & ~(_lastn - 1); }
-    private auto _col(size_t i){ return i & (_lastn - 1); }
-
-    auto freqRe(size_t i)
-    {
-        return re(_row(i) + min(_col(i), _lastn - _col(i)));
-    }
-    
+    auto freqRe(size_t i) { return re(_icomplex(i)); }
     auto freqIm(size_t i)
     {
-        return _col(i) < _lastn / 2 ? 
-            im(i) :  -im(_row(i) + _lastn - _col(i));
+        return im(_icomplex(i)) * (_col(i) > _colLimit / 2 ? -1 : 1);
     }
 
+    alias T delegate(size_t) Dg;
     static if(isInverse)
     {
-        alias T delegate(size_t) Dg;
-
         void fill(Dg fRe, Dg fIm) 
         {
-            foreach(row; iota(0, _lastn, _n))
-            foreach(col; 0 .. _lastn / 2 + 1)
+            foreach(i; 0 .. _n)
             {
-                re(row + col) = fRe(row + col);
-                im(row + col) = (col == 0 || col == _lastn / 2) ? 0.0 : fIm(row + col);
-            } 
+                auto row = _row(i);
+                auto col = _col(i);
+                if(col > _colLimit / 2)
+                    continue;
+
+                re(_ipacked(row, col)) = fRe(i);
+                im(_ipacked(row, col)) = (col == 0 || col == _colLimit / 2) ? 
+                    0.0 : fIm(i);
+            }
         }
 
         alias timeRe outRe;
@@ -154,12 +178,12 @@ mixin template realElementAccessImpl()
     }
     else
     {
-        alias T delegate(size_t) Dg;
-
         void fill(Dg fRe, Dg fIm) 
         {
             foreach(i; 0 .. _n)
-                re(i) = fRe(i);     
+                data[i] = fRe(i);
+
+            writefln("tested fill\n%(%s\n%)\n", data);
         }
         
         alias timeRe inRe;
@@ -171,21 +195,8 @@ mixin template realElementAccessImpl()
 
 mixin template realSplitElementAccess()
 {
-    private T _first_im = 0;
-    private T _last_im = 0; 
     ref re(size_t i){ return data[i]; }
-    
-    ref im(size_t i)
-    {
-        auto lastn = st!1 << log2lastn;
-        auto row = i & ~(lastn - 1);
-        auto column = i & (lastn - 1);
-
-        return 
-            column == 0 ? _first_im : 
-            column == lastn / 2 ? _last_im : data[row + lastn / 2 + column];
-    }
-
+    ref im(size_t i){ return data[$ / 2 + i]; }
     mixin realElementAccessImpl!();
 }
 
@@ -287,21 +298,22 @@ if(transfer == Transfer.rfft)
     direct.RTable rtable;
     d.MultidimTable table;
     int log2n;
-    int log2lastn;
+    int log2firstn;
 
     this(uint[] log2ns)
     {
         log2ns = log2ns.dup;
-        log2lastn = log2ns.back;
-        log2n = log2ns.reduce!sum;
-        log2ns.back -= 1;
-        data = gc_aligned_array!T(st!1 << log2n);
+        log2firstn = log2ns.front;
+        auto log2m = log2ns[1 .. $].reduce!sum;
+        log2n = log2m + log2firstn;
+        log2ns.front -= 1;
+        data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
         data[] = 0;
 
-        auto isize = d.itable_size(log2lastn);
-        itable = d.interleave_table(log2lastn, GC.malloc(isize));
-        auto rsize = d.fft_table_size(log2lastn);
-        rtable = d.rfft_table(log2lastn, GC.malloc(rsize));
+        auto isize = d.itable_size(log2firstn);
+        itable = d.interleave_table(log2firstn, GC.malloc(isize));
+        auto rsize = d.fft_table_size(log2firstn);
+        rtable = d.rfft_table(log2firstn, GC.malloc(rsize));
         auto size = d.multidim_fft_table_size(log2ns);
         table = d.multidim_fft_table(log2ns, GC.malloc(size));
     }
@@ -315,13 +327,11 @@ if(transfer == Transfer.rfft)
         }
         else
         {
-            foreach(i; iota(0, st!1 << log2n, st!1 << log2lastn))
-                d.deinterleave(
-                    data.ptr + i,
-                    log2lastn,
-                    itable);
-            
-            d.multidim_rfft(data.ptr, table, rtable);
+            d.multidim_rfft(data.ptr, table, rtable, itable);
+//            auto imag = data[$ / 2 .. $];
+//            imag[$ - 2] = 0;
+//            memmove(imag.ptr + 1, imag.ptr, T.sizeof * (imag.length - 1));
+//            imag[0] = 0;
         }
     }
 
@@ -684,6 +694,7 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
             a[i].re = fRe(i);
             a[i].im = fIm(i);
         }
+        writefln("simple fill\n%(%s\n%)\n", a);
     }
 
     auto inRe(size_t i){ return a[i].re; }
@@ -951,11 +962,15 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     auto re = (size_t a){ return cast(ST) tested.inRe(a); };
     auto im = (size_t a){ return cast(ST) tested.inIm(a); };
     simple.fill(re, im);
-    
+   
     simple.compute();
     tested.compute();
-    
-    
+
+
+    writefln("simple\n%(%s\n%)\n", simple.a);
+    static if(is(typeof(tested.data)))
+        writefln("tested\n%(%s\n%)\n", tested.data);
+
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
@@ -973,7 +988,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
             sim /= n;
         }        
 
-        //writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
+        writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 

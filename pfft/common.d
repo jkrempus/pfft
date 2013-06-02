@@ -4,6 +4,7 @@ T max(T)(T a, T b){ return a > b ? a : b; }
 T min(T)(T a, T b){ return a < b ? a : b; }
 
 import core.bitop;
+public import core.stdc.string;
 
 alias bsr log2;
 
