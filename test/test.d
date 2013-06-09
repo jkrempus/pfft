@@ -120,41 +120,49 @@ mixin template realElementAccessImpl()
 
     void initRealElementAccessImpl(uint[] log2n)
     {
-        alias _log2n_cumulative l;
-        l = new size_t[log2n.length + 1];
-        l[$ - 1] = 0;
+        _log2n_cumulative = new size_t[log2n.length + 1];
+        _log2n_cumulative[$ - 1] = 0;
         
         foreach(i; 0 .. log2n.length)
-            l[$ - 2 - i] = l[$ - 1 - i] + log2n[i];
+            _log2n_cumulative[$ - 2 - i] = 
+                _log2n_cumulative[$ - 1 - i] + log2n[i];
+
+        _n = st!1 << _log2n_cumulative[0];
     }
 
     size_t _dim_size(size_t dim)
     {
-        return st!1 << (_log2n_cumulative[dim] - logwn_cumulative[dim + 1]);
+        return st!1 << (_log2n_cumulative[dim] - _log2n_cumulative[dim + 1]);
     }
 
     size_t _index(size_t i, size_t dim)
     {
-        alias _log2n_cumulative l;
-        return (i & ((st!1 << l[dim]) - 1)) >> l[dim + 1];
-    } 
+        return (i & ((st!1 << _log2n_cumulative[dim]) - 1)) >>
+            _log2n_cumulative[dim + 1];
+    }
 
     private auto _icomplex(size_t i)
     {
-        alias _log2n_cumulative l;
-        size_t r = 0;
         auto mirrored = _index(i, half_dim) > _dim_size(half_dim) / 2;
+        size_t r = 0;
 
-        foreach(dim; 0 .. l.length - 1)
+        foreach(dim; 0 .. _log2n_cumulative.length - 1)
         {
-            r *= (dim == compressed_dim) ?
-                _dim_size(dim) : _dim_size(dim) / 2 + 1; 
+            r *= (dim == half_dim) ? _dim_size(dim) / 2 + 1  : _dim_size(dim);
 
             auto idx = _index(i, dim);
-            r += mirrored ? _dim_size(half_dim) - idx : idx;
+            r += mirrored ? _dim_size(dim) - idx : idx;
         }
 
         return r;
+    }
+
+    void testRealElementAccessImpl()
+    {
+        writefln("%s\t%s", _dim_size(0), _dim_size(1));
+        foreach(i; 0 .. _n)
+            writefln("%s\t%s\t%s\t%s",
+                i, _index(i, 0), _index(i, 1), _icomplex(i));
     }
 
     auto timeRe(size_t i){ return data[i]; }
@@ -162,7 +170,8 @@ mixin template realElementAccessImpl()
     auto freqRe(size_t i) { return re(_icomplex(i)); }
     auto freqIm(size_t i)
     {
-        return im(_icomplex(i)) * (_col(i) > _colLimit / 2 ? -1 : 1);
+        auto mirrored = _index(i, half_dim) > _dim_size(half_dim) / 2;
+        return im(_icomplex(i)) * (mirrored ? -1 : 1);
     }
 
     alias T delegate(size_t) Dg;
@@ -318,12 +327,15 @@ if(transfer == Transfer.rfft)
 
     this(uint[] log2ns)
     {
+        initRealElementAccessImpl(log2ns); 
         log2ns = log2ns.dup;
         log2firstn = log2ns.front;
         auto log2m = log2ns[1 .. $].reduce!sum;
         log2n = log2m + log2firstn;
         log2ns.front -= 1;
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
+        writeln(log2ns);
+        writeln([data.length, log2m, log2n]);
         data[] = 0;
 
         auto isize = d.itable_size(log2firstn);
@@ -1155,6 +1167,10 @@ Options:
  
 void main(string[] args)
 {
+//    auto d = DirectApi!(Transfer.rfft, false)([2, 2]);
+//    d.testRealElementAccessImpl();
+//    return;
+
     static if(dynamicC)
         PfftC!().load(args);
 
