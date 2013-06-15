@@ -116,7 +116,6 @@ mixin template realElementAccessImpl()
 {
     size_t _n;
     size_t[] _log2n_cumulative;
-    enum half_dim= 0;
 
     void initRealElementAccessImpl(uint[] log2n)
     {
@@ -125,7 +124,7 @@ mixin template realElementAccessImpl()
         
         foreach(i; 0 .. log2n.length)
             _log2n_cumulative[$ - 2 - i] = 
-                _log2n_cumulative[$ - 1 - i] + log2n[i];
+                _log2n_cumulative[$ - 1 - i] + log2n.retro[i];
 
         _n = st!1 << _log2n_cumulative[0];
     }
@@ -149,20 +148,11 @@ mixin template realElementAccessImpl()
         foreach(dim; 0 .. _log2n_cumulative.length - 1)
         {
             r *= (dim == half_dim) ? _dim_size(dim) / 2 + 1  : _dim_size(dim);
-
             auto idx = _index(i, dim);
             r += mirrored ? _dim_size(dim) - idx : idx;
         }
 
         return r;
-    }
-
-    void testRealElementAccessImpl()
-    {
-        writefln("%s\t%s", _dim_size(0), _dim_size(1));
-        foreach(i; 0 .. _n)
-            writefln("%s\t%s\t%s\t%s",
-                i, _index(i, 0), _index(i, 1), _icomplex(i));
     }
 
     auto timeRe(size_t i){ return data[i]; }
@@ -220,6 +210,7 @@ mixin template realElementAccessImpl()
 
 mixin template realSplitElementAccess()
 {
+    enum half_dim= 0;
     ref re(size_t i){ return data[i]; }
     ref im(size_t i){ return data[$ / 2 + i]; }
     mixin realElementAccessImpl!();
@@ -821,15 +812,15 @@ static if(benchFftw)
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
         extern(C) void* fftwf_plan_dft(int, int*, Complex!(float)*, Complex!(float)*, int, uint);
-        extern(C) void* fftwf_plan_dft_r2c_1d(int, float*, Complex!(float)*, uint);
-        extern(C) void* fftwf_plan_dft_c2r_1d(int, Complex!(float)*, float*, uint);
+        extern(C) void* fftwf_plan_dft_r2c(int, int, float*, Complex!(float)*, uint);
+        extern(C) void* fftwf_plan_dft_c2r(int, int, Complex!(float)*, float*, uint);
         extern(C) void fftwf_execute(void *);
         
         alias fftwf_malloc fftw_malloc;
         alias fftwf_plan_dft_1d fftw_plan_dft_1d;
         alias fftwf_plan_dft fftw_plan_dft;
-        alias fftwf_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
-        alias fftwf_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
+        alias fftwf_plan_dft_r2c fftw_plan_dft_r2c;
+        alias fftwf_plan_dft_c2r fftw_plan_dft_c2r;
         alias fftwf_execute fftw_execute;
     }
     else static if(is(T == double))
@@ -839,8 +830,8 @@ static if(benchFftw)
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
         extern(C) void* fftw_plan_dft(int, int*, Complex!(double)*, Complex!(double)*, int, uint);
-        extern(C) void* fftw_plan_dft_r2c_1d(int, double*, Complex!(double)*, uint);
-        extern(C) void* fftw_plan_dft_c2r_1d(int, Complex!(double)*, double*, uint);
+        extern(C) void* fftw_plan_dft_r2c(int, double*, Complex!(double)*, uint);
+        extern(C) void* fftw_plan_dft_c2r(int, Complex!(double)*, double*, uint);
         extern(C) void fftw_execute(void *);
     }
     else
@@ -850,15 +841,15 @@ static if(benchFftw)
         extern(C) void* fftwl_malloc(size_t);
         extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
         extern(C) void* fftwl_plan_dft(int, int*, Complex!(real)*, Complex!(real)*, int, uint);
-        extern(C) void* fftwl_plan_dft_r2c_1d(int, real*, Complex!(real)*, uint);
-        extern(C) void* fftwl_plan_dft_c2r_1d(int, Complex!(real)*, real*, uint);
+        extern(C) void* fftwl_plan_dft_r2c(int, real*, Complex!(real)*, uint);
+        extern(C) void* fftwl_plan_dft_c2r(int, Complex!(real)*, real*, uint);
         extern(C) void fftwl_execute(void *);
         
         alias fftwl_malloc fftw_malloc;
         alias fftwl_plan_dft_1d fftw_plan_dft_1d;
         alias fftwl_plan_dft fftw_plan_dft;
-        alias fftwl_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
-        alias fftwl_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
+        alias fftwl_plan_dft_r2c fftw_plan_dft_r2c;
+        alias fftwl_plan_dft_c2r fftw_plan_dft_c2r;
         alias fftwl_execute fftw_execute;
     }
 
@@ -910,29 +901,32 @@ static if(benchFftw)
         void* p;
         int log2n;
         int log2lastn;
-        
+        int ndim;
+
         this(uint[] log2ns)
         {
-            enforce(log2ns.length == 1);
-            log2n = log2ns.front;
-            log2lastn = log2n;
+            initRealElementAccessImpl(log2ns); 
+            log2n = log2ns.reduce!"a+b";
+            log2lastn = log2ns.back;
             auto n = st!1 << log2n;
             a = fftw_array!T(n);
             a[] = 0;
             r = fftw_array!(Complex!T)(n / 2 + 1);
-            
+           
+            ndim = log2ns.length.to!int; 
             static if(isInverse)
-                p = fftw_plan_dft_c2r_1d(to!int(n), r.ptr, a.ptr, flags);
+                p = fftw_plan_dft_c2r(ndim, to!int(n), r.ptr, a.ptr, flags);
             else
-                p = fftw_plan_dft_r2c_1d(to!int(n), a.ptr, r.ptr, flags);
+                p = fftw_plan_dft_r2c(ndim, to!int(n), a.ptr, r.ptr, flags);
         }
-        
+
         void compute(){ fftw_execute(p); }
-        
+
         ref re(size_t i){ return r[i].re; }
         ref im(size_t i){ return r[i].im; }
-        
+
         alias a data;
+        @property half_dim(){ return ndim - 1; }
         mixin realElementAccessImpl!();
     }
 }
@@ -988,7 +982,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     auto simple = S(log2n);
     
     rndGen.seed(1);
-    auto rnd = delegate (size_t i) => to!FT(uniform(0.0, 1.0));
+    auto rnd = delegate (size_t i) => to!FT(i & 3);//uniform(0.0, 1.0));
     tested.fill(rnd, rnd);
     simple.fill(a => tested.inRe(a).to!ST, a => tested.inIm(a).to!ST);
    
@@ -1167,10 +1161,6 @@ Options:
  
 void main(string[] args)
 {
-//    auto d = DirectApi!(Transfer.rfft, false)([2, 2]);
-//    d.testRealElementAccessImpl();
-//    return;
-
     static if(dynamicC)
         PfftC!().load(args);
 
