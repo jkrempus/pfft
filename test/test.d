@@ -52,17 +52,20 @@ version(BenchClib)
 else
     enum benchClib = false;
     
-auto gc_aligned_array(A)(size_t n)
+auto gc_aligned_array(A = void)(size_t n)
 {
+    A[] r;
     version(NoGC)
     {
-        return (cast(A*)PfftC!().allocate(A.sizeof*n / T.sizeof))[0..n];
+        r = (cast(A*)PfftC!().allocate(A.sizeof*n / T.sizeof))[0..n];
     }
     else
     {
         import core.memory;
-        return (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
+        r = (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
     }
+    //writefln("Allocated memory between %s and %s", r.ptr, r.ptr + n);
+    return r;
 }
 
 bool isIn(A, B...)(A a, B b)
@@ -140,24 +143,38 @@ mixin template realElementAccessImpl()
             _log2n_cumulative[dim + 1];
     }
 
-    private auto _icomplex(size_t i)
+    private bool _mirrored(size_t i)
     {
-        auto mirrored = _index(i, half_dim) > _dim_size(half_dim) / 2;
-        size_t r = 0;
-    
-        auto periodic(size_t i, size_t dim)
+        return _index(i, half_dim) > _dim_size(half_dim) / 2;
+    }
+
+    private auto _mirror(size_t i, size_t dim)
+    {
+        return (_dim_size(dim) - i) & (_dim_size(dim) - 1);
+    }
+
+    private bool _is_real(size_t i)
+    {
+        foreach(dim; 0 .. _log2n_cumulative.length - 1)
         {
-            return i & (_dim_size(dim) - 1);
+            auto idx = _index(i, dim);
+            if(_mirror(idx, dim) != idx)
+                return false;
         }
 
+        return true;
+    }
+
+    private auto _icomplex(size_t i)
+    {
+        size_t r = 0;
+    
         foreach(dim; 0 .. _log2n_cumulative.length - 1)
         {
             r *= (dim == half_dim) ? _dim_size(dim) / 2 + 1  : _dim_size(dim);
             auto idx = _index(i, dim);
-            r += mirrored ? periodic(_dim_size(dim) - idx, dim) : idx;
-            //writefln("%s\t%s", idx, _dim_size(dim));
+            r += _mirrored(i) ? _mirror(idx, dim) : idx;
         }
-        writefln("%d\t%d", i, r);
         return r;
     }
 
@@ -166,8 +183,7 @@ mixin template realElementAccessImpl()
     auto freqRe(size_t i) { return re(_icomplex(i)); }
     auto freqIm(size_t i)
     {
-        auto mirrored = _index(i, half_dim) > _dim_size(half_dim) / 2;
-        return im(_icomplex(i)) * (mirrored ? -1 : 1);
+        return im(_icomplex(i)) * (_mirrored(i) ? -1 : 1);
     }
 
     alias T delegate(size_t) Dg;
@@ -175,20 +191,13 @@ mixin template realElementAccessImpl()
     {
         void fill(Dg fRe, Dg fIm) 
         {
-            enforce(false, "TODO");
-            version(none)
+            foreach(i; 0 .. _n)
             {
-                foreach(i; 0 .. _n)
-                {
-                    auto row = _row(i);
-                    auto col = _col(i);
-                    if(col > _colLimit / 2)
-                        continue;
+                if(_mirrored(i))
+                    continue;
 
-                    re(_ipacked(row, col)) = fRe(i);
-                    im(_ipacked(row, col)) = (col == 0 || col == _colLimit / 2) ? 
-                        0.0 : fIm(i);
-                }
+                re(_icomplex(i)) = fRe(i);                   
+                im(_icomplex(i)) = _is_real(i) ? 0 : fIm(i); 
             }
         }
 
@@ -325,37 +334,26 @@ if(transfer == Transfer.rfft)
         initRealElementAccessImpl(log2ns); 
         log2ns = log2ns.dup;
         log2firstn = log2ns.front;
-        auto log2m = log2ns[1 .. $].reduce!sum;
+        auto log2m = 0.reduce!sum(log2ns[1 .. $]);
         log2n = log2m + log2firstn;
         log2ns.front -= 1;
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
-        writeln(log2ns);
-        writeln([data.length, log2m, log2n]);
         data[] = 0;
 
         auto isize = d.itable_size(log2firstn);
-        itable = d.interleave_table(log2firstn, GC.malloc(isize));
+        itable = d.interleave_table(log2firstn, gc_aligned_array(isize).ptr);
         auto rsize = d.fft_table_size(log2firstn);
-        rtable = d.rfft_table(log2firstn, GC.malloc(rsize));
+        rtable = d.rfft_table(log2firstn, gc_aligned_array(rsize).ptr);
         auto size = d.multidim_fft_table_size(log2ns);
-        table = d.multidim_fft_table(log2ns, GC.malloc(size));
+        table = d.multidim_fft_table(log2ns, gc_aligned_array(size).ptr);
     }
 
     void compute()
     {
         static if(isInverse)
-        {
-//            d.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
-//            d.interleave(data.ptr, log2n, itable);    
-        }
+            d.multidim_irfft(data.ptr, table, rtable, itable);
         else
-        {
             d.multidim_rfft(data.ptr, table, rtable, itable);
-//            auto imag = data[$ / 2 .. $];
-//            imag[$ - 2] = 0;
-//            memmove(imag.ptr + 1, imag.ptr, T.sizeof * (imag.length - 1));
-//            imag[0] = 0;
-        }
     }
 
     mixin realSplitElementAccess!();
@@ -992,10 +990,9 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     simple.compute();
     tested.compute();
 
-
-    writefln("simple\n%(%s\n%)\n", simple.a);
-    static if(is(typeof(tested.data)))
-        writefln("tested\n%(%s\n%)\n", tested.data);
+//    writefln("simple\n%(%s\n%)\n", simple.a);
+//    static if(is(typeof(tested.data)))
+//        writefln("tested\n%(%s\n%)\n", tested.data);
 
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;

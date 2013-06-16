@@ -125,6 +125,14 @@ void insertion_sort(alias less, T)(T[] arr)
     }
 }
 
+T reduce(alias reducer, T, R)(T seed, R a)
+{
+    foreach(e; a)
+        seed = reducer(seed, e);
+
+    return seed;
+}
+
 auto power2_or_zero(T)(T a) { return a && (a & (a - 1)) == 0; }
 
 struct Allocate(int max_num_ptr)
