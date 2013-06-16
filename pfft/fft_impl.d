@@ -1388,13 +1388,11 @@ template FFT(alias V, alias Options)
         auto im_end = im + m * (n + 1);
         writeln([n, im - p, im_end - p]);
 
-        writefln("multidim_rfft 1\n%(%s\n%)\n", p[0 .. 2 * m * (n + 1)]);
         memset(im_end - 2 * m, 0, m * T.sizeof);
         foreach(i; 1 .. n + 1)
             memcpy(im_end  - i * m, im_end - (i + 1) * m, m * T.sizeof);
 
         memset(im, 0, m * T.sizeof);
-        writefln("multidim_rfft 2\n%(%s\n%)\n", p[0 .. 2 * m * (n + 1)]);
 
         auto next_table = MultidimTableValue(table[1 .. $], buf, null);
         foreach(i; 0 .. n + 1)

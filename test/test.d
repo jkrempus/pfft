@@ -144,14 +144,20 @@ mixin template realElementAccessImpl()
     {
         auto mirrored = _index(i, half_dim) > _dim_size(half_dim) / 2;
         size_t r = 0;
+    
+        auto periodic(size_t i, size_t dim)
+        {
+            return i & (_dim_size(dim) - 1);
+        }
 
         foreach(dim; 0 .. _log2n_cumulative.length - 1)
         {
             r *= (dim == half_dim) ? _dim_size(dim) / 2 + 1  : _dim_size(dim);
             auto idx = _index(i, dim);
-            r += mirrored ? _dim_size(dim) - idx : idx;
+            r += mirrored ? periodic(_dim_size(dim) - idx, dim) : idx;
+            //writefln("%s\t%s", idx, _dim_size(dim));
         }
-
+        writefln("%d\t%d", i, r);
         return r;
     }
 
@@ -197,8 +203,6 @@ mixin template realElementAccessImpl()
         {
             foreach(i; 0 .. _n)
                 data[i] = fRe(i);
-
-            writefln("tested fill\n%(%s\n%)\n", data);
         }
         
         alias timeRe inRe;
@@ -713,7 +717,6 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
             a[i].re = fRe(i);
             a[i].im = fIm(i);
         }
-        writefln("simple fill\n%(%s\n%)\n", a);
     }
 
     auto inRe(size_t i){ return a[i].re; }
@@ -982,7 +985,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     auto simple = S(log2n);
     
     rndGen.seed(1);
-    auto rnd = delegate (size_t i) => to!FT(i & 3);//uniform(0.0, 1.0));
+    auto rnd = delegate (size_t i) => to!FT(uniform(0.0, 1.0));
     tested.fill(rnd, rnd);
     simple.fill(a => tested.inRe(a).to!ST, a => tested.inIm(a).to!ST);
    
