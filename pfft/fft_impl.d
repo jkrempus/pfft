@@ -1379,7 +1379,7 @@ template FFT(alias V, alias Options)
         deinterleave(p, table.log2n + 1, itable);
         auto n = table.log2n.exp2;
         rfft(p, p + n, table, rtable);
-        memmove(p + n + 1, p + n, n * T.sizeof);
+        memmove(p + n + 2, p + n + 1, n * T.sizeof);
         p[n + 1] = 0;
         p[2 * n + 1] = 0;
     }
@@ -1388,11 +1388,11 @@ template FFT(alias V, alias Options)
         T* p, Table table, RTable rtable, ITable itable)
     {
         auto n = table.log2n.exp2;
-        memmove(p + n, p + n + 1, n * T.sizeof);
+        memmove(p + n + 1, p + n + 2, n * T.sizeof);
         p[2 * n] = 0;
         p[2 * n + 1] = 0;
         irfft(p, p + n, table, rtable);
-        deinterleave(p, table.log2n + 1, itable);
+        interleave(p, table.log2n + 1, itable);
     }
 
     void multidim_rfft()(
