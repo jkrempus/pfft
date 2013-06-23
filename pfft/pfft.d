@@ -96,7 +96,6 @@ constructor.
  */
     this(size_t[] n...)
     {
-        assert((n[0] & (n[0] - 1)) == 0);
         auto log2n = new uint[n.length];
         log2size = 0;
         foreach(i; 0 .. log2n.length)
@@ -180,10 +179,10 @@ final class Rfft(T)
 {
     mixin Import!T;
 
-    int log2n;
-    impl.Table table;
-    impl.RTable rtable;
-    impl.ITable itable;
+    size_t array_size;
+    impl.RealMultidimTable table;
+//    impl.RTable rtable;
+//    impl.ITable itable;
 
 /// An alias for Fft!T.Array
     alias Fft!(T).Array Array;
@@ -193,19 +192,23 @@ The Rfft constructor. The parameter is the size of data sets that $(D rfft) will
 operate on. I will refer to this number as n in the rest of the documentation
 for this class. All tables used in rfft are calculated in the constructor.
  */
-    this(size_t n)
+    this(size_t[] n ...)
     {
-        assert((n & (n - 1)) == 0);
-        log2n  = bsf(n);
-    
-        auto mem = GC.malloc(impl.fft_table_size(log2n - 1));
-        table = impl.fft_table(log2n - 1, mem);
-        
-        mem = GC.malloc( impl.rtable_size(log2n));
-        rtable = impl.rfft_table(log2n, mem);
+        auto log2n = new uint[n.length];
+        size_t log2size = 0;
+        foreach(i; 0 .. log2n.length)
+        {
+            assert((n[i] & (n[i] - 1)) == 0);
+            log2n[i] = bsf(n[i]);
+            log2size += log2n[i];
+        }
 
-        mem = GC.malloc( impl.itable_size(log2n));
-        itable = impl.interleave_table(log2n, mem);
+        array_size = (st!1 << log2size) + (st!2 << (log2size - log2n[0]));
+
+        log2n[0]--;
+
+        auto size = impl.multidim_rfft_table_size(log2n);
+        table = impl.multidim_rfft_table(log2n, GC.malloc(size));
     }
 
 /**
@@ -228,10 +231,8 @@ The length of the array must be equal to n.
  */  
     void rfft(Array data)
     {
-        assert(data.length == (st!1 << log2n));
-        
-        impl.deinterleave(data.ptr, log2n, itable);
-        impl.rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
+        assert(data.length == array_size);
+        impl.multidim_rfft(data.ptr, table);
     }
 
 /**
@@ -248,10 +249,8 @@ The length of the array must be equal to n.
  */
     void irfft(Array data)
     {
-        assert(data.length == (st!1 << log2n));
-     
-        impl.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
-        impl.interleave(data.ptr, log2n, itable);
+        assert(data.length == array_size);
+        impl.multidim_irfft(data.ptr, table);
     }
 
 /// An alias for Fft!T.scale

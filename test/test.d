@@ -325,15 +325,13 @@ if(transform == Transform.rfft)
     T[] data;
     d.RealMultidimTable table;
     int log2n;
-    int log2firstn;
 
     this(uint[] log2ns)
     {
         initRealElementAccessImpl(log2ns); 
         log2ns = log2ns.dup;
-        log2firstn = log2ns.front;
         auto log2m = 0.reduce!sum(log2ns[1 .. $]);
-        log2n = log2m + log2firstn;
+        log2n = log2m + log2ns.front;
         log2ns.front -= 1;
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
         data[] = 0;
@@ -565,19 +563,21 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rf
     import pfft.pfft;
    
     alias Rfft!(T) F;
-    int log2n;
-    int log2lastn;
     F f;
     F.Array data;
     
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        log2lastn = log2n;
-        size_t n = 1U << log2n; 
-        f = new F(n);
-        data = F.Array(n);
+        initRealElementAccessImpl(log2ns); 
+        auto ns = new size_t[](log2ns.length);
+        size_t log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        f = new F(ns);
+        data = F.Array((st!1 << log2n) + (st!2 << (log2n - log2ns[0])));
         data[] = 0;
     }
     
@@ -807,8 +807,8 @@ static if(benchFftw)
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
         extern(C) void* fftwf_plan_dft(int, int*, Complex!(float)*, Complex!(float)*, int, uint);
-        extern(C) void* fftwf_plan_dft_r2c(int, int, float*, Complex!(float)*, uint);
-        extern(C) void* fftwf_plan_dft_c2r(int, int, Complex!(float)*, float*, uint);
+        extern(C) void* fftwf_plan_dft_r2c(int, int*, float*, Complex!(float)*, uint);
+        extern(C) void* fftwf_plan_dft_c2r(int, int*, Complex!(float)*, float*, uint);
         extern(C) void fftwf_execute(void *);
         
         alias fftwf_malloc fftw_malloc;
@@ -825,8 +825,8 @@ static if(benchFftw)
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
         extern(C) void* fftw_plan_dft(int, int*, Complex!(double)*, Complex!(double)*, int, uint);
-        extern(C) void* fftw_plan_dft_r2c(int, double*, Complex!(double)*, uint);
-        extern(C) void* fftw_plan_dft_c2r(int, Complex!(double)*, double*, uint);
+        extern(C) void* fftw_plan_dft_r2c(int, int*, double*, Complex!(double)*, uint);
+        extern(C) void* fftw_plan_dft_c2r(int, int*, Complex!(double)*, double*, uint);
         extern(C) void fftw_execute(void *);
     }
     else
@@ -836,8 +836,8 @@ static if(benchFftw)
         extern(C) void* fftwl_malloc(size_t);
         extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
         extern(C) void* fftwl_plan_dft(int, int*, Complex!(real)*, Complex!(real)*, int, uint);
-        extern(C) void* fftwl_plan_dft_r2c(int, real*, Complex!(real)*, uint);
-        extern(C) void* fftwl_plan_dft_c2r(int, Complex!(real)*, real*, uint);
+        extern(C) void* fftwl_plan_dft_r2c(int, int*, real*, Complex!(real)*, uint);
+        extern(C) void* fftwl_plan_dft_c2r(int, int*, Complex!(real)*, real*, uint);
         extern(C) void fftwl_execute(void *);
         
         alias fftwl_malloc fftw_malloc;
@@ -895,24 +895,28 @@ static if(benchFftw)
         Complex!(T)[] r;
         void* p;
         int log2n;
-        int log2lastn;
         int ndim;
 
         this(uint[] log2ns)
         {
             initRealElementAccessImpl(log2ns); 
             log2n = log2ns.reduce!"a+b";
-            log2lastn = log2ns.back;
             auto n = st!1 << log2n;
             a = fftw_array!T(n);
             a[] = 0;
-            r = fftw_array!(Complex!T)(n / 2 + 1);
+            r = fftw_array!(Complex!T)(
+                n / 2 + (st!1 << (log2n - log2ns.back)));
            
-            ndim = log2ns.length.to!int; 
+            ndim = log2ns.length.to!int;
+            
+            auto ns = new int[ndim];
+            foreach(i; 0 .. ndim)
+                ns[i] = 1 << log2ns[i];
+
             static if(isInverse)
-                p = fftw_plan_dft_c2r(ndim, to!int(n), r.ptr, a.ptr, flags);
+                p = fftw_plan_dft_c2r(ndim, ns.ptr, r.ptr, a.ptr, flags);
             else
-                p = fftw_plan_dft_r2c(ndim, to!int(n), a.ptr, r.ptr, flags);
+                p = fftw_plan_dft_r2c(ndim, ns.ptr, a.ptr, r.ptr, flags);
         }
 
         void compute(){ fftw_execute(p); }
