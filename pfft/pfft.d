@@ -181,10 +181,6 @@ final class Rfft(T)
 
     size_t array_size;
     impl.RealMultidimTable table;
-//    impl.RTable rtable;
-//    impl.ITable itable;
-
-/// An alias for Fft!T.Array
     alias Fft!(T).Array Array;
 
 /**

@@ -488,32 +488,32 @@ if(transform == Transform.rfft)
     alias PfftC!() Impl;
    
     int log2n;
-    int log2lastn;
     Impl.RTable* table;
-    T* data;
+    T[] data;
     
     this(uint[] log2ns)
     {
+        initRealElementAccessImpl(log2ns);
         enforce(log2ns.length == 1);
         log2n = log2ns.front;
-        log2lastn = log2n;
-        data = Impl.allocate(1 << log2n);
-        data[0 .. 1 << log2n] = 0;
-        table = Impl.rtable(1 << log2n, null); 
+        auto size = (st!1 << log2n) + 2;
+        data = gc_aligned_array!T(size); // Impl.allocate(size)[0 .. size];
+        data[] = 0;
+        table = Impl.rtable(st!1 << log2n, null); 
     }
     
     ~this()
     {
         Impl.rtable_free(table);
-        Impl.free(data);
+        //Impl.free(data.ptr);
     }
     
     void compute()
     {
         static if(isInverse)
-            Impl.irfft(data, table);
+            Impl.irfft(data.ptr, table);
         else 
-            Impl.rfft(data, table);
+            Impl.rfft(data.ptr, table);
     }
     
     mixin realSplitElementAccess!();

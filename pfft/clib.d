@@ -5,7 +5,7 @@
 
 module pfft.clib;
 
-import core.stdc.stdlib, core.bitop;
+import core.stdc.stdlib, core.stdc.string, core.bitop;
 
 version(Posix)
     import core.sys.posix.stdlib, core.sys.posix.unistd;
@@ -199,12 +199,22 @@ private template code(string type, string suffix, string Suffix)
             impl_`~type~`.deinterleave(data, cast(uint) log2n, table.itable);
             impl_`~type~`.rfft(
                 data, data + ((cast(size_t) 1) << (log2n - 1)), 
-                table.table, table.rtable); 
+                table.table, table.rtable);
+
+            auto n = cast(size_t) 1 << (log2n - 1);
+            memmove(data + n + 2, data + n + 1, n * `~type~`.sizeof);
+            data[n + 1] = 0;
+            data[2 * n + 1] = 0;
         }
 
         void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
         {
             auto log2n = impl_`~type~`.fft_table_log2n(table.table) + 1;
+            auto n = cast(size_t) 1 << (log2n - 1);
+            memmove(data + n + 1, data + n + 2, n * `~type~`.sizeof);
+            data[2 * n] = 0;
+            data[2 * n + 1] = 0;
+
             impl_`~type~`.irfft(
                 data, data + ((cast(size_t) 1) << (log2n - 1)),
                 table.table, table.rtable); 
