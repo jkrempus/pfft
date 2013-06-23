@@ -18,6 +18,14 @@ template TypeTuple(A...)
     alias A TypeTuple;
 }
 
+template select(bool select_first, alias first, alias second)
+{
+    static if(select_first)
+        alias first select;
+    else
+        alias second select;
+}
+
 template st(alias a){ enum st = cast(size_t) a; }
 
 size_t exp2(uint a){ return st!1 << a; }

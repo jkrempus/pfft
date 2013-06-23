@@ -43,6 +43,9 @@ mixin template Instantiate()
     struct MultidimTableValue{};
     alias MultidimTableValue* MultidimTable;
 
+    struct RealMultidimTableValue{};
+    alias RealMultidimTableValue* RealMultidimTable;
+    
     size_t multidim_fft_table_size(uint[] log2n);
     MultidimTable multidim_fft_table(uint[] log2n, void* ptr);
     void* multidim_fft_table_memory(MultidimTable table);
@@ -51,7 +54,9 @@ mixin template Instantiate()
     MultidimTable multidim_fft_table2(size_t ndim, void* ptr, TransposeBuffer buf);
     void multidim_fft_table_set(MultidimTable mt, size_t dim_index, Table table);
     
-    void multidim_rfft(T*, MultidimTable, RTable, ITable);
-    void multidim_irfft(T*, MultidimTable, RTable, ITable);
+    size_t multidim_rfft_table_size(uint[] log2n);
+    RealMultidimTable multidim_rfft_table(uint[] log2n, void* ptr);
+    void multidim_rfft(T* p, RealMultidimTable rmt);
+    void multidim_irfft(T* p, RealMultidimTable rmt);
 }
 

@@ -323,9 +323,7 @@ if(transform == Transform.rfft)
     alias direct d; 
 
     T[] data;
-    direct.ITable itable;
-    direct.RTable rtable;
-    d.MultidimTable table;
+    d.RealMultidimTable table;
     int log2n;
     int log2firstn;
 
@@ -340,20 +338,16 @@ if(transform == Transform.rfft)
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
         data[] = 0;
 
-        auto isize = d.itable_size(log2firstn);
-        itable = d.interleave_table(log2firstn, gc_aligned_array(isize).ptr);
-        auto rsize = d.fft_table_size(log2firstn);
-        rtable = d.rfft_table(log2firstn, gc_aligned_array(rsize).ptr);
-        auto size = d.multidim_fft_table_size(log2ns);
-        table = d.multidim_fft_table(log2ns, gc_aligned_array(size).ptr);
+        auto size = d.multidim_rfft_table_size(log2ns);
+        table = d.multidim_rfft_table(log2ns, gc_aligned_array(size).ptr);
     }
 
     void compute()
     {
         static if(isInverse)
-            d.multidim_irfft(data.ptr, table, rtable, itable);
+            d.multidim_irfft(data.ptr, table);
         else
-            d.multidim_rfft(data.ptr, table, rtable, itable);
+            d.multidim_rfft(data.ptr, table);
     }
 
     mixin realSplitElementAccess!();

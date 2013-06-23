@@ -1180,73 +1180,119 @@ template FFT(alias V, alias Options)
 
     alias MultidimTableValue* MultidimTable;
 
+    struct RealMultidimTableValue
+    {
+        MultidimTable multidim_table;
+        RTable rtable;
+        ITable itable;
+    }
+
+    alias RealMultidimTableValue* RealMultidimTable;
+
     template MultidimTableImpl()
     {
         enum max_distinct_sizes = 10;
         alias Allocate!(3 * max_distinct_sizes + 3) Alloc;
         alias TableValue[8 * size_t.sizeof] TableMap; 
 
-        void add_pointers()(
-            TableMap* table_map,
-            Table* tables,
-            MultidimTable* mt,
-            TransposeBuffer* buf,
-            Alloc* alloc,
-            uint[] log2n)
+        struct TableCreator
         {
-            size_t already_added = 0;
-            size_t n_sizes = 0;
-            foreach(i; log2n)
-            {
-                auto ith_bit = st!1 << i;
-                if((ith_bit & already_added) == 0)
-                {
-                    already_added |= ith_bit;
-                    alloc.add(&(*table_map)[i].twiddle, twiddle_table_size(i));
-                    alloc.add(&(*table_map)[i].buffer, tmp_buffer_size(i));
-                    alloc.add(&(*table_map)[i].br, BR.table_size(br_table_log2n(i)));
-                }
-            }
-
-            alloc.add(buf, transpose_buffer_size(log2n));
-            alloc.add(tables, log2n.length);
-            alloc.add(mt, 1);
-        }
-
-        size_t size(uint[] log2n)
-        {
-            Alloc alloc = void; alloc.initialize();
             TableMap table_map;
             Table tables;
             MultidimTable mt;
             TransposeBuffer buf;
-            add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
+
+            void add_to(Alloc* alloc, uint[] log2n)
+            {
+                size_t already_added = 0;
+                size_t n_sizes = 0;
+                foreach(i; log2n)
+                {
+                    auto ith_bit = st!1 << i;
+                    if((ith_bit & already_added) == 0)
+                    {
+                        already_added |= ith_bit;
+                        alloc.add(&table_map[i].twiddle, twiddle_table_size(i));
+                        alloc.add(&table_map[i].buffer, tmp_buffer_size(i));
+                        alloc.add(&table_map[i].br, BR.table_size(br_table_log2n(i)));
+                    }
+                }
+
+                alloc.add(&buf, transpose_buffer_size(log2n));
+                alloc.add(&tables, log2n.length);
+                alloc.add(&mt, 1);
+            }
+
+            auto create(uint[] log2n, void* ptr)
+            {
+                foreach(i; 0 .. log2n.length)
+                {
+                    tables[i] = table_map[log2n[i]];
+                    init_fft_table(log2n[i], tables + i);
+                }
+
+                mt.tables = tables[0 .. log2n.length];
+                mt.buffer = buf;
+                mt.memory = ptr;
+                return mt;
+            }
+        }
+
+        struct RealTableCreator
+        {
+            void* itable_memory;
+            void* rtable_memory;
+            RealMultidimTable rmt;
+            TableCreator tc;
+
+            void add_to(Alloc* alloc, uint log2n[])
+            {
+                tc.add_to(alloc, log2n);
+                alloc.add(&itable_memory, itable_size(log2n[0] + 1)); 
+                alloc.add(&rtable_memory, rtable_size(log2n[0] + 1)); 
+                alloc.add(&rmt, 1);
+            }
+
+            auto create(uint[] log2n, void* ptr)
+            {
+                rmt.multidim_table = tc.create(log2n, ptr);
+                rmt.rtable = rfft_table(log2n[0] + 1, rtable_memory); 
+                rmt.itable = interleave_table(log2n[0] + 1, itable_memory);
+                return rmt; 
+            }
+        }
+
+        template TC(bool is_real)
+        {
+            alias select!(is_real, RealTableCreator, TableCreator) TC;
+        }
+
+        size_t size(bool is_real)(uint[] log2n)
+        {
+            Alloc alloc = void; alloc.initialize();
+            TC!is_real tc = void;
+            tc.add_to(&alloc, log2n);
             return alloc.size();
         }
 
-        MultidimTable table(uint[] log2n, void* ptr)
+        template table(bool is_real)
         {
-            Alloc alloc = void; alloc.initialize();
-            TableMap table_map;
-            Table tables;
-            MultidimTable mt;
-            TransposeBuffer buf;
-            add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
-            alloc.allocate(ptr);
-
-            foreach(i; 0 .. log2n.length)
+            typeof(TC!is_real.create(null, null))
+            table(uint[] log2n, void* ptr)
             {
-                tables[i] = table_map[log2n[i]];
-                init_fft_table(log2n[i], tables + i);
+                Alloc alloc = void; alloc.initialize();
+                TC!is_real tc = void;
+                tc.add_to(&alloc, log2n);
+                alloc.allocate(ptr);
+                return tc.create(log2n, ptr);
             }
-
-            mt.tables = tables[0 .. log2n.length];
-            mt.buffer = buf;
-            mt.memory = ptr;
-            return mt;
         }
 
         void* memory(MultidimTable table) { return table.memory; }
+        void* real_memory(RealMultidimTable table)
+        {
+            return table.multidim_table.memory;
+        }
 
         size_t size2(uint ndim)
         {
@@ -1273,13 +1319,17 @@ template FFT(alias V, alias Options)
         }
     }
 
-    alias MultidimTableImpl!().table multidim_fft_table;
-    alias MultidimTableImpl!().size multidim_fft_table_size;
+    alias MultidimTableImpl!().table!false multidim_fft_table;
+    alias MultidimTableImpl!().size!false multidim_fft_table_size;
     alias MultidimTableImpl!().memory multidim_fft_table_memory;
     alias MultidimTableImpl!().table2 multidim_fft_table2;
     alias MultidimTableImpl!().size2 multidim_fft_table2_size;
     alias MultidimTableImpl!().set multidim_fft_table_set;
 
+    alias MultidimTableImpl!().table!true multidim_rfft_table;
+    alias MultidimTableImpl!().size!true multidim_rfft_table_size;
+    alias MultidimTableImpl!().real_memory multidim_rfft_table_memory;
+    
     @always_inline void fft_transposed()(
         T* re,
         T* im,
@@ -1395,14 +1445,14 @@ template FFT(alias V, alias Options)
         interleave(p, table.log2n + 1, itable);
     }
 
-    void multidim_rfft()(
-        T* p, MultidimTable multidim_table, RTable rtable, ITable itable)
+    void multidim_rfft()(T* p, RealMultidimTable rmt)
     {
+        auto multidim_table = rmt.multidim_table;
         auto head = &multidim_table.tables[0];
         auto tail = multidim_table.tables[1 .. $];
         auto n = head.log2n.exp2;
         if(tail.length == 0)
-            return rfft_complete(p, head, rtable, itable);
+            return rfft_complete(p, head, rmt.rtable, rmt.itable);
 
         int log2m = reduce!((a, e) => a + e.log2n)(0, tail);
         auto m = log2m.exp2;
@@ -1410,7 +1460,8 @@ template FFT(alias V, alias Options)
         auto im_end = im + m * (n + 1);
         auto buf = multidim_table.buffer;
 
-        rfft_transposed!false(p, log2m, log2m, head, buf, rtable, itable);
+        rfft_transposed!false(
+            p, log2m, log2m, head, buf, rmt.rtable, rmt.itable);
 
         foreach(i; 2 .. n + 1)
             memcpy(im_end  - i * m, im_end - (i + 1) * m, m * T.sizeof);
@@ -1423,14 +1474,14 @@ template FFT(alias V, alias Options)
             multidim_fft(p + i * m, im + i * m, &next_table);
     }
 
-    void multidim_irfft()(
-        T* p, MultidimTable multidim_table, RTable rtable, ITable itable)
+    void multidim_irfft()(T* p, RealMultidimTable rmt)
     {
+        auto multidim_table = rmt.multidim_table;
         auto head = &multidim_table.tables[0];
         auto tail = multidim_table.tables[1 .. $];
         auto n = head.log2n.exp2;
         if(tail.length == 0)
-            return irfft_complete(p, head, rtable, itable);
+            return irfft_complete(p, head, rmt.rtable, rmt.itable);
 
         int log2m = reduce!((a, e) => a + e.log2n)(0, tail);
         auto m = log2m.exp2;
@@ -1447,8 +1498,8 @@ template FFT(alias V, alias Options)
         
         memset(im_end - 2 * m, 0, 2 * m * T.sizeof);
 
-        rfft_transposed!true(p, log2m, log2m, head, buf, rtable, itable);
-
+        rfft_transposed!true(
+            p, log2m, log2m, head, buf, rmt.rtable, rmt.itable);
     }
 
     static void scale(T* data, size_t n, T factor)
@@ -1500,6 +1551,9 @@ mixin template Instantiate()
     struct MultidimTableValue{};
     alias MultidimTableValue* MultidimTable;
 
+    struct RealMultidimTableValue{};
+    alias RealMultidimTableValue* RealMultidimTable;
+    
     struct RTableValue{};
     alias RTableValue* RTable;
     
@@ -1673,23 +1727,24 @@ mixin template Instantiate()
             cast(FFT0.MultidimTable) mt, dim_index, table);
     }
     
-    void multidim_rfft(
-        T* p, MultidimTable multidim_table, RTable rtable, ITable itable)
+    size_t multidim_rfft_table_size(uint[] log2n)
     {
-        selected!"multidim_rfft"(
-            p, 
-            cast(FFT0.MultidimTable) multidim_table, 
-            cast(FFT0.RTable) rtable,
-            cast(FFT0.ITable) itable);
+        return selected!"multidim_rfft_table_size"(log2n); 
+    }
+
+    RealMultidimTable multidim_rfft_table(uint[] log2n, void* ptr)
+    {
+        return selected!("multidim_rfft_table", RealMultidimTable)(log2n, ptr);
+    }
+
+    void multidim_rfft(T* p, RealMultidimTable rmt)
+    {
+        selected!"multidim_rfft"(p, cast(FFT0.RealMultidimTable) rmt);
     }
     
-    void multidim_irfft(
-        T* p, MultidimTable multidim_table, RTable rtable, ITable itable)
+    void multidim_irfft(T* p, RealMultidimTable rmt)
     {
-        selected!"multidim_irfft"(
-            p, 
-            cast(FFT0.MultidimTable) multidim_table, 
-            cast(FFT0.RTable) rtable,
-            cast(FFT0.ITable) itable);
+        selected!"multidim_irfft"(p, cast(FFT0.RealMultidimTable) rmt);
     }
+    
 }
