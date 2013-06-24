@@ -190,7 +190,7 @@ void buildLib(Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
 
     buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs, clib);
 
-    commonArgs(dc)
+    dcArgs
         .genLib
         .output("lib/pfft" ~ (clib ? "-c" : ""))
         .obj("pfft")
