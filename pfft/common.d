@@ -5,17 +5,13 @@ T min(T)(T a, T b){ return a < b ? a : b; }
 
 import core.bitop;
 public import core.stdc.string;
+public import pfft.common_templates;
 
 alias bsr log2;
 
 uint first_set_bit(size_t a)
 { 
     return a == 0 ? 8 * size_t.sizeof : bsf(a); 
-}
-
-template TypeTuple(A...)
-{
-    alias A TypeTuple;
 }
 
 template select(bool select_first, alias first, alias second)
@@ -25,8 +21,6 @@ template select(bool select_first, alias first, alias second)
     else
         alias second select;
 }
-
-template st(alias a){ enum st = cast(size_t) a; }
 
 size_t exp2(uint a){ return st!1 << a; }
 
@@ -54,36 +48,6 @@ void swap(T)(ref T a, ref T b)
     auto bb = b;
     b = aa;
     a = bb;
-}
-
-template ints_up_to(arg...)
-{
-    static if(arg.length == 1)
-        alias ints_up_to!(0, arg[0], 1) ints_up_to;
-    else static if(arg[0] < arg[1])
-        alias 
-            TypeTuple!(arg[0], ints_up_to!(arg[0] + arg[2], arg[1], arg[2])) 
-            ints_up_to;
-    else
-        alias TypeTuple!() ints_up_to;
-}
-
-template powers_up_to(int n, T...)
-{
-    static if(n > 1)
-    {
-        alias powers_up_to!(n / 2, n / 2, T) powers_up_to;
-    }
-    else
-        alias T powers_up_to;
-}
-
-template RepeatType(T, int n, R...)
-{
-    static if(n == 0)
-        alias R RepeatType;
-    else
-        alias RepeatType!(T, n - 1, T, R) RepeatType;
 }
 
 U[] array_cast(U, T)(T[] arr)

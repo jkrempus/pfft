@@ -6,6 +6,7 @@
 module pfft.clib;
 
 import core.stdc.stdlib, core.stdc.string, core.bitop;
+import pfft.common_templates;
 
 version(Posix)
     import core.sys.posix.stdlib, core.sys.posix.unistd;
@@ -33,8 +34,10 @@ static if(is(typeof(posix_memalign)))
 
     alias free free_aligned;
 
-    size_t alignment(alias F)(size_t n)
+    size_t alignment_(alias F)(size_t n)
     {
+        n = cast(size_t) 1 << bsr(n); 
+
         return min(max(n, F.alignment(n)), pagesize());  
     }
 }
@@ -55,8 +58,10 @@ else
         free(*cast(void**)(p - (void*).sizeof)); 
     }
 
-    size_t alignment(alias F)(size_t n)
+    size_t alignment_(alias F)(size_t n)
     {
+        n = cast(size_t) 1 << bsr(n); 
+
         static if(is(typeof(sysconf)) && is(typeof(_SC_PAGESIZE)))
             size_t page_size = sysconf(_SC_PAGESIZE);
         else
@@ -79,7 +84,7 @@ else
 
 private void assert_power2(size_t n)
 {
-    if(n & (n - 1))
+    if((n & (n - 1)) || n == 0)
     {
         version(Posix)
         {
@@ -96,158 +101,171 @@ size_t ptrsize_align(size_t n)
     return (n + (void*).sizeof) & ~((void*).sizeof - 1);
 }
 
+align(1) struct Table(T){}
+align(1) struct RTable(T){}
+
+private template cimpl(T)
+{
+    mixin("import impl = pfft.impl_"~T.stringof~";");
+
+    auto compute_log2n_table(size_t* n, size_t nlen, uint* dst)
+    {
+        size_t j = 0;
+        foreach(i; 0 .. nlen)
+        {
+            assert_power2(n[i]);
+            if(n[i] > 1)
+            {
+                dst[j] = bsf(n[i]);
+                j++;
+            }
+        }
+
+        return dst[0 .. j]; 
+    }
+
+    size_t table_size(size_t* n, size_t nlen)
+    {
+        uint[8 * size_t.sizeof] log2n_mem;
+        auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
+        return impl.multidim_fft_table_size(log2n);
+    }
+    
+    Table!T * table(size_t* n, size_t nlen, void* mem)
+    {
+        uint[8 * size_t.sizeof] log2n_mem;
+        auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
+
+        if(mem is null)
+        {
+            auto sz = table_size(n, nlen);
+            mem = allocate_aligned(alignment_!(impl)(sz), sz);
+        }
+
+        return cast(Table!T*) impl.multidim_fft_table(log2n, mem);
+    }
+
+    void table_free(Table!T* table)
+    {
+        free_aligned(impl.multidim_fft_table_memory(
+            cast(impl.MultidimTable) table));
+    }
+        
+    void fft(T* re, T* im, Table!T* table)
+    {
+        auto p = cast(impl.MultidimTable) table;
+        impl.multidim_fft(re, im, p);
+    }
+
+    void ifft(T* re, T* im, Table!T* table)
+    {
+        auto p = cast(impl.MultidimTable) table;
+        impl.multidim_fft(im, re, p);
+    }
+
+    size_t rtable_size(size_t* n, size_t nlen)
+    {
+        uint[8 * size_t.sizeof] log2n_mem;
+        auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
+        log2n[0]--;
+        return impl.multidim_rfft_table_size(log2n);
+    }
+    
+    RTable!T * rtable(size_t* n, size_t nlen, void* mem)
+    {
+        uint[8 * size_t.sizeof] log2n_mem;
+        auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
+        log2n[0]--;
+
+        if(mem is null)
+        {
+            auto sz = rtable_size(n, nlen);
+            mem = allocate_aligned(alignment_!(impl)(sz), sz);
+        }
+
+        return cast(RTable!T*) impl.multidim_rfft_table(log2n, mem);
+    }
+
+    void rtable_free(RTable!T* table)
+    {
+        free_aligned(impl.multidim_rfft_table_memory(
+            cast(impl.MultidimTable) table));
+    }
+        
+    void rfft(T* data, RTable!T* table)
+    {
+        auto p = cast(impl.RealMultidimTable) table;
+        impl.multidim_rfft(data, p);
+    }
+
+    void irfft(T* data, RTable!T* table)
+    {
+        auto p = cast(impl.RealMultidimTable) table;
+        impl.multidim_irfft(data, p);
+    }
+        
+    size_t alignment(size_t n)
+    {
+        return alignment_!(impl)(n / 2);
+    }
+
+    T* allocate(size_t n)
+    {
+        return cast(T*) 
+            allocate_aligned(alignment_!(impl)(n), T.sizeof * n);
+    }
+
+    void free(T* p) { free_aligned(p); }
+}
+
 private template code(string type, string suffix, string Suffix)
 {
+    template generate_wrapper(string name_base)
+    {
+        enum name = `cimpl!`~type~`.`~name_base;
+        enum wrapper_name = `pfft_`~name_base~`_`~suffix;
+        mixin("alias "~name~" wrapped;"); 
+        alias ParamTypeTuple!wrapped Params;
+        alias typeof(wrapped(Params.init)) Return;
+
+        template arg_list(int i, bool types)
+        {
+            static if(i == 0)
+                enum arg_list = "";
+            else
+                enum arg_list = 
+                    (i > 1 ? arg_list!(i - 1, types) ~ ", " : "") ~
+                    (types ? Params[i - 1].stringof ~ " " : "") ~
+                    "_" ~ i.stringof;
+        }
+
+        enum generate_wrapper = 
+            Return.stringof ~ " " ~ 
+            wrapper_name ~ "(" ~ arg_list!(Params.length, true) ~ "){ return " ~ 
+            name ~ "(" ~ arg_list!(Params.length, false) ~ "); }\n";
+    }
+
+    enum cimpl_str = "cimpl!("~type~").";
     enum code = 
-    `
-        import impl_`~type~` = pfft.impl_`~type~`;
-
-        /// A documentation comment. 
-        align(1) struct PfftTable`~Suffix~` { }
-
-        size_t pfft_table_size_`~suffix~`(size_t n)
-        {
-            assert_power2(n);
-
-            uint log2n = bsf(n);
-            return impl_`~type~`.multidim_fft_table_size((&log2n)[0 .. 1]);
-        }
-
-        auto pfft_table_`~suffix~`(size_t n, void* mem)
-        {
-            assert_power2(n);
-
-            uint log2n = bsf(n);
-
-            if(mem is null)
-                mem = allocate_aligned(
-                    alignment!(impl_`~type~`)(n), 
-                    pfft_table_size_`~suffix~`(n));
-
-            return cast(PfftTable`~Suffix~`*) impl_`~type~`.
-                multidim_fft_table((&log2n)[0 .. 1], mem);
-        }
-
-        void pfft_table_free_`~suffix~`(PfftTable`~Suffix~`* table)
-        {
-            free_aligned(impl_`~type~`.multidim_fft_table_memory(
-                cast(impl_`~type~`.MultidimTable) table));
-        }
-
-        void pfft_fft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
-        {
-            auto p = cast(impl_`~type~`.MultidimTable) table;
-            impl_`~type~`.multidim_fft(re, im, p);
-        }
-
-        void pfft_ifft_`~suffix~`(`~type~`* re, `~type~`* im, PfftTable`~Suffix~`* table)
-        {
-            pfft_fft_`~suffix~`(im, re, table);
-        }
-
-        align(1) struct PfftRTable`~Suffix~`
-        {
-            impl_`~type~`.RTable rtable;
-            impl_`~type~`.Table table;
-            impl_`~type~`.ITable itable;
-        }
-
-        size_t pfft_rtable_size_`~suffix~`(size_t n)
-        {
-            assert_power2(n);
-
-            return 
-                ptrsize_align(impl_`~type~`.itable_size(bsf(n)) +
-                impl_`~type~`.fft_table_size(bsf(n) - 1) +
-                impl_`~type~`.rtable_size(bsf(n))) + 
-                PfftRTable`~Suffix~`.sizeof;
-        }
-
-        auto pfft_rtable_`~suffix~`(size_t n, void* mem)
-        {
-            assert_power2(n);
-
-            auto log2n = bsf(n);
-
-            auto rtable_size = impl_`~type~`.rtable_size(log2n);
-            auto table_size = impl_`~type~`.fft_table_size(log2n - 1);
-            auto itable_size = impl_`~type~`.itable_size(log2n);
-
-            auto sz = ptrsize_align(table_size + rtable_size + itable_size);
-            auto al = alignment!(impl_`~type~`)(n);
-
-            if(mem is null)
-                mem = allocate_aligned(al, sz + PfftRTable`~Suffix~`.sizeof);
-
-            auto table = cast(PfftRTable`~Suffix~`*)(mem + sz);
-
-            table.rtable = impl_`~type~`.rfft_table(log2n, mem);
-            table.table = impl_`~type~`.fft_table(log2n - 1, mem + rtable_size);
-            table.itable = impl_`~type~`.interleave_table(log2n, mem + rtable_size + table_size);
-
-            return table;
-        }
-
-        void pfft_rtable_free_`~suffix~`(PfftRTable`~Suffix~`* table)
-        {
-            free_aligned(table.rtable);
-        }
-
-        void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
-        {
-            auto log2n = impl_`~type~`.fft_table_log2n(table.table) + 1;
-            impl_`~type~`.deinterleave(data, cast(uint) log2n, table.itable);
-            impl_`~type~`.rfft(
-                data, data + ((cast(size_t) 1) << (log2n - 1)), 
-                table.table, table.rtable);
-
-            auto n = cast(size_t) 1 << (log2n - 1);
-            memmove(data + n + 2, data + n + 1, n * `~type~`.sizeof);
-            data[n + 1] = 0;
-            data[2 * n + 1] = 0;
-        }
-
-        void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
-        {
-            auto log2n = impl_`~type~`.fft_table_log2n(table.table) + 1;
-            auto n = cast(size_t) 1 << (log2n - 1);
-            memmove(data + n + 1, data + n + 2, n * `~type~`.sizeof);
-            data[2 * n] = 0;
-            data[2 * n + 1] = 0;
-
-            impl_`~type~`.irfft(
-                data, data + ((cast(size_t) 1) << (log2n - 1)),
-                table.table, table.rtable); 
-            impl_`~type~`.interleave(data, cast(uint) log2n, table.itable);
-        }
-
-        size_t pfft_alignment_`~suffix~`(size_t n)
-        {
-            assert_power2(n);
-
-            return impl_`~type~`.alignment(n);
-        }
-
-        `~type~`* pfft_allocate_`~suffix~`(size_t n)
-        {
-            assert_power2(n);
-
-            auto p = allocate_aligned(alignment!(impl_`~type~`)(n), `~type~`.sizeof * n);
-
-            return cast(`~type~`*) p;
-        }
-
-        void pfft_free_`~suffix~`(`~type~`* p)
-        {
-            free_aligned(p);
-        }
-    `;
+        generate_wrapper!"table_size" ~ 
+        generate_wrapper!"table" ~ 
+        generate_wrapper!"table_free" ~ 
+        generate_wrapper!"fft" ~ 
+        generate_wrapper!"ifft" ~
+        generate_wrapper!"rtable_size" ~ 
+        generate_wrapper!"rtable" ~ 
+        generate_wrapper!"rtable_free" ~ 
+        generate_wrapper!"rfft" ~ 
+        generate_wrapper!"irfft" ~ 
+        generate_wrapper!"alignment" ~ 
+        generate_wrapper!"allocate" ~ 
+        generate_wrapper!"free" ~ 
+        "alias Table!"~type~" PfftTable"~Suffix~";\n" ~
+        "alias RTable!"~type~" PfftRTable"~Suffix~";\n";
 }
 
 export:
 extern(C):
-
-//pragma(msg, code!("float", "f", "F"));
 
 version(Float)
     mixin(code!("float", "f", "F"));

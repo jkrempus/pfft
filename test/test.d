@@ -382,7 +382,7 @@ template PfftC()
         struct RTable {}
 
         T* function(size_t) allocate;
-        Table* function(size_t, void*) table;
+        Table* function(size_t*, size_t, void*) table;
         RTable* function(size_t, void*) rtable;
         void function(Table*) table_free;
         void function(RTable*) rtable_free;
@@ -455,13 +455,19 @@ if(transform == Transform.fft)
     
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        _re = Impl.allocate(1 << log2n);
-        _im = Impl.allocate(1 << log2n);
-        _re[0 .. 1 << log2n] = 0;
-        _im[0 .. 1 << log2n] = 0;
-        table = Impl.table(cast(size_t) 1 << log2n, null);
+        auto ns = new size_t[](log2ns.length);
+        log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        auto n = st!1 << log2n;
+        table = Impl.table(ns.ptr, ns.length, null);
+        _re = Impl.allocate(n);
+        _im = Impl.allocate(n);
+        _re[0 .. n] = 0;
+        _im[0 .. n] = 0;
     }
 
     ~this()
@@ -494,18 +500,24 @@ if(transform == Transform.rfft)
     this(uint[] log2ns)
     {
         initRealElementAccessImpl(log2ns);
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        auto size = (st!1 << log2n) + 2;
-        data = gc_aligned_array!T(size); // Impl.allocate(size)[0 .. size];
+        auto ns = new size_t[](log2ns.length);
+        log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        auto n = st!1 << log2n;
+        table = Impl.rtable(ns.ptr, ns.length, null);
+        auto len = (st!1 << log2n) + (st!2 << (log2n - log2ns[0]));
+        data = Impl.allocate(len)[0 .. len];
         data[] = 0;
-        table = Impl.rtable(st!1 << log2n, null); 
     }
     
     ~this()
     {
         Impl.rtable_free(table);
-        //Impl.free(data.ptr);
+        Impl.free(data.ptr);
     }
     
     void compute()
@@ -568,7 +580,7 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rf
     
     this(uint[] log2ns)
     {
-        initRealElementAccessImpl(log2ns); 
+        initRealElementAccessImpl(log2ns);
         auto ns = new size_t[](log2ns.length);
         size_t log2n = 0;
         foreach(i; 0 .. log2ns.length)
@@ -576,8 +588,10 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rf
             ns[i] = st!1 << log2ns[i];
             log2n += log2ns[i]; 
         }
+        auto n = st!1 << log2n;
         f = new F(ns);
-        data = F.Array((st!1 << log2n) + (st!2 << (log2n - log2ns[0])));
+        auto len = (st!1 << log2n) + (st!2 << (log2n - log2ns[0]));
+        data = F.Array(len);
         data[] = 0;
     }
     

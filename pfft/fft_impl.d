@@ -63,27 +63,6 @@ version(DisableLarge)
 else 
     enum disable_large = false;
 
-// reinventing some Phobos stuff...
-
-template ParamTypeTuple(alias f)
-{
-    auto params_struct(Ret, Params...)(Ret function(Params) f) 
-    {
-        struct R
-        {
-            Params p;
-        }
-        return R.init;
-    }
-
-    static if(is(typeof(params_struct(&f))))
-        alias f f_instance;
-    else
-        alias f!() f_instance;
-
-    alias typeof(params_struct(&f_instance).tupleof) type;
-}
-
 template FFT(alias V, alias Options)
 {
     static assert(!(Options.passes_per_recursive_call & 1));
@@ -1408,6 +1387,9 @@ template FFT(alias V, alias Options)
 
     void multidim_fft()(T* re, T* im, MultidimTable multidim_table)
     {
+        if(multidim_table.tables.length == 0)
+            return;
+
         auto head = &multidim_table.tables[0];
         auto tail = multidim_table.tables[1 .. $];
         if(tail.length == 0)
@@ -1447,6 +1429,9 @@ template FFT(alias V, alias Options)
 
     void multidim_rfft()(T* p, RealMultidimTable rmt)
     {
+        if(rmt.multidim_table.tables.length == 0)
+            return;
+
         auto multidim_table = rmt.multidim_table;
         auto head = &multidim_table.tables[0];
         auto tail = multidim_table.tables[1 .. $];
@@ -1539,7 +1524,7 @@ template FFT(alias V, alias Options)
     {
         enum pow2tsize = cast(size_t)1 << bsr(T.sizeof);
         enum pow2vecsize = cast(size_t)1 << bsr(vec.sizeof);
-        return max(min(pow2vecsize, pow2tsize << bsr(2 * n - 1)), (void*).sizeof);
+        return max(min(pow2vecsize, pow2tsize << bsr(n)), (void*).sizeof);
     }
 }
 
@@ -1577,7 +1562,7 @@ mixin template Instantiate()
                 {
                     mixin("alias F." ~ func_name ~ " func;");
 
-                    ParamTypeTuple!(func).type fargs;
+                    ParamTypeTuple!(func) fargs;
 
                     foreach(j, _; fargs)
                         fargs[j] = cast(typeof(fargs[j])) args[j];
@@ -1747,4 +1732,8 @@ mixin template Instantiate()
         selected!"multidim_irfft"(p, cast(FFT0.RealMultidimTable) rmt);
     }
     
+    void* multidim_rfft_table_memory(MultidimTable table)
+    {
+        return selected!"multidim_rfft_table_memory"(cast(FFT0.MultidimTable) table);
+    }
 }

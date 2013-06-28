@@ -58,5 +58,6 @@ mixin template Instantiate()
     RealMultidimTable multidim_rfft_table(uint[] log2n, void* ptr);
     void multidim_rfft(T* p, RealMultidimTable rmt);
     void multidim_irfft(T* p, RealMultidimTable rmt);
+    void* multidim_rfft_table_memory(MultidimTable table);
 }
 
