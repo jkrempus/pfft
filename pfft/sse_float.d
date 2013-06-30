@@ -22,6 +22,7 @@ template Vector()
 {
     alias float4 vec;
     alias float T;
+    alias float Twiddle;
     
     enum vec_size = 4;
     enum log2_bitreverse_chunk_size = 2;
@@ -30,7 +31,7 @@ template Vector()
     {
         import gcc.builtins;
                 
-        vec scalar_to_vector()(T a)
+        vec twiddle_to_vector()(T a)
         {
             return a;
         }  
@@ -60,7 +61,7 @@ template Vector()
     }
     else version(DigitalMars)
     {
-        vec scalar_to_vector()(float a)
+        vec twiddle_to_vector()(float a)
         {
             version(linux_x86_64)
                 asm
@@ -104,7 +105,7 @@ template Vector()
         import ldc.simd;
         import ldc.gccbuiltins_x86;
 
-        vec scalar_to_vector()(float a)
+        vec twiddle_to_vector()(float a)
         {
             return a;
         }

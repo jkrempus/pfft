@@ -39,14 +39,12 @@ template Scalar(_T, A...)
     enum{ isScalar }
     alias _T vec;
     alias _T T;
-    
+    alias _T Twiddle;
+
     enum vec_size = 1;
     enum log2_bitreverse_chunk_size = 1;
     
-    vec scalar_to_vector(T a)
-    {
-        return a;
-    }
+    vec twiddle_to_vector(T a) { return a; }
    
     void bit_reverse(A...)(ref A arg)
     {
@@ -56,6 +54,29 @@ template Scalar(_T, A...)
     T unaligned_load(T* p){ return *p; }
     void unaligned_store(T* p, T a){ *p = a; }
     T reverse(T a){ return a; }           
+}
+
+template MultiScalar(alias Vector)
+{
+    enum{ isScalar }
+    alias Vector.vec vec;
+    alias Vector.vec T;
+    alias Vector.Twiddle Twiddle;
+
+    enum vec_size = 1;
+    enum log2_bitreverse_chunk_size = 1;
+
+    vec twiddle_to_vector(Twiddle a)
+    {
+        return Vector.twiddle_to_vector(a);;
+    }
+
+    void bit_reverse(A...)(ref A arg)
+    {
+        swap(arg[1], arg[2]);
+    }
+    
+    T unaligned_load(T* p){ return *p; }
 }
 
 version(DisableLarge)
@@ -75,6 +96,7 @@ template FFT(alias V, alias Options)
     alias V.vec_size vec_size;
     alias V.T T;
     alias V.vec vec;
+    alias V.Twiddle Twiddle;
 
     enum isScalar = is(typeof(V.isScalar));
     static if(!isScalar)
@@ -103,7 +125,17 @@ template FFT(alias V, alias Options)
     else
         static assert(0);
 
-    alias Tuple!(T,T) Pair;
+    auto v()(T* p){ return cast(vec*) p; }
+
+    vec load_twiddle_vector()(Twiddle *p)
+    {
+        static if(is(vec == T))
+            return V.twiddle_to_vector(*p);
+        else
+            return *cast(vec*)(p);
+    }
+    
+    alias Tuple!(Twiddle, Twiddle) Pair;
    
     void complex_array_to_vector()(Pair * pairs, size_t n)
     {
@@ -133,7 +165,7 @@ template FFT(alias V, alias Options)
     }
  
     void sines_cosines_refine(bool computeEven)(
-        Pair* src, Pair* dest, size_t n_from, T dphi)
+        Pair* src, Pair* dest, size_t n_from, Twiddle dphi)
     {
         T cdphi = _cos(dphi);
         T sdphi = _sin(dphi);
@@ -153,7 +185,7 @@ template FFT(alias V, alias Options)
     }
 
     void sines_cosines(bool phi0_is_last)(
-        Pair* r, size_t n, T phi0, T deltaphi, bool bit_reversed)
+        Pair* r, size_t n, Twiddle phi0, Twiddle deltaphi, bool bit_reversed)
     {
         r[n - 1][0] = _cos(phi0);
         r[n - 1][1] = _sin(phi0);
@@ -249,7 +281,7 @@ template FFT(alias V, alias Options)
 
     struct TableValue
     {
-        T* twiddle;
+        Twiddle* twiddle;
         void* buffer; 
         uint* br;
         uint log2n;
@@ -470,13 +502,14 @@ template FFT(alias V, alias Options)
         }
     }
         
-    @always_inline void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    @always_inline void fft_pass()(
+        vec *pr, vec *pi, vec *pend, Twiddle *table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend ; pr += m, pi += m)
         {
-            vec wr = V.scalar_to_vector(table[0]);
-            vec wi = V.scalar_to_vector(table[1]);
+            vec wr = V.twiddle_to_vector(table[0]);
+            vec wi = V.twiddle_to_vector(table[1]);
             table += 2;
             for (size_t k1 = 0, k2 = m2; k1<m2; k1++, k2 ++) 
             { 
@@ -492,7 +525,8 @@ template FFT(alias V, alias Options)
         }
     }
 
-    @always_inline void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+    @always_inline void fft_two_passes(Tab...)(
+        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
         // sometimes gives an incorrect result (for example when building with 
@@ -513,11 +547,11 @@ template FFT(alias V, alias Options)
         {
             static if(tab.length == 2)
             {
-                vec w1r = V.scalar_to_vector(tab[1][0]);
-                vec w1i = V.scalar_to_vector(tab[1][1]);
+                vec w1r = V.twiddle_to_vector(tab[1][0]);
+                vec w1i = V.twiddle_to_vector(tab[1][1]);
 
-                vec w2r = V.scalar_to_vector(tab[0][0]);
-                vec w2i = V.scalar_to_vector(tab[0][1]);
+                vec w2r = V.twiddle_to_vector(tab[0][0]);
+                vec w2i = V.twiddle_to_vector(tab[0][1]);
 
                 vec w3r = w1r * w2r - w1i * w2i;
                 vec w3i = w1r * w2i + w1i * w2r;
@@ -527,14 +561,14 @@ template FFT(alias V, alias Options)
             }
             else
             {
-                vec w1r = V.scalar_to_vector(tab[0][0]);
-                vec w1i = V.scalar_to_vector(tab[0][1]);
+                vec w1r = V.twiddle_to_vector(tab[0][0]);
+                vec w1i = V.twiddle_to_vector(tab[0][1]);
 
-                vec w2r = V.scalar_to_vector(tab[0][2]);
-                vec w2i = V.scalar_to_vector(tab[0][3]);
+                vec w2r = V.twiddle_to_vector(tab[0][2]);
+                vec w2i = V.twiddle_to_vector(tab[0][3]);
 
-                vec w3r = V.scalar_to_vector(tab[0][4]);
-                vec w3i = V.scalar_to_vector(tab[0][5]);
+                vec w3r = V.twiddle_to_vector(tab[0][4]);
+                vec w3i = V.twiddle_to_vector(tab[0][5]);
 
                 tab[0] += 6;
             }
@@ -562,7 +596,7 @@ template FFT(alias V, alias Options)
         table += start_stride + start_stride;
         vec* re_end = re + N;
         size_t m2 = start_stride;
-        
+
         static if(useTwoPasses)
             for(; m2 < N / 2; m2 <<= 2)
             {
@@ -578,7 +612,7 @@ template FFT(alias V, alias Options)
     }
     
     @always_inline void fft_passes(bool compact_table)(
-        vec* re, vec* im, size_t N, size_t end_stride, T* table)
+        vec* re, vec* im, size_t N, size_t end_stride, Twiddle* table)
     {
         vec * pend = re + N;
 
@@ -632,7 +666,12 @@ template FFT(alias V, alias Options)
     }
    
     @always_inline void fractional_inner(bool do_prefetch)(
-        ref vec ar, ref vec ai, ref vec br, ref vec bi, T* table, size_t tableI)
+        ref vec ar,
+        ref vec ai,
+        ref vec br,
+        ref vec bi,
+        Twiddle* table,
+        size_t tableI)
     {
         foreach(i; ints_up_to!(log2(vec_size)))
         {
@@ -660,8 +699,8 @@ template FFT(alias V, alias Options)
         V.interleave(ai, bi, ai, bi);
     }
 
-    @always_inline void fft_passes_fractional()
-    (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
+    @always_inline void fft_passes_fractional()(
+        vec * pr, vec * pi, vec * pend, Twiddle * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
         {
@@ -694,7 +733,7 @@ template FFT(alias V, alias Options)
         vec * pr,
         vec * pi, 
         size_t N , 
-        ref T * table, 
+        ref Twiddle * table, 
         ref size_t tableI, 
         void* tmp_buffer,
         size_t stride,
@@ -746,7 +785,7 @@ template FFT(alias V, alias Options)
     }
 
     @always_inline void fft_passes_recursive_last()(
-        vec* pr, vec*  pi, size_t N, T* table, size_t tableI)
+        vec* pr, vec*  pi, size_t N, Twiddle* table, size_t tableI)
     {
         profStart(Action.passes_last);
         size_t m2 = N >> 1;
@@ -766,7 +805,12 @@ template FFT(alias V, alias Options)
     }
 
     void fft_passes_recursive()(
-        vec* pr, vec*  pi, size_t N, T* table, size_t tableI, void* tmp_buffer)
+        vec* pr,
+        vec*  pi,
+        size_t N,
+        Twiddle* table,
+        size_t tableI,
+        void* tmp_buffer)
     {
         enum log2l =  Options.passes_per_recursive_call, l = 1 << log2l;
         enum chunk_size = st!1 << Options.log2_recursive_passes_chunk_size;
@@ -805,7 +849,7 @@ template FFT(alias V, alias Options)
 
     }
   
-    void static_size_fft(int log2n_elem)(vec* pr, vec* pi, T* table)
+    void static_size_fft(int log2n_elem)(vec* pr, vec* pi, Twiddle* table)
     {
         enum log2n = log2n_elem - log2(vec_size);  
         enum n = 1 << log2n;
@@ -897,8 +941,6 @@ template FFT(alias V, alias Options)
             }
     }
 
-    auto v(T* p){ return cast(vec*) p; }
-
     void fft_small()(T * re, T * im, uint log2n, Table table)
     {
         // assert(log2n >= 2*log2(vec_size));
@@ -968,7 +1010,7 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, table);
     }
 
-    alias T* RTable;
+    alias Twiddle* RTable;
  
     auto rtable_size()(int log2n)
     {
@@ -1057,7 +1099,7 @@ template FFT(alias V, alias Options)
 
         auto n = st!1 << log2n;
 
-        vec half = V.scalar_to_vector(cast(T) 0.5);
+        vec half = V.twiddle_to_vector(cast(T) 0.5);
 
         T middle_r = rr[n / 4];        
         T middle_i = ri[n / 4];        
@@ -1067,8 +1109,8 @@ template FFT(alias V, alias Options)
             i0 <= i1; 
             i0 += vec_size, i1 -= vec_size, iw += 2*vec_size)
         {
-            vec wr = *v(rtable + iw);
-            vec wi = *v(rtable + iw + vec_size);
+            vec wr = load_twiddle_vector(rtable + iw);
+            vec wi = load_twiddle_vector(rtable + iw + vec_size);
 
             vec r0r = V.unaligned_load(&rr[i0]);
             vec r0i = V.unaligned_load(&ri[i0]);
@@ -1489,7 +1531,7 @@ template FFT(alias V, alias Options)
 
     static void scale(T* data, size_t n, T factor)
     {
-        auto k  = V.scalar_to_vector(factor);
+        auto k  = V.twiddle_to_vector(factor);
         
         foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
             e = e * k;

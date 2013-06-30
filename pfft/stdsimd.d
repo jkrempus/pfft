@@ -60,14 +60,14 @@ struct Vector
     
     version(GNU)
     {
-        static vec scalar_to_vector(T a)
+        static vec twiddle_to_vector(T a)
         {
             return a;
         }
     }
     else
     {
-        static vec scalar_to_vector(float a)
+        static vec twiddle_to_vector(float a)
         {
             struct quad
             {

@@ -61,6 +61,7 @@ template Vector()
 
     alias double4 vec;
     alias double T;
+    alias double Twiddle;
     
     enum vec_size = 4;
     enum log2_bitreverse_chunk_size = 2;
@@ -130,7 +131,7 @@ template Vector()
         a3 = interleave128_hi(b2, b3);
     }    
 
-    vec scalar_to_vector(T a)
+    vec twiddle_to_vector(T a)
     {
         return a;
     }
