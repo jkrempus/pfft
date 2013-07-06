@@ -77,6 +77,8 @@ template MultiScalar(alias Vector)
     }
     
     T unaligned_load(T* p){ return *p; }
+    void unaligned_store(T* p, T a){ *p = a; }
+    vec reverse(T a){ return a; }           
 }
 
 version(DisableLarge)
@@ -104,19 +106,19 @@ template FFT(alias V, alias Options)
  
     import cmath = core.stdc.math;
 
-    static if(is(T == float))
+    static if(is(Twiddle == float))
     {
         alias cmath.sinf _sin;
         alias cmath.cosf _cos;
         alias cmath.asinf _asin;
     }
-    else static if(is(T == double))
+    else static if(is(Twiddle == double))
     {
         alias cmath.sin _sin;
         alias cmath.cos _cos;
         alias cmath.asin _asin;
     }
-    else static if(is(T == real))
+    else static if(is(Twiddle == real))
     {
         alias cmath.sinl _sin;
         alias cmath.cosl _cos;
@@ -141,7 +143,7 @@ template FFT(alias V, alias Options)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
-            T buffer[vec_size*2] = void;
+            Twiddle buffer[vec_size*2] = void;
             for(size_t j = 0; j < vec_size; j++)
             {
                 buffer[j] = pairs[i+j][0];
@@ -167,8 +169,8 @@ template FFT(alias V, alias Options)
     void sines_cosines_refine(bool computeEven)(
         Pair* src, Pair* dest, size_t n_from, Twiddle dphi)
     {
-        T cdphi = _cos(dphi);
-        T sdphi = _sin(dphi);
+        Twiddle cdphi = _cos(dphi);
+        Twiddle sdphi = _sin(dphi);
        
         enum compute = computeEven ? 0 : 1;
         enum copy = compute ^ 1;
@@ -619,7 +621,7 @@ template FFT(alias V, alias Options)
         size_t tableRowLen = 2;
         size_t m2 = N/2;
 
-        static nextRow(ref T* table, ref size_t len)
+        static nextRow(ref Twiddle* table, ref size_t len)
         {
             static if(!compact_table)
             {
@@ -1099,7 +1101,7 @@ template FFT(alias V, alias Options)
 
         auto n = st!1 << log2n;
 
-        vec half = V.twiddle_to_vector(cast(T) 0.5);
+        vec half = V.twiddle_to_vector(cast(Twiddle) 0.5);
 
         T middle_r = rr[n / 4];        
         T middle_i = ri[n / 4];        
@@ -1529,7 +1531,7 @@ template FFT(alias V, alias Options)
             p, log2m, log2m, head, buf, rmt.rtable, rmt.itable);
     }
 
-    static void scale(T* data, size_t n, T factor)
+    static void scale(T* data, size_t n, Twiddle factor)
     {
         auto k  = V.twiddle_to_vector(factor);
         

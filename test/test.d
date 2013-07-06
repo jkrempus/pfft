@@ -606,9 +606,9 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rf
     mixin realSplitElementAccess!();
 }
 
-struct SimpleFft(T, Transform transform, bool isInverse)
+struct SimpleFft(T, Transform transform, bool isInverse, int multi = 1)
 if(isIn(transform, Transform.rfft, Transform.fft))
-{    
+{
     Complex!(T)[] a;
     Complex!(T)[] w;
     int log2n;
