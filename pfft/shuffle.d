@@ -369,7 +369,8 @@ struct Columns(alias V)
 
     private static size_t block_size(size_t nrows, size_t ncolumns)
     {
-        return nrows.min(ncolumns).min(st!16);
+        //TODO the optimal value for this parameter depends on transform size
+        return nrows.min(ncolumns).min(512 / V.T.sizeof); 
     }
 
     static size_t buffer_size(size_t nrows, size_t ncolumns)

@@ -1083,7 +1083,7 @@ void precision(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
             sim /= n;
         }        
 
-        //writefln("%s\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", i, sre, tre, sim, tim, 0.0, sim - tim);
+        writefln("%s\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", i, sre, tre, sim, tim, 0.0, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 

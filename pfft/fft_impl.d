@@ -92,12 +92,7 @@ template MultiScalarOptions(alias Options, int multi)
     enum log2_recursive_passes_chunk_size = Options.log2_recursive_passes_chunk_size;
 } 
 
-version(DisableLarge)
-    enum disable_large = true;
-else 
-    enum disable_large = false;
-
-template FFT(alias V, alias Options)
+template FFT(alias V, alias Options, bool disable_large = false)
 {
     static assert(!(Options.passes_per_recursive_call & 1));
 
@@ -114,10 +109,14 @@ template FFT(alias V, alias Options)
     enum isScalar = is(typeof(V.isScalar));
     static if(!isScalar)
         alias FFT!(Scalar!(T, V), Options) SFFT;
+    else
+        alias FFT!(V, Options, disable_large) SFFT;
  
     enum isMultiScalar = is(typeof(V.isMultiScalar));
     static if(!isMultiScalar)
         alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
+    else
+        alias FFT!(V, Options, disable_large) MSFFT;
  
     import cmath = core.stdc.math;
 
@@ -1249,9 +1248,9 @@ template FFT(alias V, alias Options)
 
     template MultidimTableImpl()
     {
-        enum max_distinct_sizes = 10;
-        alias Allocate!(3 * max_distinct_sizes + 3) Alloc;
-        alias TableValue[8 * size_t.sizeof] TableMap; 
+        enum max_ndim = size_t.sizeof * 8;
+        alias Allocate!(3 * max_ndim + 3) Alloc;
+        alias TableValue[max_ndim] TableMap; 
 
         struct TableCreator
         {
@@ -1262,32 +1261,35 @@ template FFT(alias V, alias Options)
 
             void add_to(Alloc* alloc, uint[] log2n)
             {
-                size_t already_added = 0;
-                size_t n_sizes = 0;
-                foreach(i; log2n)
+                size_t last = log2n.length - 1;
+                foreach(i; 0 .. last)
                 {
-                    auto ith_bit = st!1 << i;
-                    if((ith_bit & already_added) == 0)
-                    {
-                        already_added |= ith_bit;
-                        alloc.add(&table_map[i].twiddle, twiddle_table_size(i));
-                        alloc.add(&table_map[i].buffer, tmp_buffer_size(i));
-                        alloc.add(&table_map[i].br, BR.table_size(br_table_log2n(i)));
-                    }
+                    auto l = log2n[i];
+                    alloc.add(&table_map[i].twiddle, MSFFT.twiddle_table_size(l));
+                    alloc.add(&table_map[i].buffer, MSFFT.tmp_buffer_size(l));
+                    alloc.add(&table_map[i].br, MSFFT.BR.table_size(br_table_log2n(l)));
                 }
+                
+                alloc.add(&table_map[last].twiddle, twiddle_table_size(log2n[last]));
+                alloc.add(&table_map[last].buffer, tmp_buffer_size(log2n[last]));
+                alloc.add(&table_map[last].br, BR.table_size(br_table_log2n(log2n[last])));
 
-                alloc.add(&buf, transpose_buffer_size(log2n));
+                alloc.add(&buf, MSFFT.transpose_buffer_size(log2n));
                 alloc.add(&tables, log2n.length);
                 alloc.add(&mt, 1);
             }
 
             auto create(uint[] log2n, void* ptr)
             {
-                foreach(i; 0 .. log2n.length)
+                size_t last = log2n.length - 1;
+                foreach(i; 0 .. last)
                 {
-                    tables[i] = table_map[log2n[i]];
-                    init_fft_table(log2n[i], tables + i);
+                    tables[i] = table_map[i];
+                    MSFFT.init_fft_table(log2n[i], cast(MSFFT.Table) &tables[i]);
                 }
+                    
+                tables[last] = table_map[last];
+                init_fft_table(log2n[last], &tables[last]);
 
                 mt.tables = tables[0 .. log2n.length];
                 mt.buffer = buf;
@@ -1396,27 +1398,51 @@ template FFT(alias V, alias Options)
         Table table,
         TransposeBuffer buffer)
     {
-        auto n = st!1 << table.log2n;
-        auto m = st!1 << log2m;
-        auto stride = st!1 << log2stride;
-        auto nbuf = Col.buffer_size(n, m);
-       
-        Col[2] col = void; 
-        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
-        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
-
-        foreach(j; 0 .. m)
+        static if(isScalar)
         {
-            foreach(i; 0 .. 2)
-                col[i].load();
+            auto n = st!1 << table.log2n;
+            auto m = st!1 << log2m;
+            auto stride = st!1 << log2stride;
+            auto nbuf = Col.buffer_size(n, m);
+           
+            Col[2] col = void; 
+            col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
+            col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
 
-            fft(col[0].column, col[1].column, table);
+            foreach(j; 0 .. m)
+            {
+                foreach(i; 0 .. 2)
+                    col[i].load();
 
-            foreach(i; 0 .. 2)
-                col[i].save();
+                fft(col[0].column, col[1].column, table);
+
+                foreach(i; 0 .. 2)
+                    col[i].save();
+            }
+        }
+        else
+        {
+            enum log2vs = log2(vec_size);
+            if(log2m < log2vs)
+                SFFT.fft_transposed(
+                    re,
+                    im, 
+                    log2stride, 
+                    log2m, 
+                    cast(SFFT.Table) table, 
+                    cast(SFFT.TransposeBuffer) buffer);
+            else
+                MSFFT.fft_transposed(
+                    v(re), 
+                    v(im), 
+                    log2stride - log2vs,
+                    log2m - log2vs,
+                    cast(MSFFT.Table) table,
+                    cast(MSFFT.TransposeBuffer) buffer);
         }
     }
 
+    //TODO: use multi-scalar
     @always_inline void rfft_transposed(bool inverse)(
         T* p,
         int log2stride, 
