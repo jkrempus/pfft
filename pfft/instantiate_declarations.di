@@ -11,6 +11,14 @@ mixin template Instantiate()
     uint fft_table_log2n(Table table);
     size_t fft_table_size(uint log2n);
 
+    struct MultiTableValue{};
+    alias MultiTableValue* MultiTable;
+
+    MultiTable multi_fft_table(uint log2n, void* p);
+    size_t multi_fft_table_size(size_t log2n);
+    void multi_fft(T* re, T* im, MultiTable t);
+    size_t multi_fft_ntransforms();
+
     struct RTableValue{};
     alias RTableValue* RTable;
 

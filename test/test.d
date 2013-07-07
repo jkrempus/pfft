@@ -51,7 +51,7 @@ version(BenchClib)
     enum benchClib = true;
 else
     enum benchClib = false;
-    
+
 auto gc_aligned_array(A = void)(size_t n)
 {
     A[] r;
@@ -75,6 +75,14 @@ bool isIn(A, B...)(A a, B b)
             return true;
     
     return false;
+}
+
+template ntransforms(Api)
+{
+    static if(is(typeof({ Api.multi; })))
+        alias Api.multi ntransforms;
+    else
+        enum ntransforms = 1;
 }
 
 mixin template ElementAccess()
@@ -102,7 +110,7 @@ mixin template splitElementAccess()
 
     void fill(Dg fRe, Dg fIm) 
     {
-        foreach(i; 0 .. st!1 << log2n)
+        foreach(i; 0 .. ntransforms!(typeof(this)) << log2n)
         {
             _re[i] = fRe(i);
             _im[i] = fIm(i);
@@ -281,8 +289,8 @@ static if(!dynamicC)
         import direct = pfft.impl_float;
 }
 
-struct DirectApi(Transform transform, bool isInverse) 
-if(transform == Transform.fft)
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.fft && !isMulti)
 {
     import core.memory; 
     alias direct d; 
@@ -316,8 +324,44 @@ if(transform == Transform.fft)
     mixin splitElementAccess!();
 }
 
-struct DirectApi(Transform transform, bool isInverse)
-if(transform == Transform.rfft)
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.fft && isMulti)
+{
+    import core.memory; 
+    alias direct d; 
+
+    T[] _re;
+    T[] _im;
+    d.MultiTable table;
+    int log2n;
+
+    static @property multi(){ return d.multi_fft_ntransforms(); }
+
+    this(uint[] log2ns)
+    {
+        enforce(log2ns.length == 1);
+        log2n = log2ns.front;
+        _re = gc_aligned_array!T(multi << log2n);
+        _im = gc_aligned_array!T(multi << log2n);
+        _re[] = 0;
+        _im[] = 0;
+        auto size = d.multi_fft_table_size(log2n);
+        table = d.multi_fft_table(log2n, GC.malloc(size));
+    }
+    
+    void compute()
+    {
+        static if(isInverse)
+            d.multi_fft(_im.ptr, _re.ptr, table);
+        else 
+            d.multi_fft(_re.ptr, _im.ptr, table);
+    }
+
+    mixin splitElementAccess!();
+}
+
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.rfft && !isMulti)
 {
     import core.memory; 
     alias direct d; 
@@ -606,14 +650,15 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rf
     mixin realSplitElementAccess!();
 }
 
-struct SimpleFft(T, Transform transform, bool isInverse, int multi = 1)
+struct SimpleFft(T, Transform transform, bool isInverse)
 if(isIn(transform, Transform.rfft, Transform.fft))
 {
     Complex!(T)[] a;
     Complex!(T)[] w;
     int log2n;
     uint[] log2ns;
-    
+    size_t multi;
+
     private static void bit_reverse(A)(int log2n, A a)
     {
         import core.bitop;
@@ -682,10 +727,7 @@ if(isIn(transform, Transform.rfft, Transform.fft))
                 swap(e.re, e.im);
     }
 
-    private static void multidim()(
-        Complex!(T)[] a,
-        Complex!(T)[] w,
-        uint[] log2ns)
+    private static void multidim(A, W)(A a, W w, uint[] log2ns)
     {
         if(log2ns.length == 1)
             return fft(a, w);
@@ -698,12 +740,13 @@ if(isIn(transform, Transform.rfft, Transform.fft))
             fft(a[i .. $].stride(m), w);
     }
 
-    this(uint[] log2ns)
+    this(uint[] log2ns, size_t multi = 1)
     {
+        this.multi = multi;
         this.log2ns = log2ns;
         log2n = log2ns.reduce!sum;
         
-        a = gc_aligned_array!(Complex!T)(st!1 << log2n);
+        a = gc_aligned_array!(Complex!T)(multi << log2n);
         a[] = Complex!T(0, 0);
 
         w = table(log2ns.reduce!max);
@@ -711,7 +754,11 @@ if(isIn(transform, Transform.rfft, Transform.fft))
    
     void compute()
     {
-        multidim(a, w, log2ns);
+        if (multi == 1)
+            multidim(a, w, log2ns);
+        else 
+            foreach(i; 0 .. multi)
+                multidim(a[i .. $].stride(multi), w, log2ns);
     }
     
     alias T delegate(size_t) Dg;
@@ -946,14 +993,15 @@ static if(benchFftw)
 
 
 void speed(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
-{    
+{
     auto f = F(log2n);
    
     auto zero = delegate(size_t i){ return to!(typeof(F.init.inRe(0)))(0); };
  
     f.fill(zero, zero);
 
-    ulong flopsPerIter = 5UL * log2n.reduce!sum * (1UL << log2n.reduce!sum) / 
+    ulong flopsPerIter = 
+        ntransforms!F * 5UL * log2n.reduce!sum * (1UL << log2n.reduce!sum) /
         (transform == Transform.fft ? 1 : 2); 
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
@@ -992,13 +1040,13 @@ void precision(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
 
     auto n = st!1 << log2n.reduce!sum;
     auto tested = F(log2n);
-    auto simple = S(log2n);
+    auto simple = S(log2n, ntransforms!F);
     
     rndGen.seed(1);
     
     static if(isInverse &&  transform == Transform.rfft)
     {
-        auto tmp = SimpleFft!(real, Transform.rfft, false)(log2n);
+        auto tmp = SimpleFft!(real, Transform.rfft, false)(log2n, ntransforms!F);
         tmp.fill(i => to!ST(uniform(0.0, 1.0)), a => to!ST(0));
         tmp.compute();
         tested.fill(a => tmp.inRe(a).to!FT, a => tmp.inIm(a).to!FT);
@@ -1021,7 +1069,7 @@ void precision(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
-    foreach(i; 0 .. n)
+    foreach(i; 0 .. n * ntransforms!F)
     {
         auto tre = tested.outRe(i);
         auto tim = tested.outIm(i);
@@ -1058,10 +1106,21 @@ void runTest(bool testSpeed, Transform transform, bool isInverse)(
             return f!(CApi!(transform, isInverse), transform, isInverse)(
                 log2n, flops);
 
-    static if(!dynamicC) 
+    static if(!dynamicC)
+    {
         if(impl == "direct")
-            return f!(DirectApi!(transform, isInverse), transform, isInverse)(
+            return f!(DirectApi!(transform, isInverse, false), transform, isInverse)(
                 log2n, flops);
+
+        if(impl == "direct-multi")
+        {
+            enforce(transform == Transform.fft);
+            return f!(
+                DirectApi!(Transform.fft, isInverse, true),
+                Transform.fft,
+                isInverse)(log2n, flops);
+        }
+    }
     
     static if(!justDirect && !dynamicC)
     { 
@@ -1101,7 +1160,6 @@ void runTest(bool testSpeed, Transform transform, bool isInverse)(
 }
 
 template Group(A...){ alias A Members; }
-
 auto callInstance(alias f, int n, alias FParams = Group!(), Params...)(
     Params params)
 {

@@ -59,6 +59,7 @@ template Scalar(_T, A...)
 template MultiScalar(alias Vector)
 {
     enum{ isScalar }
+    enum{ isMultiScalar }
     alias Vector.vec vec;
     alias Vector.vec T;
     alias Vector.Twiddle Twiddle;
@@ -80,6 +81,16 @@ template MultiScalar(alias Vector)
     void unaligned_store(T* p, T a){ *p = a; }
     vec reverse(T a){ return a; }           
 }
+
+template MultiScalarOptions(alias Options, int multi)
+{
+    enum dl = (log2(multi) + 1) / 2;
+    enum log2_bitreverse_large_chunk_size = Options.log2_bitreverse_large_chunk_size - dl;
+    enum large_limit = Options.large_limit - log2(multi);
+    enum log2_optimal_n = Options.log2_optimal_n;
+    enum passes_per_recursive_call = Options.passes_per_recursive_call;
+    enum log2_recursive_passes_chunk_size = Options.log2_recursive_passes_chunk_size;
+} 
 
 version(DisableLarge)
     enum disable_large = true;
@@ -103,6 +114,10 @@ template FFT(alias V, alias Options)
     enum isScalar = is(typeof(V.isScalar));
     static if(!isScalar)
         alias FFT!(Scalar!(T, V), Options) SFFT;
+ 
+    enum isMultiScalar = is(typeof(V.isMultiScalar));
+    static if(!isMultiScalar)
+        alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
  
     import cmath = core.stdc.math;
 
@@ -1012,6 +1027,26 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, table);
     }
 
+    static if(!isMultiScalar)
+    {
+        alias MSFFT.Table MultiTable;
+        alias MSFFT.fft_table_size multi_fft_table_size;
+        alias MSFFT.fft_table multi_fft_table;
+        
+        void multi_fft()(T* re, T* im, MultiTable table)
+        {
+            MSFFT.fft(
+                cast(MSFFT.T*) re,
+                cast(MSFFT.T*) im,
+                cast(MSFFT.Table) table);
+        }
+
+        size_t multi_fft_ntransforms()()
+        {
+            return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
+        }
+    }
+
     alias Twiddle* RTable;
  
     auto rtable_size()(int log2n)
@@ -1577,6 +1612,9 @@ mixin template Instantiate()
     struct TableValue{};
     alias TableValue* Table;
 
+    struct MultiTableValue{};
+    alias MultiTableValue* MultiTable;
+
     struct MultidimTableValue{};
     alias MultidimTableValue* MultidimTable;
 
@@ -1642,6 +1680,26 @@ mixin template Instantiate()
     uint fft_table_log2n(Table table)
     {
         return selected!"fft_table_log2n"(table);
+    }
+
+    MultiTable multi_fft_table(uint log2n, void* p = null)
+    {
+        return selected!("multi_fft_table", MultiTable)(log2n, p);
+    }
+    
+    size_t multi_fft_table_size(size_t log2n)
+    {
+        return selected!"multi_fft_table_size"(log2n);
+    }
+
+    void multi_fft(T* re, T* im, MultiTable t)
+    {
+        selected!"multi_fft"(re, im, cast(FFT0.MultiTable) t);
+    }
+
+    size_t multi_fft_ntransforms()
+    {
+        return selected!"multi_fft_ntransforms"();
     }
 
     /*void cmul(T* dr, T* di, T* sr, T* si, size_t n)
