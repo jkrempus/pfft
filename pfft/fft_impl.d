@@ -1678,30 +1678,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
 mixin template Instantiate()
 {
-    struct TableValue{};
-    alias TableValue* Table;
-
-    struct MultiTableValue{};
-    alias MultiTableValue* MultiTable;
-
-    struct MultidimTableValue{};
-    alias MultidimTableValue* MultidimTable;
-
-    struct RealMultidimTableValue{};
-    alias RealMultidimTableValue* RealMultidimTable;
-    
-    struct RTableValue{};
-    alias RTableValue* RTable;
-    
-    struct ITableValue{};
-    alias ITableValue* ITable;
-
-    struct TransposeBufferValue{};
-    alias TransposeBufferValue* TransposeBuffer;
-
     template selected(string func_name, Ret...)
     {
-        auto selected(A...)(A args)
+        @always_inline auto selected(A...)(A args)
         {
             static if(is(typeof(implementation)))
                 auto impl = implementation.get();
@@ -1727,183 +1706,51 @@ mixin template Instantiate()
             assert(false);
         }
     }
-
-    alias FFTs[0] FFT0;
-    alias FFT0.T T;
-
-    Table fft_table(uint log2n, void* p = null)
-    {
-        return selected!("fft_table", Table)(log2n, p);
-    }
-    
-    void* fft_table_memory(Table table)
-    { 
-        return selected!("fft_table_memory", Table)(table);
-    }
-
-    size_t fft_table_size(uint log2n)
-    {
-        return selected!"fft_table_size"(log2n);
-    }
-    
-    uint fft_table_log2n(Table table)
-    {
-        return selected!"fft_table_log2n"(table);
-    }
-
-    MultiTable multi_fft_table(uint log2n, void* p = null)
-    {
-        return selected!("multi_fft_table", MultiTable)(log2n, p);
-    }
-    
-    size_t multi_fft_table_size(size_t log2n)
-    {
-        return selected!"multi_fft_table_size"(log2n);
-    }
-
-    void multi_fft(T* re, T* im, MultiTable t)
-    {
-        selected!"multi_fft"(re, im, t);
-    }
-
-    size_t multi_fft_ntransforms()
-    {
-        return selected!"multi_fft_ntransforms"();
-    }
-
-    /*void cmul(T* dr, T* di, T* sr, T* si, size_t n)
-    {
-        selected!"cmul"(dr, di, sr, si, n);
-    }*/
-
-    void scale(T* data, size_t n, T factor)
-    {
-        selected!"scale"(data, n, factor); 
-    }
-
-    size_t alignment(size_t n)
-    {
-        return selected!"alignment"(n);
-    }
-
-    void rfft(T* re, T* im, Table t, RTable rt)
-    {
-        selected!"rfft"(re, im, t, rt);
-    }
-
-    void irfft(T* re, T* im, Table t, RTable rt)
-    {
-        selected!"irfft"(re, im, t, rt);
-    }
-
-    RTable rfft_table(uint log2n, void* p = null)
-    {
-        return selected!("rfft_table", RTable)(log2n, p);
-    }
-
-    size_t rtable_size(int log2n)
-    {
-        return selected!"rtable_size"(log2n);
-    }
-
-    void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
-    {
-        selected!"deinterleave_array"(even, odd, interleaved, n);
-    }
-
-    void interleave_array(T* even, T* odd, T* interleaved, size_t n)
-    {
-        selected!"interleave_array"(even, odd, interleaved, n);
-    }
-
-    size_t itable_size(uint log2n)
-    {
-        return selected!"itable_size"(log2n);
-    }
-
-    ITable interleave_table(uint log2n, void* p)
-    {
-        return selected!("interleave_table", ITable)(log2n, p);
-    }
-
-    void interleave(T* p, uint log2n, ITable table)
-    {
-        selected!"interleave"(p, log2n, table);  
-    }
-
-    void deinterleave(T* p, uint log2n, ITable table)
-    {
-        selected!"deinterleave"(p, log2n, table);  
-    }
     
     void set_implementation(int i)
     {
         static if(is(typeof(implementation.set)))
             implementation.set(i);
     }
-    
-    size_t transpose_buffer_size(uint[] log2n)
+
+    alias FFTs[0] FFT0;
+    alias FFT0.T T;
+
+    template Api()
     {
-        return selected!"transpose_buffer_size"(log2n);
+        import decl = pfft.instantiate_declarations;
+        mixin decl.Instantiate!();
     }
 
-    size_t multidim_fft_table_size(uint[] log2n)
+    template code(names ...)
     {
-        return selected!"multidim_fft_table_size"(log2n); 
+        static if(names.length == 0)
+            enum code = "";
+        else
+        {
+            enum name = names[0];
+            alias get_member!(Api!(), name) member;
+
+            static if(is(member E : E*))
+                enum current = 
+                    "struct "~name~"Value{}\n" ~
+                    "alias "~name~"Value* "~name~";\n";
+            else static if(
+                is(typeof(member) == function) && 
+                __traits(hasMember, FFT0, name))
+            {
+                enum current = 
+                    "auto "~name~"("~generate_arg_list!(member, true)~
+                    "){ return selected!(\""~name~"\", "~
+                    ReturnType!member.stringof~")("~
+                    generate_arg_list!(member, false)~"); }\n";
+            }
+            else 
+                enum current = "";
+
+            enum code = current ~ code!(names[1 .. $]);
+        }
     }
 
-    MultidimTable multidim_fft_table(uint[] log2n, void* ptr)
-    {
-        return selected!("multidim_fft_table", MultidimTable)(log2n, ptr);
-    }
-
-    void* multidim_fft_table_memory(MultidimTable table)
-    {
-        return selected!"multidim_fft_table_memory"(table);
-    }
-        
-    void multidim_fft( T* re, T* im, MultidimTable table)
-    {
-        selected!"multidim_fft"(re, im, table);
-    }
-        
-    size_t multidim_fft_table2_size(uint ndim)
-    {
-        return selected!"multidim_fft_table2_size"(ndim);
-    }
-
-    MultidimTable multidim_fft_table2(size_t ndim, void* ptr, TransposeBuffer buf)
-    {
-        return selected!("multidim_fft_table2", MultidimTable)(ndim, ptr, buf);
-    }
-
-    void multidim_fft_table_set(MultidimTable mt, size_t dim_index, Table table)
-    {
-        selected!"multidim_fft_table_set"(mt, dim_index, table);
-    }
-    
-    size_t multidim_rfft_table_size(uint[] log2n)
-    {
-        return selected!"multidim_rfft_table_size"(log2n); 
-    }
-
-    RealMultidimTable multidim_rfft_table(uint[] log2n, void* ptr)
-    {
-        return selected!("multidim_rfft_table", RealMultidimTable)(log2n, ptr);
-    }
-
-    void multidim_rfft(T* p, RealMultidimTable rmt)
-    {
-        selected!"multidim_rfft"(p, rmt);
-    }
-    
-    void multidim_irfft(T* p, RealMultidimTable rmt)
-    {
-        selected!"multidim_irfft"(p, rmt);
-    }
-    
-    void* multidim_rfft_table_memory(MultidimTable table)
-    {
-        return selected!"multidim_rfft_table_memory"(table);
-    }
+    mixin(code!(__traits(allMembers, Api!())));
 }
