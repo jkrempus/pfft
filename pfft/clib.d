@@ -104,7 +104,7 @@ size_t ptrsize_align(size_t n)
 align(1) struct Table(T){}
 align(1) struct RTable(T){}
 
-private template cimpl(T)
+package template cimpl(T)
 {
     mixin("import impl = pfft.impl_"~T.stringof~";");
 
@@ -225,24 +225,12 @@ private template code(string type, string suffix, string Suffix)
         enum name = `cimpl!`~type~`.`~name_base;
         enum wrapper_name = `pfft_`~name_base~`_`~suffix;
         mixin("alias "~name~" wrapped;"); 
-        alias ParamTypeTuple!wrapped Params;
-        alias typeof(wrapped(Params.init)) Return;
-
-        template arg_list(int i, bool types)
-        {
-            static if(i == 0)
-                enum arg_list = "";
-            else
-                enum arg_list = 
-                    (i > 1 ? arg_list!(i - 1, types) ~ ", " : "") ~
-                    (types ? Params[i - 1].stringof ~ " " : "") ~
-                    "_" ~ i.stringof;
-        }
 
         enum generate_wrapper = 
-            Return.stringof ~ " " ~ 
-            wrapper_name ~ "(" ~ arg_list!(Params.length, true) ~ "){ return " ~ 
-            name ~ "(" ~ arg_list!(Params.length, false) ~ "); }\n";
+            ReturnType!wrapped.stringof ~ " " ~ 
+            wrapper_name ~ "(" ~ generate_arg_list!(wrapped, true)
+            ~ "){ return " ~ name ~ 
+            "(" ~ generate_arg_list!(wrapped, false) ~ "); }\n";
     }
 
     enum cimpl_str = "cimpl!("~type~").";

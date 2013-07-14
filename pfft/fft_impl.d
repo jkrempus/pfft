@@ -59,7 +59,6 @@ template Scalar(_T, A...)
 template MultiScalar(alias Vector)
 {
     enum{ isScalar }
-    enum{ isMultiScalar }
     alias Vector.vec vec;
     alias Vector.vec T;
     alias Vector.Twiddle Twiddle;
@@ -112,8 +111,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     else
         alias FFT!(V, Options, disable_large) SFFT;
  
-    enum isMultiScalar = is(typeof(V.isMultiScalar));
-    static if(!isMultiScalar)
+    static if(!isScalar)
         alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
     else
         alias FFT!(V, Options, disable_large) MSFFT;
@@ -1026,7 +1024,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 fft_large(re, im, log2n, table);
     }
 
-    static if(!isMultiScalar)
+    static if(!isScalar)
     {
         alias MSFFT.Table MultiTable;
         alias MSFFT.fft_table_size multi_fft_table_size;
@@ -1044,6 +1042,24 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
         }
+        
+//        alias MSFFT.RTable MultiRTable;
+//        alias MSFFT.rfft_table_size multi_rfft_table_size;
+//        alias MSFFT.rfft_table multi_rfft_table;
+//        
+//        void multi_fft()(T* re, T* im, MultiTable table, MultiRTable rtable)
+//        {
+//            MSFFT.rfft(
+//                cast(MSFFT.T*) re,
+//                cast(MSFFT.T*) im,
+//                cast(MSFFT.Table) table,
+//                cast(MSFFT.RTable) Rtable);
+//        }
+//
+//        size_t multi_rfft_ntransforms()()
+//        {
+//            return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
+//        }
     }
 
     alias Twiddle* RTable;
@@ -1747,7 +1763,7 @@ mixin template Instantiate()
 
     void multi_fft(T* re, T* im, MultiTable t)
     {
-        selected!"multi_fft"(re, im, cast(FFT0.MultiTable) t);
+        selected!"multi_fft"(re, im, t);
     }
 
     size_t multi_fft_ntransforms()
@@ -1772,12 +1788,12 @@ mixin template Instantiate()
 
     void rfft(T* re, T* im, Table t, RTable rt)
     {
-        selected!"rfft"(re, im, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
+        selected!"rfft"(re, im, t, rt);
     }
 
     void irfft(T* re, T* im, Table t, RTable rt)
     {
-        selected!"irfft"(re, im, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
+        selected!"irfft"(re, im, t, rt);
     }
 
     RTable rfft_table(uint log2n, void* p = null)
@@ -1812,12 +1828,12 @@ mixin template Instantiate()
 
     void interleave(T* p, uint log2n, ITable table)
     {
-        selected!"interleave"(p, log2n, cast(FFT0.ITable) table);  
+        selected!"interleave"(p, log2n, table);  
     }
 
     void deinterleave(T* p, uint log2n, ITable table)
     {
-        selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
+        selected!"deinterleave"(p, log2n, table);  
     }
     
     void set_implementation(int i)
@@ -1843,12 +1859,12 @@ mixin template Instantiate()
 
     void* multidim_fft_table_memory(MultidimTable table)
     {
-        return selected!"multidim_fft_table_memory"(cast(FFT0.MultidimTable) table);
+        return selected!"multidim_fft_table_memory"(table);
     }
         
     void multidim_fft( T* re, T* im, MultidimTable table)
     {
-        selected!"multidim_fft"(re, im, cast(FFT0.MultidimTable) table);
+        selected!"multidim_fft"(re, im, table);
     }
         
     size_t multidim_fft_table2_size(uint ndim)
@@ -1863,8 +1879,7 @@ mixin template Instantiate()
 
     void multidim_fft_table_set(MultidimTable mt, size_t dim_index, Table table)
     {
-        selected!"multidim_fft_table_set"(
-            cast(FFT0.MultidimTable) mt, dim_index, table);
+        selected!"multidim_fft_table_set"(mt, dim_index, table);
     }
     
     size_t multidim_rfft_table_size(uint[] log2n)
@@ -1879,16 +1894,16 @@ mixin template Instantiate()
 
     void multidim_rfft(T* p, RealMultidimTable rmt)
     {
-        selected!"multidim_rfft"(p, cast(FFT0.RealMultidimTable) rmt);
+        selected!"multidim_rfft"(p, rmt);
     }
     
     void multidim_irfft(T* p, RealMultidimTable rmt)
     {
-        selected!"multidim_irfft"(p, cast(FFT0.RealMultidimTable) rmt);
+        selected!"multidim_irfft"(p, rmt);
     }
     
     void* multidim_rfft_table_memory(MultidimTable table)
     {
-        return selected!"multidim_rfft_table_memory"(cast(FFT0.MultidimTable) table);
+        return selected!"multidim_rfft_table_memory"(table);
     }
 }
