@@ -1246,6 +1246,16 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     alias RealMultidimTableValue* RealMultidimTable;
 
+    uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
+    {
+        return log2n.dropExactly(dim_index + 1).sum;
+    }
+
+    bool multidim_use_multiscalar(uint log2ncolumns)
+    {
+        return log2ncolumns >= log2(vec_size);
+    }
+
     template MultidimTableImpl()
     {
         enum max_ndim = size_t.sizeof * 8;
@@ -1265,16 +1275,35 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 foreach(i; 0 .. last)
                 {
                     auto l = log2n[i];
-                    alloc.add(&table_map[i].twiddle, MSFFT.twiddle_table_size(l));
-                    alloc.add(&table_map[i].buffer, MSFFT.tmp_buffer_size(l));
-                    alloc.add(&table_map[i].br, MSFFT.BR.table_size(br_table_log2n(l)));
+                    auto log2m = multidim_log2ncolumns(log2n, i);
+                    if(multidim_use_multiscalar(log2m))
+                    {
+                        alloc.add(
+                            &table_map[i].twiddle,
+                            MSFFT.twiddle_table_size(l));
+
+                        alloc.add(
+                            &table_map[i].buffer,
+                            MSFFT.tmp_buffer_size(l));
+
+                        alloc.add(
+                            &table_map[i].br,
+                            MSFFT.BR.table_size(br_table_log2n(l)));
+                    }
+                    else
+                    {
+                        alloc.add(&table_map[i].twiddle, twiddle_table_size(l));
+                        alloc.add(&table_map[i].buffer, tmp_buffer_size(l));
+                        alloc.add(
+                            &table_map[i].br,BR.table_size(br_table_log2n(l)));
+                    }
                 }
                 
                 alloc.add(&table_map[last].twiddle, twiddle_table_size(log2n[last]));
                 alloc.add(&table_map[last].buffer, tmp_buffer_size(log2n[last]));
                 alloc.add(&table_map[last].br, BR.table_size(br_table_log2n(log2n[last])));
 
-                alloc.add(&buf, MSFFT.transpose_buffer_size(log2n));
+                alloc.add(&buf, transpose_buffer_size(log2n));
                 alloc.add(&tables, log2n.length);
                 alloc.add(&mt, 1);
             }
@@ -1285,7 +1314,12 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 foreach(i; 0 .. last)
                 {
                     tables[i] = table_map[i];
-                    MSFFT.init_fft_table(log2n[i], cast(MSFFT.Table) &tables[i]);
+                    auto lm = multidim_log2ncolumns(log2n, i);
+                    if(multidim_use_multiscalar(lm))
+                        MSFFT.init_fft_table(
+                            log2n[i], cast(MSFFT.Table) &tables[i]);
+                    else
+                        init_fft_table(log2n[i], &tables[i]);
                 }
                     
                 tables[last] = table_map[last];
@@ -1389,7 +1423,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     alias MultidimTableImpl!().table!true multidim_rfft_table;
     alias MultidimTableImpl!().size!true multidim_rfft_table_size;
     alias MultidimTableImpl!().real_memory multidim_rfft_table_memory;
-    
+
     @always_inline void fft_transposed()(
         T* re,
         T* im,
@@ -1398,47 +1432,37 @@ template FFT(alias V, alias Options, bool disable_large = false)
         Table table,
         TransposeBuffer buffer)
     {
-        static if(isScalar)
-        {
-            auto n = st!1 << table.log2n;
-            auto m = st!1 << log2m;
-            auto stride = st!1 << log2stride;
-            auto nbuf = Col.buffer_size(n, m);
-           
-            Col[2] col = void; 
-            col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
-            col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
-
-            foreach(j; 0 .. m)
+        static if(!isScalar)
+            if(multidim_use_multiscalar(log2m))
             {
-                foreach(i; 0 .. 2)
-                    col[i].load();
-
-                fft(col[0].column, col[1].column, table);
-
-                foreach(i; 0 .. 2)
-                    col[i].save();
-            }
-        }
-        else
-        {
-            enum log2vs = log2(vec_size);
-            if(log2m < log2vs)
-                SFFT.fft_transposed(
-                    re,
-                    im, 
-                    log2stride, 
-                    log2m, 
-                    cast(SFFT.Table) table, 
-                    cast(SFFT.TransposeBuffer) buffer);
-            else
-                MSFFT.fft_transposed(
+                enum log2vs = log2(vec_size);
+                return MSFFT.fft_transposed(
                     v(re), 
                     v(im), 
                     log2stride - log2vs,
                     log2m - log2vs,
                     cast(MSFFT.Table) table,
                     cast(MSFFT.TransposeBuffer) buffer);
+            }
+
+        auto n = st!1 << table.log2n;
+        auto m = st!1 << log2m;
+        auto stride = st!1 << log2stride;
+        auto nbuf = Col.buffer_size(n, m);
+
+        Col[2] col = void; 
+        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
+        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
+
+        foreach(j; 0 .. m)
+        {
+            foreach(i; 0 .. 2)
+                col[i].load();
+
+            fft(col[0].column, col[1].column, table);
+
+            foreach(i; 0 .. 2)
+                col[i].save();
         }
     }
 
@@ -1476,18 +1500,21 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     size_t transpose_buffer_size()(uint[] log2n)
     {
-        auto lnmax = uint.min;
-        auto lm = 0u;
-        foreach(i; 1 .. log2n.length)
+        size_t maxsz = 0;
+        foreach(i; 0 .. log2n.length - 1)
         {
-            lm += log2n[$ - i];
-            auto j = log2n.length - (i + 1);
-            // the first dimension needs a larger 
-            // transpose buffer when doing a real transform
-            lnmax = max(lnmax, log2n[j] + (j == 0 ? 1 : 0));
+            auto lm = multidim_log2ncolumns(log2n, i);
+            auto ln = log2n[i];
+            maxsz = max(
+                maxsz, 
+                multidim_use_multiscalar(lm)
+                    ? MSFFT.Col.buffer_size(st!1 << ln, st!1 << lm) *
+                        2 * MSFFT.T.sizeof //TODO: should probably be lm - log2vs
+                    : Col.buffer_size(st!1 << ln, st!1 << lm) * 
+                        2 * T.sizeof); 
         }
-        
-        return Col.buffer_size(st!1 << lnmax, st!1 << lm) * 2 * T.sizeof;
+       
+        return maxsz * 2 * T.sizeof;
     }
 
     void multidim_fft()(T* re, T* im, MultidimTable multidim_table)
@@ -1501,7 +1528,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             return fft(re, im, head);
 
         auto buf = multidim_table.buffer;
-        int log2m = reduce!((a, e) => a + e.log2n)(0, tail);
+        int log2m = tail.map!(a => a.log2n).sum;
         auto m = log2m.exp2;
         auto next_table = MultidimTableValue(tail, buf, null);
         foreach(i; 0 .. head.log2n.exp2)

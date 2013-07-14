@@ -97,12 +97,43 @@ void insertion_sort(alias less, T)(T[] arr)
     }
 }
 
+@property front(T)(T[] a){ return a[0]; }
+@property empty(T)(T[] a){ return a.length == 0; }
+void popFront(T)(ref T[] a){ a = a[1 .. $]; }
+
+auto map(alias mapper, R)(R r)
+{
+    static struct Result
+    {
+        R r;
+        @property empty(){ return r.empty(); } 
+        @property front(){ return mapper(r.front()); }
+        void popFront(){ r.popFront(); } 
+    }
+
+    return Result(r);
+}
+
 T reduce(alias reducer, T, R)(T seed, R a)
 {
     foreach(e; a)
         seed = reducer(seed, e);
 
     return seed;
+}
+
+auto sum(R)(R r)
+{
+    typeof(r.front) seed = 0;
+    return reduce!((a, e) => a + e)(seed, r); 
+}
+
+R dropExactly(R)(R r, size_t n)
+{
+    foreach(i; 0 .. n)
+        r.popFront();
+
+    return r;
 }
 
 auto power2_or_zero(T)(T a) { return a && (a & (a - 1)) == 0; }
