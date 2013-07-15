@@ -1043,23 +1043,27 @@ template FFT(alias V, alias Options, bool disable_large = false)
             return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
         }
         
-//        alias MSFFT.RTable MultiRTable;
-//        alias MSFFT.rfft_table_size multi_rfft_table_size;
-//        alias MSFFT.rfft_table multi_rfft_table;
-//        
-//        void multi_fft()(T* re, T* im, MultiTable table, MultiRTable rtable)
-//        {
-//            MSFFT.rfft(
-//                cast(MSFFT.T*) re,
-//                cast(MSFFT.T*) im,
-//                cast(MSFFT.Table) table,
-//                cast(MSFFT.RTable) Rtable);
-//        }
-//
-//        size_t multi_rfft_ntransforms()()
-//        {
-//            return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
-//        }
+        alias MSFFT.RTable MultiRTable;
+        alias MSFFT.rtable_size multi_rtable_size;
+        alias MSFFT.rfft_table multi_rfft_table;
+        alias MSFFT.ITable MultiITable;
+        alias MSFFT.itable_size multi_itable_size;
+        alias MSFFT.interleave_table multi_interleave_table;
+        
+        void multi_rfft_complete()(
+            T* data, MultiTable table, MultiRTable rtable, MultiITable itable)
+        {
+            MSFFT.rfft_complete(
+                cast(MSFFT.T*) data,
+                cast(MSFFT.Table) table,
+                cast(MSFFT.RTable) rtable,
+                cast(MSFFT.ITable) itable);
+        }
+
+        size_t multi_rfft_ntransforms()()
+        {
+            return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
+        }
     }
 
     alias Twiddle* RTable;
@@ -1553,7 +1557,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         fft_transposed(re, im, log2m, log2m, head, buf);
     }
 
-    private void rfft_complete()(
+    void rfft_complete()(
         T* p, Table table, RTable rtable, ITable itable)
     {
         deinterleave(p, table.log2n + 1, itable);
@@ -1564,7 +1568,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         p[2 * n + 1] = 0;
     }
 
-    private void irfft_complete()(
+    void irfft_complete()(
         T* p, Table table, RTable rtable, ITable itable)
     {
         auto n = table.log2n.exp2;

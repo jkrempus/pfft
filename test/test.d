@@ -368,14 +368,13 @@ if(transform == Transform.rfft && !isMulti)
 
     T[] data;
     d.RealMultidimTable table;
-    int log2n;
 
     this(uint[] log2ns)
     {
         initRealElementAccessImpl(log2ns); 
         log2ns = log2ns.dup;
         auto log2m = 0.reduce!sum(log2ns[1 .. $]);
-        log2n = log2m + log2ns.front;
+        auto log2n = log2m + log2ns.front;
         log2ns.front -= 1;
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
         data[] = 0;
@@ -393,6 +392,86 @@ if(transform == Transform.rfft && !isMulti)
     }
 
     mixin realSplitElementAccess!();
+}
+
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.rfft && isMulti)
+{
+    import core.memory; 
+    alias direct d; 
+
+    T[] data;
+    d.MultiTable table;
+    d.MultiRTable rtable;
+    d.MultiITable itable;
+    uint log2multi;
+    uint log2n;
+
+    static @property multi(){ return d.multi_rfft_ntransforms(); }
+
+    this(uint[] log2ns)
+    {
+        enforce(log2ns.length == 1);
+        log2multi = bsr(multi);
+        log2n = log2ns.front;
+        data = gc_aligned_array!T(multi * ((st!1 << log2n) + 2));
+        data[] = 0;
+        auto size = d.multi_fft_table_size(log2n - 1);
+        table = d.multi_fft_table(log2n - 1, GC.malloc(size));
+        auto rsize = d.multi_rtable_size(log2n);
+        rtable = d.multi_rfft_table(log2n, GC.malloc(rsize));
+        auto isize = d.multi_itable_size(log2n);
+        itable = d.multi_interleave_table(log2n, GC.malloc(isize));
+    }
+    
+    void compute()
+    {
+        static if(isInverse)
+        {
+//            d.multi_fft(_im.ptr, _re.ptr, table);
+        }
+        else 
+        {
+            d.multi_rfft_complete(data.ptr, table, rtable, itable);
+        }
+    }
+
+    alias T delegate(size_t) Dg;
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i; 0 .. multi << log2n)
+            data[i] = fRe(i);
+    }
+
+    T inRe(size_t i){ return data[i]; }
+    T inIm(size_t i){ return 0; }
+    T outRe(size_t i)
+    {
+        size_t n = st!1 << log2n;
+        size_t j = i >> log2multi;
+        size_t k = i & ((1 << log2multi) - 1);
+
+        if(j > n / 2)
+            j = n - j;
+
+        return data[(j << log2multi) | k]; 
+    }
+
+    T outIm(size_t i)
+    {
+        size_t n = st!1 << log2n;
+        size_t j = i >> log2multi;
+        size_t k = i & ((1 << log2multi) - 1);
+
+        T sign = 1;
+        if(j > n / 2)
+        {
+            j = n - j;
+            sign = -1;
+        }
+
+        return sign * data[((n / 2 + 1 + j) << log2multi) | k]; 
+    }
 }
 
 template PfftC()
@@ -1083,7 +1162,7 @@ void precision(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
             sim /= n;
         }        
 
-        //writefln("%s\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", i, sre, tre, sim, tim, 0.0, sim - tim);
+//        writefln("%s\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", i, sre, tre, sim, tim, 0.0, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 
@@ -1113,13 +1192,10 @@ void runTest(bool testSpeed, Transform transform, bool isInverse)(
                 log2n, flops);
 
         if(impl == "direct-multi")
-        {
-            enforce(transform == Transform.fft);
             return f!(
-                DirectApi!(Transform.fft, isInverse, true),
+                DirectApi!(transform, isInverse, true),
                 Transform.fft,
                 isInverse)(log2n, flops);
-        }
     }
     
     static if(!justDirect && !dynamicC)
