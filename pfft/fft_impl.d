@@ -1245,28 +1245,26 @@ template FFT(alias V, alias Options)
         fft(ri, rr, table);
     }
 
-    void multidim_rfft()(T* p, MultidimTable multidim_table, RTable rtable)
+    void multidim_rfft()(
+        T* re, T* im, MultidimTable multidim_table, RTable rtable)
     {
         auto table = multidim_table.tables;
-        auto ninner = st!1 << table[$ - 1].log2n;
         if(table.length == 1)
-            return rfft(p, p + ninner, &table[0], rtable);
+            return rfft(re, im, &table[0], rtable);
 
         auto buf = multidim_table.buffer;
-        // add one because we have real and imaginary part
-        int log2m = 1;                          
+        int log2m = 0;
         foreach(e; table[1 .. $])
             log2m += e.log2n;
 
         auto m = st!1 << log2m;
         auto next_table = MultidimTableValue(table[1 .. $], buf, null);
         foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_rfft(p + i * m, &next_table, rtable);
+            multidim_fft(re + i * m, im + i * m, &next_table, rtable);
 
-//        fft_transposed(
-//            p, p + ninner, log2m, table[0].log2n, log2m, &table[0], buf, true);
+        fft_transposed(re, im, log2m, table[0].log2n, log2m, &table[0], buf);
     }
-
+    
     void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
@@ -1332,6 +1330,7 @@ template FFT(alias V, alias Options)
         // fixes the aliasing bug:
         rr[n / 4] = inverse ? middle_r + middle_r : middle_r; 
         ri[n / 4] = -(inverse ? middle_i + middle_i : middle_i);
+        
 
         {
             // When calculating inverse we would need to multiply with 0.5 here 
@@ -1345,7 +1344,7 @@ template FFT(alias V, alias Options)
             ri[0] = r0r - r0i;
         }
     }
-
+    
     void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(!supports_real)
     {
@@ -1535,14 +1534,14 @@ mixin template Instantiate()
         return selected!("interleave_table", ITable)(log2n, p);
     }
 
-    void interleave(T* even, T* odd, uint log2n, ITable table)
+    void interleave(T* p, uint log2n, ITable table)
     {
-        selected!"interleave"(even, odd, log2n, cast(FFT0.ITable) table);  
+        selected!"interleave"(p, log2n, cast(FFT0.ITable) table);  
     }
 
-    void deinterleave(T* even, T* odd, uint log2n, ITable table)
+    void deinterleave(T* p, uint log2n, ITable table)
     {
-        selected!"deinterleave"(even, odd, log2n, cast(FFT0.ITable) table);
+        selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
     }
     
     void set_implementation(int i)
@@ -1574,12 +1573,6 @@ mixin template Instantiate()
     void multidim_fft( T* re, T* im, MultidimTable table)
     {
         selected!"multidim_fft"(re, im, cast(FFT0.MultidimTable) table);
-    }
-    
-    void multidim_rfft(T* p, MultidimTable table, RTable rtable)
-    {
-        selected!"multidim_rfft"(
-            p, cast(FFT0.MultidimTable) table, cast(FFT0.RTable) rtable);
     }
         
     size_t multidim_fft_table2_size(uint ndim)

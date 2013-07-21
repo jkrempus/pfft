@@ -196,17 +196,19 @@ private template code(string type, string suffix, string Suffix)
         void pfft_rfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
         {
             auto log2n = impl_`~type~`.fft_table_log2n(table.table) + 1;
-            auto halfn = cast(size_t) 1 << (log2n - 1);
-            impl_`~type~`.deinterleave(data, data + halfn, cast(uint) log2n, table.itable);
-            impl_`~type~`.rfft(data, data + halfn, table.table, table.rtable); 
+            impl_`~type~`.deinterleave(data, cast(uint) log2n, table.itable);
+            impl_`~type~`.rfft(
+                data, data + ((cast(size_t) 1) << (log2n - 1)), 
+                table.table, table.rtable); 
         }
 
         void pfft_irfft_`~suffix~`(`~type~`* data, PfftRTable`~Suffix~`* table)
         {
             auto log2n = impl_`~type~`.fft_table_log2n(table.table) + 1;
-            auto halfn = cast(size_t) 1 << (log2n - 1);
-            impl_`~type~`.irfft(data, data + halfn, table.table, table.rtable); 
-            impl_`~type~`.interleave(data, data + halfn, cast(uint) log2n, table.itable);
+            impl_`~type~`.irfft(
+                data, data + ((cast(size_t) 1) << (log2n - 1)),
+                table.table, table.rtable); 
+            impl_`~type~`.interleave(data, cast(uint) log2n, table.itable);
         }
 
         size_t pfft_alignment_`~suffix~`(size_t n)

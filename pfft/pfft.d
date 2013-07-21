@@ -229,8 +229,8 @@ The length of the array must be equal to n.
     void rfft(Array data)
     {
         assert(data.length == (st!1 << log2n));
-       
-        impl.deinterleave(data.ptr, data[$ / 2 .. $].ptr,  log2n, itable);
+        
+        impl.deinterleave(data.ptr, log2n, itable);
         impl.rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
     }
 
@@ -251,7 +251,7 @@ The length of the array must be equal to n.
         assert(data.length == (st!1 << log2n));
      
         impl.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable);
-        impl.interleave(data.ptr, data[$ / 2 .. $].ptr, log2n, itable);
+        impl.interleave(data.ptr, log2n, itable);
     }
 
 /// An alias for Fft!T.scale
