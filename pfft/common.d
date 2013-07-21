@@ -84,19 +84,6 @@ size_t align_size(T)(size_t size)
     return (size + mask) & ~mask; 
 }
 
-void insertion_sort(alias less, T)(T[] arr)
-{
-    foreach(i; 1 .. arr.length)
-    {
-        auto last = arr[i];
-        size_t j = i;
-        for(; j && !less(arr[j - 1], last); j--)
-            arr[j] = arr[j - 1];
-
-        arr[j] = last;
-    }
-}
-
 @property front(T)(T[] a){ return a[0]; }
 @property empty(T)(T[] a){ return a.length == 0; }
 void popFront(T)(ref T[] a){ a = a[1 .. $]; }
@@ -136,7 +123,48 @@ R dropExactly(R)(R r, size_t n)
     return r;
 }
 
-auto power2_or_zero(T)(T a) { return a && (a & (a - 1)) == 0; }
+void insertion_sort(alias less, T)(T[] arr)
+{
+    foreach(i; 1 .. arr.length)
+    {
+        auto last = arr[i];
+        size_t j = i;
+        for(; j && !less(arr[j - 1], last); j--)
+            arr[j] = arr[j - 1];
+
+        arr[j] = last;
+    }
+}
+
+template SelectImplementation(Implementations...)
+{
+    @always_inline: 
+
+    template call(string func_name)
+    {
+        auto call(A...)(uint selection, A args)
+        {
+            mixin(
+                "alias ReturnType!(Implementations[0]." ~
+                func_name ~ ") Ret;");
+
+            foreach(i, I; Implementations)
+                if(i == selection)
+                {
+                    mixin("alias I." ~ func_name ~ " func;");
+
+                    ParamTypeTuple!(func) fargs;
+
+                    foreach(j, _; fargs)
+                        fargs[j] = cast(typeof(fargs[j])) args[j];
+
+                    return cast(Ret) func(fargs);
+                }
+
+            assert(false);
+        }
+    }
+}
 
 struct Allocate(int max_num_ptr)
 {

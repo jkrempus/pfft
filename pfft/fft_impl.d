@@ -115,7 +115,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
         alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
     else
         alias FFT!(V, Options, disable_large) MSFFT;
- 
+
+    alias 
+        SelectImplementation!(FFT!(V, Options, disable_large), MSFFT)
+        SelectMulti; 
+
     import cmath = core.stdc.math;
 
     static if(is(Twiddle == float))
@@ -1024,6 +1028,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 fft_large(re, im, log2n, table);
     }
 
+    @always_inline size_t log2_multi()()
+    {
+        return log2(MSFFT.T.sizeof / MSFFT.Twiddle.sizeof);
+    }
+
     static if(!isScalar)
     {
         alias MSFFT.Table MultiTable;
@@ -1042,7 +1051,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
         }
-        
+
         alias MSFFT.RTable MultiRTable;
         alias MSFFT.rtable_size multi_rtable_size;
         alias MSFFT.rfft_table multi_rfft_table;
@@ -1266,14 +1275,21 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     alias RealMultidimTableValue* RealMultidimTable;
 
-    uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
+    @always_inline uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
     {
         return log2n.dropExactly(dim_index + 1).sum;
     }
 
-    bool multidim_use_multiscalar(uint log2ncolumns)
+    @always_inline bool multidim_use_multiscalar(uint log2ncolumns)
     {
         return log2ncolumns >= log2(vec_size);
+    }
+
+    @always_inline uint multidim_multi_selection(Range)(
+        Range log2n, size_t dim_index)
+    {
+        return multidim_log2ncolumns(log2n, dim_index) >= log2(vec_size) ?
+            1 : 0;
     }
 
     template MultidimTableImpl()
@@ -1295,28 +1311,18 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 foreach(i; 0 .. last)
                 {
                     auto l = log2n[i];
-                    auto log2m = multidim_log2ncolumns(log2n, i);
-                    if(multidim_use_multiscalar(log2m))
-                    {
-                        alloc.add(
-                            &table_map[i].twiddle,
-                            MSFFT.twiddle_table_size(l));
+                    auto selection = multidim_multi_selection(log2n, i);
+                    alloc.add(
+                        &table_map[i].twiddle, 
+                        SelectMulti.call!("twiddle_table_size")(selection, l));
 
-                        alloc.add(
-                            &table_map[i].buffer,
-                            MSFFT.tmp_buffer_size(l));
+                    alloc.add(
+                        &table_map[i].buffer,
+                        SelectMulti.call!("tmp_buffer_size")(selection, l));
 
-                        alloc.add(
-                            &table_map[i].br,
-                            MSFFT.BR.table_size(br_table_log2n(l)));
-                    }
-                    else
-                    {
-                        alloc.add(&table_map[i].twiddle, twiddle_table_size(l));
-                        alloc.add(&table_map[i].buffer, tmp_buffer_size(l));
-                        alloc.add(
-                            &table_map[i].br,BR.table_size(br_table_log2n(l)));
-                    }
+                    alloc.add(
+                        &table_map[i].br,
+                        SelectMulti.call!("br_table_log2n")(selection, l));
                 }
                 
                 alloc.add(&table_map[last].twiddle, twiddle_table_size(log2n[last]));
@@ -1334,12 +1340,10 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 foreach(i; 0 .. last)
                 {
                     tables[i] = table_map[i];
-                    auto lm = multidim_log2ncolumns(log2n, i);
-                    if(multidim_use_multiscalar(lm))
-                        MSFFT.init_fft_table(
-                            log2n[i], cast(MSFFT.Table) &tables[i]);
-                    else
-                        init_fft_table(log2n[i], &tables[i]);
+                    SelectMulti.call!("init_fft_table")(
+                        multidim_multi_selection(log2n, i),
+                        log2n[i], 
+                        &tables[i]); 
                 }
                     
                 tables[last] = table_map[last];
@@ -1487,7 +1491,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     //TODO: use multi-scalar
-    @always_inline void rfft_transposed(bool inverse)(
+    @always_inline void rfft_transposed_impl(bool inverse)(
         T* p,
         int log2stride, 
         int log2m,
@@ -1518,6 +1522,14 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
+    alias rfft_transposed_impl!false rfft_transposed;
+    alias rfft_transposed_impl!true irfft_transposed;
+
+    size_t column_buffer_size(size_t log2n, size_t log2m)
+    {
+        return Col.buffer_size(st!1 << log2n, st!1 << log2m) * 2 * T.sizeof;
+    }
+
     size_t transpose_buffer_size()(uint[] log2n)
     {
         size_t maxsz = 0;
@@ -1525,36 +1537,40 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             auto lm = multidim_log2ncolumns(log2n, i);
             auto ln = log2n[i];
+            auto selection = multidim_multi_selection(log2n, i);
+            auto l2m = SelectMulti.call!("log2_multi")(selection);
             maxsz = max(
                 maxsz, 
-                multidim_use_multiscalar(lm)
-                    ? MSFFT.Col.buffer_size(st!1 << ln, st!1 << lm) *
-                        2 * MSFFT.T.sizeof //TODO: should probably be lm - log2vs
-                    : Col.buffer_size(st!1 << ln, st!1 << lm) * 
-                        2 * T.sizeof); 
+                SelectMulti.call!("column_buffer_size")(
+                    selection, 
+                    log2n[i], 
+                    multidim_log2ncolumns(log2n, i) - 
+                        SelectMulti.call!("log2_multi")(selection)));
         }
-       
-        return maxsz * 2 * T.sizeof;
+
+        return maxsz;
     }
 
     void multidim_fft()(T* re, T* im, MultidimTable multidim_table)
     {
-        if(multidim_table.tables.length == 0)
+        auto tables = multidim_table.tables;
+        if(tables.length == 0)
             return;
-
-        auto head = &multidim_table.tables[0];
-        auto tail = multidim_table.tables[1 .. $];
-        if(tail.length == 0)
-            return fft(re, im, head);
+        else if(tables.length == 1)
+            return fft(re, im, &tables[0]);
 
         auto buf = multidim_table.buffer;
-        int log2m = tail.map!(a => a.log2n).sum;
+        auto log2ns = tables.map!(a => a.log2n);
+        int log2m = log2ns.dropExactly(1).sum;
         auto m = log2m.exp2;
-        auto next_table = MultidimTableValue(tail, buf, null);
-        foreach(i; 0 .. head.log2n.exp2)
+        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        foreach(i; 0 .. tables[0].log2n.exp2)
             multidim_fft(re + i * m, im + i * m, &next_table);
 
-        fft_transposed(re, im, log2m, log2m, head, buf);
+        auto selection = multidim_multi_selection(log2ns, 0);
+        auto l2m = SelectMulti.call!("log2_multi")(selection);
+        SelectMulti.call!("fft_transposed")(
+            selection, re, im, log2m - l2m, log2m - l2m, &tables[0], buf);
     }
 
     void rfft_complete()(
@@ -1581,24 +1597,27 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     void multidim_rfft()(T* p, RealMultidimTable rmt)
     {
-        if(rmt.multidim_table.tables.length == 0)
-            return;
-
         auto multidim_table = rmt.multidim_table;
-        auto head = &multidim_table.tables[0];
-        auto tail = multidim_table.tables[1 .. $];
-        auto n = head.log2n.exp2;
-        if(tail.length == 0)
-            return rfft_complete(p, head, rmt.rtable, rmt.itable);
+        auto tables = multidim_table.tables;
+        if(tables.length == 0)
+            return;
+        else if(tables.length == 1)
+            return rfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
 
-        int log2m = reduce!((a, e) => a + e.log2n)(0, tail);
+        auto n = tables[0].log2n.exp2;
+        auto log2ns = tables.map!(a => a.log2n);
+        int log2m = log2ns.dropExactly(1).sum;
         auto m = log2m.exp2;
         auto im = p + m * (n + 1);
         auto im_end = im + m * (n + 1);
         auto buf = multidim_table.buffer;
 
-        rfft_transposed!false(
-            p, log2m, log2m, head, buf, rmt.rtable, rmt.itable);
+        auto selection = multidim_multi_selection(log2ns, 0);
+        auto l2m = SelectMulti.call!("log2_multi")(selection);
+        SelectMulti.call!("rfft_transposed")(
+            selection, p,
+            log2m - l2m, log2m - l2m,
+            &tables[0], buf, rmt.rtable, rmt.itable);
 
         foreach(i; 2 .. n + 1)
             memcpy(im_end  - i * m, im_end - (i + 1) * m, m * T.sizeof);
@@ -1606,7 +1625,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         memset(im_end - m, 0, m * T.sizeof);
         memset(im, 0, m * T.sizeof);
 
-        auto next_table = MultidimTableValue(tail, buf, null);
+        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
         foreach(i; 0 .. n + 1)
             multidim_fft(p + i * m, im + i * m, &next_table);
     }
@@ -1635,7 +1654,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         
         memset(im_end - 2 * m, 0, 2 * m * T.sizeof);
 
-        rfft_transposed!true(
+        irfft_transposed(
             p, log2m, log2m, head, buf, rmt.rtable, rmt.itable);
     }
 
@@ -1682,35 +1701,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
 mixin template Instantiate()
 {
-    template selected(string func_name, Ret...)
-    {
-        @always_inline auto selected(A...)(A args)
-        {
-            static if(is(typeof(implementation)))
-                auto impl = implementation.get();
-            else
-                enum impl = 0;
-    
-            foreach(i, F; FFTs)
-                if(i == impl)
-                {
-                    mixin("alias F." ~ func_name ~ " func;");
+    static if(is(typeof(implementation)))
+        alias impl = implementation.get;
+    else
+        enum impl = 0;
 
-                    ParamTypeTuple!(func) fargs;
-
-                    foreach(j, _; fargs)
-                        fargs[j] = cast(typeof(fargs[j])) args[j];
-
-                    static if(Ret.length == 0)
-                        return func(fargs);
-                    else
-                        return cast(Ret[0]) func(fargs);
-                }
-            
-            assert(false);
-        }
-    }
-    
     void set_implementation(int i)
     {
         static if(is(typeof(implementation.set)))
@@ -1745,8 +1740,8 @@ mixin template Instantiate()
             {
                 enum current = 
                     "auto "~name~"("~generate_arg_list!(member, true)~
-                    "){ return selected!(\""~name~"\", "~
-                    ReturnType!member.stringof~")("~
+                    "){ return cast("~ ReturnType!member.stringof~
+                    ") SelectImplementation!FFTs.call!(\""~name~"\")(impl, "~
                     generate_arg_list!(member, false)~"); }\n";
             }
             else 
