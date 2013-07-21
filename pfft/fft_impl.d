@@ -39,14 +39,12 @@ template Scalar(_T, A...)
     enum{ isScalar }
     alias _T vec;
     alias _T T;
-    
+    alias _T Twiddle;
+
     enum vec_size = 1;
     enum log2_bitreverse_chunk_size = 1;
     
-    vec scalar_to_vector(T a)
-    {
-        return a;
-    }
+    vec twiddle_to_vector(T a) { return a; }
    
     void bit_reverse(A...)(ref A arg)
     {
@@ -58,33 +56,42 @@ template Scalar(_T, A...)
     T reverse(T a){ return a; }           
 }
 
-version(DisableLarge)
-    enum disable_large = true;
-else 
-    enum disable_large = false;
-
-// reinventing some Phobos stuff...
-
-template ParamTypeTuple(alias f)
+template MultiScalar(alias Vector)
 {
-    auto params_struct(Ret, Params...)(Ret function(Params) f) 
+    enum{ isScalar }
+    alias Vector.vec vec;
+    alias Vector.vec T;
+    alias Vector.Twiddle Twiddle;
+
+    enum vec_size = 1;
+    enum log2_bitreverse_chunk_size = 1;
+
+    vec twiddle_to_vector(Twiddle a)
     {
-        struct R
-        {
-            Params p;
-        }
-        return R.init;
+        return Vector.twiddle_to_vector(a);;
     }
 
-    static if(is(typeof(params_struct(&f))))
-        alias f f_instance;
-    else
-        alias f!() f_instance;
-
-    alias typeof(params_struct(&f_instance).tupleof) type;
+    void bit_reverse(A...)(ref A arg)
+    {
+        swap(arg[1], arg[2]);
+    }
+    
+    T unaligned_load(T* p){ return *p; }
+    void unaligned_store(T* p, T a){ *p = a; }
+    vec reverse(T a){ return a; }           
 }
 
-template FFT(alias V, alias Options)
+template MultiScalarOptions(alias Options, int multi)
+{
+    enum dl = (log2(multi) + 1) / 2;
+    enum log2_bitreverse_large_chunk_size = Options.log2_bitreverse_large_chunk_size - dl;
+    enum large_limit = Options.large_limit - log2(multi);
+    enum log2_optimal_n = Options.log2_optimal_n;
+    enum passes_per_recursive_call = Options.passes_per_recursive_call;
+    enum log2_recursive_passes_chunk_size = Options.log2_recursive_passes_chunk_size;
+} 
+
+template FFT(alias V, alias Options, bool disable_large = false)
 {
     static assert(!(Options.passes_per_recursive_call & 1));
 
@@ -96,26 +103,38 @@ template FFT(alias V, alias Options)
     alias V.vec_size vec_size;
     alias V.T T;
     alias V.vec vec;
+    alias V.Twiddle Twiddle;
 
     enum isScalar = is(typeof(V.isScalar));
     static if(!isScalar)
         alias FFT!(Scalar!(T, V), Options) SFFT;
+    else
+        alias FFT!(V, Options, disable_large) SFFT;
  
+    static if(!isScalar)
+        alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
+    else
+        alias FFT!(V, Options, disable_large) MSFFT;
+
+    alias 
+        SelectImplementation!(FFT!(V, Options, disable_large), MSFFT).call
+        multi; 
+
     import cmath = core.stdc.math;
 
-    static if(is(T == float))
+    static if(is(Twiddle == float))
     {
         alias cmath.sinf _sin;
         alias cmath.cosf _cos;
         alias cmath.asinf _asin;
     }
-    else static if(is(T == double))
+    else static if(is(Twiddle == double))
     {
         alias cmath.sin _sin;
         alias cmath.cos _cos;
         alias cmath.asin _asin;
     }
-    else static if(is(T == real))
+    else static if(is(Twiddle == real))
     {
         alias cmath.sinl _sin;
         alias cmath.cosl _cos;
@@ -124,13 +143,23 @@ template FFT(alias V, alias Options)
     else
         static assert(0);
 
-    alias Tuple!(T,T) Pair;
+    auto v()(T* p){ return cast(vec*) p; }
+
+    vec load_twiddle_vector()(Twiddle *p)
+    {
+        static if(is(vec == T))
+            return V.twiddle_to_vector(*p);
+        else
+            return *cast(vec*)(p);
+    }
+    
+    alias Tuple!(Twiddle, Twiddle) Pair;
    
     void complex_array_to_vector()(Pair * pairs, size_t n)
     {
         for(size_t i=0; i<n; i += vec_size)
         {
-            T buffer[vec_size*2] = void;
+            Twiddle buffer[vec_size*2] = void;
             for(size_t j = 0; j < vec_size; j++)
             {
                 buffer[j] = pairs[i+j][0];
@@ -154,10 +183,10 @@ template FFT(alias V, alias Options)
     }
  
     void sines_cosines_refine(bool computeEven)(
-        Pair* src, Pair* dest, size_t n_from, T dphi)
+        Pair* src, Pair* dest, size_t n_from, Twiddle dphi)
     {
-        T cdphi = _cos(dphi);
-        T sdphi = _sin(dphi);
+        Twiddle cdphi = _cos(dphi);
+        Twiddle sdphi = _sin(dphi);
        
         enum compute = computeEven ? 0 : 1;
         enum copy = compute ^ 1;
@@ -174,7 +203,7 @@ template FFT(alias V, alias Options)
     }
 
     void sines_cosines(bool phi0_is_last)(
-        Pair* r, size_t n, T phi0, T deltaphi, bool bit_reversed)
+        Pair* r, size_t n, Twiddle phi0, Twiddle deltaphi, bool bit_reversed)
     {
         r[n - 1][0] = _cos(phi0);
         r[n - 1][1] = _sin(phi0);
@@ -270,7 +299,7 @@ template FFT(alias V, alias Options)
 
     struct TableValue
     {
-        T* twiddle;
+        Twiddle* twiddle;
         void* buffer; 
         uint* br;
         uint log2n;
@@ -491,13 +520,14 @@ template FFT(alias V, alias Options)
         }
     }
         
-    @always_inline void fft_pass()(vec *pr, vec *pi, vec *pend, T *table, size_t m2)
+    @always_inline void fft_pass()(
+        vec *pr, vec *pi, vec *pend, Twiddle *table, size_t m2)
     {
         size_t m = m2 + m2;
         for(; pr < pend ; pr += m, pi += m)
         {
-            vec wr = V.scalar_to_vector(table[0]);
-            vec wi = V.scalar_to_vector(table[1]);
+            vec wr = V.twiddle_to_vector(table[0]);
+            vec wi = V.twiddle_to_vector(table[1]);
             table += 2;
             for (size_t k1 = 0, k2 = m2; k1<m2; k1++, k2 ++) 
             { 
@@ -513,7 +543,8 @@ template FFT(alias V, alias Options)
         }
     }
 
-    @always_inline void fft_two_passes(Tab...)(vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
+    @always_inline void fft_two_passes(Tab...)(
+        vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
         // sometimes gives an incorrect result (for example when building with 
@@ -534,11 +565,11 @@ template FFT(alias V, alias Options)
         {
             static if(tab.length == 2)
             {
-                vec w1r = V.scalar_to_vector(tab[1][0]);
-                vec w1i = V.scalar_to_vector(tab[1][1]);
+                vec w1r = V.twiddle_to_vector(tab[1][0]);
+                vec w1i = V.twiddle_to_vector(tab[1][1]);
 
-                vec w2r = V.scalar_to_vector(tab[0][0]);
-                vec w2i = V.scalar_to_vector(tab[0][1]);
+                vec w2r = V.twiddle_to_vector(tab[0][0]);
+                vec w2i = V.twiddle_to_vector(tab[0][1]);
 
                 vec w3r = w1r * w2r - w1i * w2i;
                 vec w3i = w1r * w2i + w1i * w2r;
@@ -548,14 +579,14 @@ template FFT(alias V, alias Options)
             }
             else
             {
-                vec w1r = V.scalar_to_vector(tab[0][0]);
-                vec w1i = V.scalar_to_vector(tab[0][1]);
+                vec w1r = V.twiddle_to_vector(tab[0][0]);
+                vec w1i = V.twiddle_to_vector(tab[0][1]);
 
-                vec w2r = V.scalar_to_vector(tab[0][2]);
-                vec w2i = V.scalar_to_vector(tab[0][3]);
+                vec w2r = V.twiddle_to_vector(tab[0][2]);
+                vec w2i = V.twiddle_to_vector(tab[0][3]);
 
-                vec w3r = V.scalar_to_vector(tab[0][4]);
-                vec w3i = V.scalar_to_vector(tab[0][5]);
+                vec w3r = V.twiddle_to_vector(tab[0][4]);
+                vec w3i = V.twiddle_to_vector(tab[0][5]);
 
                 tab[0] += 6;
             }
@@ -583,7 +614,7 @@ template FFT(alias V, alias Options)
         table += start_stride + start_stride;
         vec* re_end = re + N;
         size_t m2 = start_stride;
-        
+
         static if(useTwoPasses)
             for(; m2 < N / 2; m2 <<= 2)
             {
@@ -599,14 +630,14 @@ template FFT(alias V, alias Options)
     }
     
     @always_inline void fft_passes(bool compact_table)(
-        vec* re, vec* im, size_t N, size_t end_stride, T* table)
+        vec* re, vec* im, size_t N, size_t end_stride, Twiddle* table)
     {
         vec * pend = re + N;
 
         size_t tableRowLen = 2;
         size_t m2 = N/2;
 
-        static nextRow(ref T* table, ref size_t len)
+        static nextRow(ref Twiddle* table, ref size_t len)
         {
             static if(!compact_table)
             {
@@ -653,7 +684,12 @@ template FFT(alias V, alias Options)
     }
    
     @always_inline void fractional_inner(bool do_prefetch)(
-        ref vec ar, ref vec ai, ref vec br, ref vec bi, T* table, size_t tableI)
+        ref vec ar,
+        ref vec ai,
+        ref vec br,
+        ref vec bi,
+        Twiddle* table,
+        size_t tableI)
     {
         foreach(i; ints_up_to!(log2(vec_size)))
         {
@@ -681,8 +717,8 @@ template FFT(alias V, alias Options)
         V.interleave(ai, bi, ai, bi);
     }
 
-    @always_inline void fft_passes_fractional()
-    (vec * pr, vec * pi, vec * pend, T * table, size_t tableI)
+    @always_inline void fft_passes_fractional()(
+        vec * pr, vec * pi, vec * pend, Twiddle * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
         {
@@ -715,7 +751,7 @@ template FFT(alias V, alias Options)
         vec * pr,
         vec * pi, 
         size_t N , 
-        ref T * table, 
+        ref Twiddle * table, 
         ref size_t tableI, 
         void* tmp_buffer,
         size_t stride,
@@ -767,7 +803,7 @@ template FFT(alias V, alias Options)
     }
 
     @always_inline void fft_passes_recursive_last()(
-        vec* pr, vec*  pi, size_t N, T* table, size_t tableI)
+        vec* pr, vec*  pi, size_t N, Twiddle* table, size_t tableI)
     {
         profStart(Action.passes_last);
         size_t m2 = N >> 1;
@@ -787,7 +823,12 @@ template FFT(alias V, alias Options)
     }
 
     void fft_passes_recursive()(
-        vec* pr, vec*  pi, size_t N, T* table, size_t tableI, void* tmp_buffer)
+        vec* pr,
+        vec*  pi,
+        size_t N,
+        Twiddle* table,
+        size_t tableI,
+        void* tmp_buffer)
     {
         enum log2l =  Options.passes_per_recursive_call, l = 1 << log2l;
         enum chunk_size = st!1 << Options.log2_recursive_passes_chunk_size;
@@ -826,7 +867,7 @@ template FFT(alias V, alias Options)
 
     }
   
-    void static_size_fft(int log2n_elem)(vec* pr, vec* pi, T* table)
+    void static_size_fft(int log2n_elem)(vec* pr, vec* pi, Twiddle* table)
     {
         enum log2n = log2n_elem - log2(vec_size);  
         enum n = 1 << log2n;
@@ -918,8 +959,6 @@ template FFT(alias V, alias Options)
             }
     }
 
-    auto v(T* p){ return cast(vec*) p; }
-
     void fft_small()(T * re, T * im, uint log2n, Table table)
     {
         // assert(log2n >= 2*log2(vec_size));
@@ -989,185 +1028,12 @@ template FFT(alias V, alias Options)
                 fft_large(re, im, log2n, table);
     }
 
-    struct MultidimTableValue
+    @always_inline size_t log2_multi()()
     {
-        TableValue[] tables;
-        TransposeBuffer buffer;
-        void* memory;
+        return log2(T.sizeof / Twiddle.sizeof);
     }
 
-    alias MultidimTableValue* MultidimTable;
-
-    template MultidimTableImpl()
-    {
-        enum max_distinct_sizes = 10;
-        alias Allocate!(3 * max_distinct_sizes + 3) Alloc;
-        alias TableValue[8 * size_t.sizeof] TableMap; 
-
-        void add_pointers()(
-            TableMap* table_map,
-            Table* tables,
-            MultidimTable* mt,
-            TransposeBuffer* buf,
-            Alloc* alloc,
-            uint[] log2n)
-        {
-            size_t already_added = 0;
-            size_t n_sizes = 0;
-            foreach(i; log2n)
-            {
-                auto ith_bit = st!1 << i;
-                if((ith_bit & already_added) == 0)
-                {
-                    already_added |= ith_bit;
-                    alloc.add(&(*table_map)[i].twiddle, twiddle_table_size(i));
-                    alloc.add(&(*table_map)[i].buffer, tmp_buffer_size(i));
-                    alloc.add(&(*table_map)[i].br, BR.table_size(br_table_log2n(i)));
-                }
-            }
-
-            alloc.add(buf, transpose_buffer_size(log2n));
-            alloc.add(tables, log2n.length);
-            alloc.add(mt, 1);
-        }
-
-        size_t size(uint[] log2n)
-        {
-            Alloc alloc = void; alloc.initialize();
-            TableMap table_map;
-            Table tables;
-            MultidimTable mt;
-            TransposeBuffer buf;
-            add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
-            return alloc.size();
-        }
-
-        MultidimTable table(uint[] log2n, void* ptr)
-        {
-            Alloc alloc = void; alloc.initialize();
-            TableMap table_map;
-            Table tables;
-            MultidimTable mt;
-            TransposeBuffer buf;
-            add_pointers(&table_map, &tables, &mt, &buf, &alloc, log2n);
-            alloc.allocate(ptr);
-
-            foreach(i; 0 .. log2n.length)
-            {
-                tables[i] = table_map[log2n[i]];
-                init_fft_table(log2n[i], tables + i);
-            }
-
-            mt.tables = tables[0 .. log2n.length];
-            mt.buffer = buf;
-            mt.memory = ptr;
-            return mt;
-        }
-
-        void* memory(MultidimTable table) { return table.memory; }
-
-        size_t size2(uint ndim)
-        {
-            return 
-                align_size!TableValue(MultidimTableValue.sizeof) + 
-                ndim * TableValue.sizeof;
-        }
-
-        MultidimTable table2(size_t ndim, void* ptr, TransposeBuffer buf)
-        {
-            auto mt = cast(MultidimTable) ptr;
-            auto t = cast(Table)(
-                ptr + align_size!TableValue(MultidimTableValue.sizeof));
-
-            mt.tables = t[0 .. ndim];
-            mt.buffer = buf;
-            mt.memory = ptr;
-            return mt;
-        }
-
-        void set(MultidimTable mt, size_t dim_index, Table table)
-        {
-            mt.tables[dim_index] = *table;
-        }
-    }
-
-    alias MultidimTableImpl!().table multidim_fft_table;
-    alias MultidimTableImpl!().size multidim_fft_table_size;
-    alias MultidimTableImpl!().memory multidim_fft_table_memory;
-    alias MultidimTableImpl!().table2 multidim_fft_table2;
-    alias MultidimTableImpl!().size2 multidim_fft_table2_size;
-    alias MultidimTableImpl!().set multidim_fft_table_set;
-
-    @always_inline void fft_transposed()(
-        T* re,
-        T* im,
-        int log2stride, 
-        int log2n,
-        int log2m,
-        Table table,
-        TransposeBuffer buffer,
-        bool is_real)
-    {
-        auto n = st!1 << log2n;
-        auto m = st!1 << log2m;
-        auto stride = st!1 << log2stride;
-        auto nbuf = Col.buffer_size(n, m);
-       
-        Col[2] col = void; 
-        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
-        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
-
-        foreach(j; 0 .. m)
-        {
-            foreach(i; 0 .. 2)
-                col[i].load();
-
-            fft(col[0].column, col[1].column, table);
-
-//            if(j == 0 && is_real)
-//                foreach(i; 0 .. n / 2)
-//                {
-//                }
-//
-            foreach(i; 0 .. 2)
-                col[i].save();
-        }
-    }
-
-    size_t transpose_buffer_size()(uint[] log2n)
-    {
-        auto lnmax = uint.min;
-        auto lm = 0u;
-        foreach(i; 1 .. log2n.length)
-        {
-            lm += log2n[$ - i];
-            lnmax = max(lnmax, log2n[$ - (i + 1)]);
-        }
-        
-        return Col.buffer_size(st!1 << lnmax, st!1 << lm) * 2 * T.sizeof;
-    }
-
-    void multidim_fft()(T* re, T* im, MultidimTable multidim_table)
-    {
-        auto table = multidim_table.tables;
-        if(table.length == 1)
-            return fft(re, im, &table[0]);
-
-        auto buf = multidim_table.buffer;
-        int log2m = 0;
-        foreach(e; table[1 .. $])
-            log2m += e.log2n;
-
-        auto m = st!1 << log2m;
-        auto next_table = MultidimTableValue(table[1 .. $], buf, null);
-        foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_fft(re + i * m, im + i * m, &next_table);
-
-        fft_transposed(
-            re, im, log2m, table[0].log2n, log2m, &table[0], buf, false);
-    }
-
-    alias T* RTable;
+    alias Twiddle* RTable;
  
     auto rtable_size()(int log2n)
     {
@@ -1207,7 +1073,7 @@ template FFT(alias V, alias Options)
         return SFFT.rfft_table(log2n, p);
     }
 
-    void rfft()( T* rr, T* ri, Table table, RTable rtable) 
+    void rfft()(T* rr, T* ri, Table table, RTable rtable) 
     {
         auto log2n = table.log2n + 1;
         if(log2n == 0)
@@ -1245,26 +1111,6 @@ template FFT(alias V, alias Options)
         fft(ri, rr, table);
     }
 
-    void multidim_rfft()(
-        T* re, T* im, MultidimTable multidim_table, RTable rtable)
-    {
-        auto table = multidim_table.tables;
-        if(table.length == 1)
-            return rfft(re, im, &table[0], rtable);
-
-        auto buf = multidim_table.buffer;
-        int log2m = 0;
-        foreach(e; table[1 .. $])
-            log2m += e.log2n;
-
-        auto m = st!1 << log2m;
-        auto next_table = MultidimTableValue(table[1 .. $], buf, null);
-        foreach(i; 0 .. st!1 << table[0].log2n)
-            multidim_fft(re + i * m, im + i * m, &next_table, rtable);
-
-        fft_transposed(re, im, log2m, table[0].log2n, log2m, &table[0], buf);
-    }
-    
     void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
@@ -1276,7 +1122,7 @@ template FFT(alias V, alias Options)
 
         auto n = st!1 << log2n;
 
-        vec half = V.scalar_to_vector(cast(T) 0.5);
+        vec half = V.twiddle_to_vector(cast(Twiddle) 0.5);
 
         T middle_r = rr[n / 4];        
         T middle_i = ri[n / 4];        
@@ -1286,8 +1132,8 @@ template FFT(alias V, alias Options)
             i0 <= i1; 
             i0 += vec_size, i1 -= vec_size, iw += 2*vec_size)
         {
-            vec wr = *v(rtable + iw);
-            vec wi = *v(rtable + iw + vec_size);
+            vec wr = load_twiddle_vector(rtable + iw);
+            vec wi = load_twiddle_vector(rtable + iw + vec_size);
 
             vec r0r = V.unaligned_load(&rr[i0]);
             vec r0i = V.unaligned_load(&ri[i0]);
@@ -1369,9 +1215,401 @@ template FFT(alias V, alias Options)
     alias Interleave!(V, interleaveChunkSize, false).interleaved_copy interleave_array;
     alias Interleave!(V, interleaveChunkSize, true).interleaved_copy deinterleave_array;
 
-    static void scale(T* data, size_t n, T factor)
+    struct MultidimTableValue
     {
-        auto k  = V.scalar_to_vector(factor);
+        TableValue[] tables;
+        TransposeBuffer buffer;
+        void* memory;
+    }
+
+    alias MultidimTableValue* MultidimTable;
+
+    struct RealMultidimTableValue
+    {
+        MultidimTable multidim_table;
+        RTable rtable;
+        ITable itable;
+    }
+
+    alias RealMultidimTableValue* RealMultidimTable;
+
+    @always_inline uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
+    {
+        return log2n.dropExactly(dim_index + 1).sum;
+    }
+
+    @always_inline bool multidim_use_multiscalar(uint log2ncolumns)
+    {
+        return log2ncolumns >= log2(vec_size);
+    }
+
+    @always_inline uint multidim_multi_selection(Range)(
+        Range log2n, size_t dim_index)
+    {
+        return multidim_log2ncolumns(log2n, dim_index) >= log2(vec_size) ?
+            1 : 0;
+    }
+
+    template MultidimTableImpl()
+    {
+        enum max_ndim = size_t.sizeof * 8;
+        alias Allocate!(3 * max_ndim + 3) Alloc;
+        alias TableValue[max_ndim] TableMap; 
+
+        struct TableCreator
+        {
+            TableMap table_map;
+            Table tables;
+            MultidimTable mt;
+            TransposeBuffer buf;
+
+            void add_to(Alloc* alloc, uint[] log2n)
+            {
+                size_t last = log2n.length - 1;
+                foreach(i; 0 .. last)
+                {
+                    auto l = log2n[i];
+                    auto s = multidim_multi_selection(log2n, i);
+                    alloc.add(&table_map[i].twiddle, 
+                        multi!("twiddle_table_size")(s, l));
+
+                    alloc.add(&table_map[i].buffer,
+                        multi!("tmp_buffer_size")(s, l));
+
+                    auto br_log2n = multi!("br_table_log2n")(s, l);
+                    alloc.add(&table_map[i].br,
+                        multi!("BR.table_size")(s, br_log2n));
+                }
+
+                alloc.add(&table_map[last].twiddle, twiddle_table_size(log2n[last]));
+                alloc.add(&table_map[last].buffer, tmp_buffer_size(log2n[last]));
+                alloc.add(&table_map[last].br, BR.table_size(br_table_log2n(log2n[last])));
+
+                alloc.add(&buf, transpose_buffer_size(log2n));
+                alloc.add(&tables, log2n.length);
+                alloc.add(&mt, 1);
+            }
+
+            auto create(uint[] log2n, void* ptr)
+            {
+                size_t last = log2n.length - 1;
+                foreach(i; 0 .. last)
+                {
+                    tables[i] = table_map[i];
+                    auto s = multidim_multi_selection(log2n, i);
+                    multi!("init_fft_table")(s, log2n[i], &tables[i]);
+                }
+                    
+                tables[last] = table_map[last];
+                init_fft_table(log2n[last], &tables[last]);
+
+                mt.tables = tables[0 .. log2n.length];
+                mt.buffer = buf;
+                mt.memory = ptr;
+                return mt;
+            }
+        }
+
+        struct RealTableCreator
+        {
+            void* itable_memory;
+            void* rtable_memory;
+            RealMultidimTable rmt;
+            TableCreator tc;
+
+            void add_to(Alloc* alloc, uint log2n[])
+            {
+                auto s = multidim_multi_selection(log2n, 0);
+                tc.add_to(alloc, log2n);
+                alloc.add(&itable_memory, multi!"itable_size"(s, log2n[0] + 1));
+                alloc.add(&rtable_memory, multi!"rtable_size"(s, log2n[0] + 1));
+                alloc.add(&rmt, 1);
+            }
+
+            auto create(uint[] log2n, void* ptr)
+            {
+                rmt.multidim_table = tc.create(log2n, ptr);
+                auto s = multidim_multi_selection(log2n, 0);
+                rmt.rtable = multi!"rfft_table"(s, log2n[0] + 1, rtable_memory);
+                rmt.itable = multi!"interleave_table"(
+                    s, log2n[0] + 1, itable_memory);
+
+                return rmt; 
+            }
+        }
+
+        template TC(bool is_real)
+        {
+            alias select!(is_real, RealTableCreator, TableCreator) TC;
+        }
+
+        size_t size(bool is_real)(uint[] log2n)
+        {
+            Alloc alloc = void; alloc.initialize();
+            TC!is_real tc = void;
+            tc.add_to(&alloc, log2n);
+            return alloc.size();
+        }
+
+        template table(bool is_real)
+        {
+            typeof(TC!is_real.create(null, null))
+            table(uint[] log2n, void* ptr)
+            {
+                Alloc alloc = void; alloc.initialize();
+                TC!is_real tc = void;
+                tc.add_to(&alloc, log2n);
+                alloc.allocate(ptr);
+                return tc.create(log2n, ptr);
+            }
+        }
+
+        void* memory(MultidimTable table) { return table.memory; }
+        void* real_memory(RealMultidimTable table)
+        {
+            return table.multidim_table.memory;
+        }
+
+        size_t size2(uint ndim)
+        {
+            return 
+                align_size!TableValue(MultidimTableValue.sizeof) + 
+                ndim * TableValue.sizeof;
+        }
+
+        MultidimTable table2(size_t ndim, void* ptr, TransposeBuffer buf)
+        {
+            auto mt = cast(MultidimTable) ptr;
+            auto t = cast(Table)(
+                ptr + align_size!TableValue(MultidimTableValue.sizeof));
+
+            mt.tables = t[0 .. ndim];
+            mt.buffer = buf;
+            mt.memory = ptr;
+            return mt;
+        }
+
+        void set(MultidimTable mt, size_t dim_index, Table table)
+        {
+            mt.tables[dim_index] = *table;
+        }
+    }
+
+    alias MultidimTableImpl!().table!false multidim_fft_table;
+    alias MultidimTableImpl!().size!false multidim_fft_table_size;
+    alias MultidimTableImpl!().memory multidim_fft_table_memory;
+    alias MultidimTableImpl!().table2 multidim_fft_table2;
+    alias MultidimTableImpl!().size2 multidim_fft_table2_size;
+    alias MultidimTableImpl!().set multidim_fft_table_set;
+
+    alias MultidimTableImpl!().table!true multidim_rfft_table;
+    alias MultidimTableImpl!().size!true multidim_rfft_table_size;
+    alias MultidimTableImpl!().real_memory multidim_rfft_table_memory;
+
+    @always_inline void fft_transposed()(
+        T* re,
+        T* im,
+        int log2stride, 
+        int log2m,
+        Table table,
+        TransposeBuffer buffer)
+    {
+        auto n = st!1 << table.log2n;
+        auto m = st!1 << log2m;
+        auto stride = st!1 << log2stride;
+        auto nbuf = Col.buffer_size(n, m);
+
+        Col[2] col = void; 
+        col[0] = Col.create(re, stride, n, m, cast(T*) buffer);
+        col[1] = Col.create(im, stride, n, m, cast(T*) buffer + nbuf);
+
+        foreach(j; 0 .. m)
+        {
+            foreach(i; 0 .. 2)
+                col[i].load();
+
+            fft(col[0].column, col[1].column, table);
+
+            foreach(i; 0 .. 2)
+                col[i].save();
+        }
+    }
+
+    //TODO: use multi-scalar
+    @always_inline void rfft_transposed_impl(bool inverse)(
+        T* p,
+        int log2stride, 
+        int log2m,
+        Table table,
+        TransposeBuffer buffer,
+        RTable rtable,
+        ITable itable)
+    {
+        auto n = st!1 << table.log2n;
+        auto m = st!1 << log2m;
+        auto stride = st!1 << log2stride;
+        auto col = Col.create(p, stride, 2 * n, m, cast(T*) buffer);
+
+        foreach(j; 0 .. m)
+        {
+            col.load();
+            static if(inverse)
+            {
+                irfft(col.column, col.column + n, table, rtable);
+                interleave(col.column, table.log2n + 1, itable);
+            }
+            else
+            {
+                deinterleave(col.column, table.log2n + 1, itable);
+                rfft(col.column, col.column + n, table, rtable);
+            }
+            col.save();
+        }
+    }
+
+    alias rfft_transposed_impl!false rfft_transposed;
+    alias rfft_transposed_impl!true irfft_transposed;
+
+    size_t column_buffer_size(size_t log2n, size_t log2m)
+    {
+        return Col.buffer_size(st!1 << log2n, st!1 << log2m) * 2 * T.sizeof;
+    }
+
+    size_t transpose_buffer_size()(uint[] log2n)
+    {
+        size_t maxsz = 0;
+        foreach(i; 0 .. log2n.length - 1)
+        {
+            auto lm = multidim_log2ncolumns(log2n, i);
+            auto ln = log2n[i];
+            auto s = multidim_multi_selection(log2n, i);
+            maxsz = max(
+                maxsz, 
+                (i == 0 ? 1 : 2) * multi!"column_buffer_size"(
+                    s,
+                    log2n[i], 
+                    multidim_log2ncolumns(log2n, i) - multi!"log2_multi"(s)));
+        }
+
+        return maxsz;
+    }
+
+    void multidim_fft()(T* re, T* im, MultidimTable multidim_table)
+    {
+        auto tables = multidim_table.tables;
+        if(tables.length == 0)
+            return;
+        else if(tables.length == 1)
+            return fft(re, im, &tables[0]);
+
+        auto buf = multidim_table.buffer;
+        auto log2ns = tables.map!(a => a.log2n);
+        int log2m = log2ns.dropExactly(1).sum;
+        auto m = log2m.exp2;
+        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        foreach(i; 0 .. tables[0].log2n.exp2)
+            multidim_fft(re + i * m, im + i * m, &next_table);
+
+        auto selection = multidim_multi_selection(log2ns, 0);
+        auto l2m = multi!("log2_multi")(selection);
+        multi!("fft_transposed")(
+            selection, re, im, log2m - l2m, log2m - l2m, &tables[0], buf);
+    }
+
+    void rfft_complete()(
+        T* p, Table table, RTable rtable, ITable itable)
+    {
+        deinterleave(p, table.log2n + 1, itable);
+        auto n = table.log2n.exp2;
+        rfft(p, p + n, table, rtable);
+        memmove(p + n + 2, p + n + 1, n * T.sizeof);
+        p[n + 1] = 0;
+        p[2 * n + 1] = 0;
+    }
+
+    void irfft_complete()(
+        T* p, Table table, RTable rtable, ITable itable)
+    {
+        auto n = table.log2n.exp2;
+        memmove(p + n + 1, p + n + 2, n * T.sizeof);
+        p[2 * n] = 0;
+        p[2 * n + 1] = 0;
+        irfft(p, p + n, table, rtable);
+        interleave(p, table.log2n + 1, itable);
+    }
+
+    void multidim_rfft()(T* p, RealMultidimTable rmt)
+    {
+        auto multidim_table = rmt.multidim_table;
+        auto tables = multidim_table.tables;
+        if(tables.length == 0)
+            return;
+        else if(tables.length == 1)
+            return rfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
+
+        auto n = tables[0].log2n.exp2;
+        auto log2ns = tables.map!(a => a.log2n);
+        int log2m = log2ns.dropExactly(1).sum;
+        auto m = log2m.exp2;
+        auto im = p + m * (n + 1);
+        auto im_end = im + m * (n + 1);
+        auto buf = multidim_table.buffer;
+
+        auto selection = multidim_multi_selection(log2ns, 0);
+        auto l2m = multi!("log2_multi")(selection);
+        multi!("rfft_transposed")(
+            selection, p,
+            log2m - l2m, log2m - l2m,
+            &tables[0], buf, rmt.rtable, rmt.itable);
+
+        foreach(i; 2 .. n + 1)
+            memcpy(im_end  - i * m, im_end - (i + 1) * m, m * T.sizeof);
+
+        memset(im_end - m, 0, m * T.sizeof);
+        memset(im, 0, m * T.sizeof);
+
+        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        foreach(i; 0 .. n + 1)
+            multidim_fft(p + i * m, im + i * m, &next_table);
+    }
+
+    void multidim_irfft()(T* p, RealMultidimTable rmt)
+    {
+        auto multidim_table = rmt.multidim_table;
+        auto tables = multidim_table.tables;
+        if(tables.length == 0)
+            return;
+        else if(tables.length == 1)
+            return irfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
+
+        auto n = tables[0].log2n.exp2;
+        auto log2ns = tables.map!(a => a.log2n);
+        int log2m = log2ns.dropExactly(1).sum;
+        auto m = log2m.exp2;
+        auto im = p + m * (n + 1);
+        auto im_end = im + m * (n + 1);
+        auto buf = multidim_table.buffer;
+
+        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        foreach(i; 0 .. n + 1)
+            multidim_fft(im + i * m, p + i * m, &next_table);
+
+        foreach(i; 0 .. n - 1)
+            memcpy(im + i * m, im + (i + 1) * m, m * T.sizeof);
+        
+        memset(im_end - 2 * m, 0, 2 * m * T.sizeof);
+
+        auto selection = multidim_multi_selection(log2ns, 0);
+        auto l2m = multi!("log2_multi")(selection);
+        multi!("irfft_transposed")(
+            selection, p,
+            log2m - l2m, log2m - l2m,
+            &tables[0], buf, rmt.rtable, rmt.itable);
+    }
+
+    static void scale(T* data, size_t n, Twiddle factor)
+    {
+        auto k  = V.twiddle_to_vector(factor);
         
         foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
             e = e * k;
@@ -1406,188 +1644,97 @@ template FFT(alias V, alias Options)
     {
         enum pow2tsize = cast(size_t)1 << bsr(T.sizeof);
         enum pow2vecsize = cast(size_t)1 << bsr(vec.sizeof);
-        return max(min(pow2vecsize, pow2tsize << bsr(2 * n - 1)), (void*).sizeof);
+        return max(min(pow2vecsize, pow2tsize << bsr(n)), (void*).sizeof);
     }
+    
+    alias MSFFT.Table MultiTable;
+    alias MSFFT.fft_table_size multi_fft_table_size;
+    alias MSFFT.fft_table multi_fft_table;
+    
+    void multi_fft()(T* re, T* im, MultiTable table)
+    {
+        MSFFT.fft(
+            cast(MSFFT.T*) re,
+            cast(MSFFT.T*) im,
+            cast(MSFFT.Table) table);
+    }
+
+    size_t multi_fft_ntransforms()()
+    {
+        return MSFFT.T.sizeof / T.sizeof;
+    }
+
+    alias MSFFT.RTable MultiRTable;
+    alias MSFFT.rtable_size multi_rtable_size;
+    alias MSFFT.rfft_table multi_rfft_table;
+    alias MSFFT.ITable MultiITable;
+    alias MSFFT.itable_size multi_itable_size;
+    alias MSFFT.interleave_table multi_interleave_table;
+    
+    void multi_rfft_complete()(
+        T* data, MultiTable table, MultiRTable rtable, MultiITable itable)
+    {
+        MSFFT.rfft_complete(
+            cast(MSFFT.T*) data,
+            cast(MSFFT.Table) table,
+            cast(MSFFT.RTable) rtable,
+            cast(MSFFT.ITable) itable);
+    }
+
+    size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
 }
 
 mixin template Instantiate()
 {
-    struct TableValue{};
-    alias TableValue* Table;
+    static if(is(typeof(implementation)))
+        alias impl = implementation.get;
+    else
+        enum impl = 0;
 
-    struct MultidimTableValue{};
-    alias MultidimTableValue* MultidimTable;
-
-    struct RTableValue{};
-    alias RTableValue* RTable;
-    
-    struct ITableValue{};
-    alias ITableValue* ITable;
-
-    struct TransposeBufferValue{};
-    alias TransposeBufferValue* TransposeBuffer;
-
-    template selected(string func_name, Ret...)
-    {
-        auto selected(A...)(A args)
-        {
-            static if(is(typeof(implementation)))
-                auto impl = implementation.get();
-            else
-                enum impl = 0;
-    
-            foreach(i, F; FFTs)
-                if(i == impl)
-                {
-                    mixin("alias F." ~ func_name ~ " func;");
-
-                    ParamTypeTuple!(func).type fargs;
-
-                    foreach(j, _; fargs)
-                        fargs[j] = cast(typeof(fargs[j])) args[j];
-
-                    static if(Ret.length == 0)
-                        return func(fargs);
-                    else
-                        return cast(Ret[0]) func(fargs);
-                }
-            
-            assert(false);
-        }
-    }
-
-    alias FFTs[0] FFT0;
-    alias FFT0.T T;
-
-    Table fft_table(uint log2n, void* p = null)
-    {
-        return selected!("fft_table", Table)(log2n, p);
-    }
-    
-    void* fft_table_memory(Table table)
-    { 
-        return selected!("fft_table_memory", Table)(table);
-    }
-
-    size_t fft_table_size(uint log2n)
-    {
-        return selected!"fft_table_size"(log2n);
-    }
-    
-    uint fft_table_log2n(Table table)
-    {
-        return selected!"fft_table_log2n"(table);
-    }
-
-    /*void cmul(T* dr, T* di, T* sr, T* si, size_t n)
-    {
-        selected!"cmul"(dr, di, sr, si, n);
-    }*/
-
-    void scale(T* data, size_t n, T factor)
-    {
-        selected!"scale"(data, n, factor); 
-    }
-
-    size_t alignment(size_t n)
-    {
-        return selected!"alignment"(n);
-    }
-
-    void rfft(T* re, T* im, Table t, RTable rt)
-    {
-        selected!"rfft"(re, im, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
-    }
-
-    void irfft(T* re, T* im, Table t, RTable rt)
-    {
-        selected!"irfft"(re, im, cast(FFT0.Table) t, cast(FFT0.RTable) rt);
-    }
-
-    RTable rfft_table(uint log2n, void* p = null)
-    {
-        return selected!("rfft_table", RTable)(log2n, p);
-    }
-
-    size_t rtable_size(int log2n)
-    {
-        return selected!"rtable_size"(log2n);
-    }
-
-    void deinterleave_array(T* even, T* odd, T* interleaved, size_t n)
-    {
-        selected!"deinterleave_array"(even, odd, interleaved, n);
-    }
-
-    void interleave_array(T* even, T* odd, T* interleaved, size_t n)
-    {
-        selected!"interleave_array"(even, odd, interleaved, n);
-    }
-
-    size_t itable_size(uint log2n)
-    {
-        return selected!"itable_size"(log2n);
-    }
-
-    ITable interleave_table(uint log2n, void* p)
-    {
-        return selected!("interleave_table", ITable)(log2n, p);
-    }
-
-    void interleave(T* p, uint log2n, ITable table)
-    {
-        selected!"interleave"(p, log2n, cast(FFT0.ITable) table);  
-    }
-
-    void deinterleave(T* p, uint log2n, ITable table)
-    {
-        selected!"deinterleave"(p, log2n, cast(FFT0.ITable) table);  
-    }
-    
     void set_implementation(int i)
     {
         static if(is(typeof(implementation.set)))
             implementation.set(i);
     }
-    
-    size_t transpose_buffer_size(uint[] log2n)
+
+    alias FFTs[0] FFT0;
+    alias FFT0.T T;
+
+    template Api()
     {
-        return selected!"transpose_buffer_size"(log2n);
+        import decl = pfft.instantiate_declarations;
+        mixin decl.Instantiate!();
     }
 
-    size_t multidim_fft_table_size(uint[] log2n)
+    template code(names ...)
     {
-        return selected!"multidim_fft_table_size"(log2n); 
+        static if(names.length == 0)
+            enum code = "";
+        else
+        {
+            enum name = names[0];
+            alias get_member!(Api!(), name) member;
+
+            static if(is(member E : E*))
+                enum current = 
+                    "struct "~name~"Value{}\n" ~
+                    "alias "~name~"Value* "~name~";\n";
+            else static if(
+                is(typeof(member) == function) && 
+                __traits(hasMember, FFT0, name))
+            {
+                enum current = 
+                    "auto "~name~"("~generate_arg_list!(member, true)~
+                    "){ return cast("~ ReturnType!member.stringof~
+                    ") SelectImplementation!FFTs.call!(\""~name~"\")(impl, "~
+                    generate_arg_list!(member, false)~"); }\n";
+            }
+            else 
+                enum current = "";
+
+            enum code = current ~ code!(names[1 .. $]);
+        }
     }
 
-    MultidimTable multidim_fft_table(uint[] log2n, void* ptr)
-    {
-        return selected!("multidim_fft_table", MultidimTable)(log2n, ptr);
-    }
-
-    void* multidim_fft_table_memory(MultidimTable table)
-    {
-        return selected!"multidim_fft_table_memory"(cast(FFT0.MultidimTable) table);
-    }
-        
-    void multidim_fft( T* re, T* im, MultidimTable table)
-    {
-        selected!"multidim_fft"(re, im, cast(FFT0.MultidimTable) table);
-    }
-        
-    size_t multidim_fft_table2_size(uint ndim)
-    {
-        return selected!"multidim_fft_table2_size"(ndim);
-    }
-
-    MultidimTable multidim_fft_table2(size_t ndim, void* ptr, TransposeBuffer buf)
-    {
-        return selected!("multidim_fft_table2", MultidimTable)(ndim, ptr, buf);
-    }
-
-    void multidim_fft_table_set(MultidimTable mt, size_t dim_index, Table table)
-    {
-        selected!"multidim_fft_table_set"(
-            cast(FFT0.MultidimTable) mt, dim_index, table);
-    }
+    mixin(code!(__traits(allMembers, Api!())));
 }

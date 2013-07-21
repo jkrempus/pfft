@@ -333,9 +333,9 @@ struct Columns(alias V)
             foreach(i; 0 .. n)
                 foreach(j; 0 .. m)
                     static if(inverse) 
-                        src[j * sstride + i] = dst[i * dstride + j];
+                        src[i * sstride + j] = dst[j * dstride + i];
                     else
-                        dst[i * dstride + j] = src[j * sstride + i];
+                        dst[j * dstride + i] = src[i * sstride + j];
 
             return;
         }
@@ -369,7 +369,8 @@ struct Columns(alias V)
 
     private static size_t block_size(size_t nrows, size_t ncolumns)
     {
-        return nrows.min(ncolumns).min(st!16);
+        //TODO the optimal value for this parameter depends on transform size
+        return nrows.min(ncolumns).min(512 / V.T.sizeof); 
     }
 
     static size_t buffer_size(size_t nrows, size_t ncolumns)

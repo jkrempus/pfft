@@ -103,6 +103,7 @@ template Vector()
 
     alias float8 vec;
     alias float T;
+    alias float Twiddle;
     
     enum vec_size = 8;
   
@@ -215,7 +216,7 @@ template Vector()
         _deinterleave2(a6, a7, a6, a7); 
     }
     
-    vec scalar_to_vector(T a)
+    vec twiddle_to_vector(T a)
     {
         return a;
     }

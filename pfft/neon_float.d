@@ -47,11 +47,12 @@ template Vector()
 {
     alias NeonVec vec;
     alias float T;
+    alias float Twiddle;
     
     enum vec_size = 4;
     enum log2_bitreverse_chunk_size = 2;   
  
-    vec scalar_to_vector(T a)
+    vec twiddle_to_vector(T a)
     {
         return vec(a);
     }

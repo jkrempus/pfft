@@ -4,6 +4,8 @@ T max(T)(T a, T b){ return a > b ? a : b; }
 T min(T)(T a, T b){ return a < b ? a : b; }
 
 import core.bitop;
+public import core.stdc.string;
+public import pfft.common_templates;
 
 alias bsr log2;
 
@@ -12,12 +14,15 @@ uint first_set_bit(size_t a)
     return a == 0 ? 8 * size_t.sizeof : bsf(a); 
 }
 
-template TypeTuple(A...)
+template select(bool select_first, alias first, alias second)
 {
-    alias A TypeTuple;
+    static if(select_first)
+        alias first select;
+    else
+        alias second select;
 }
 
-template st(alias a){ enum st = cast(size_t) a; }
+size_t exp2(uint a){ return st!1 << a; }
 
 struct Tuple(A...)
 {
@@ -25,11 +30,11 @@ struct Tuple(A...)
     alias a this;
 }
 
-version(GNU)
+version(none/*GNU*/)
 {
     public import gcc.attribute;
     enum noinline = attribute("noinline");
-    enum always_inline = attribute("always_inline");
+    enum always_inline = attribute("forceinline");
 }
 else
 {
@@ -43,36 +48,6 @@ void swap(T)(ref T a, ref T b)
     auto bb = b;
     b = aa;
     a = bb;
-}
-
-template ints_up_to(arg...)
-{
-    static if(arg.length == 1)
-        alias ints_up_to!(0, arg[0], 1) ints_up_to;
-    else static if(arg[0] < arg[1])
-        alias 
-            TypeTuple!(arg[0], ints_up_to!(arg[0] + arg[2], arg[1], arg[2])) 
-            ints_up_to;
-    else
-        alias TypeTuple!() ints_up_to;
-}
-
-template powers_up_to(int n, T...)
-{
-    static if(n > 1)
-    {
-        alias powers_up_to!(n / 2, n / 2, T) powers_up_to;
-    }
-    else
-        alias T powers_up_to;
-}
-
-template RepeatType(T, int n, R...)
-{
-    static if(n == 0)
-        alias R RepeatType;
-    else
-        alias RepeatType!(T, n - 1, T, R) RepeatType;
 }
 
 U[] array_cast(U, T)(T[] arr)
@@ -109,6 +84,45 @@ size_t align_size(T)(size_t size)
     return (size + mask) & ~mask; 
 }
 
+@property front(T)(T[] a){ return a[0]; }
+@property empty(T)(T[] a){ return a.length == 0; }
+void popFront(T)(ref T[] a){ a = a[1 .. $]; }
+
+auto map(alias mapper, R)(R r)
+{
+    static struct Result
+    {
+        R r;
+        @property empty(){ return r.empty(); } 
+        @property front(){ return mapper(r.front()); }
+        void popFront(){ r.popFront(); } 
+    }
+
+    return Result(r);
+}
+
+T reduce(alias reducer, T, R)(T seed, R a)
+{
+    foreach(e; a)
+        seed = reducer(seed, e);
+
+    return seed;
+}
+
+auto sum(R)(R r)
+{
+    typeof(r.front) seed = 0;
+    return reduce!((a, e) => a + e)(seed, r); 
+}
+
+R dropExactly(R)(R r, size_t n)
+{
+    foreach(i; 0 .. n)
+        r.popFront();
+
+    return r;
+}
+
 void insertion_sort(alias less, T)(T[] arr)
 {
     foreach(i; 1 .. arr.length)
@@ -122,7 +136,35 @@ void insertion_sort(alias less, T)(T[] arr)
     }
 }
 
-auto power2_or_zero(T)(T a) { return a && (a & (a - 1)) == 0; }
+template SelectImplementation(Implementations...)
+{
+    @always_inline: 
+
+    template call(string func_name)
+    {
+        auto call(A...)(uint selection, A args)
+        {
+            mixin(
+                "alias ReturnType!(Implementations[0]." ~
+                func_name ~ ") Ret;");
+
+            foreach(i, I; Implementations)
+                if(i == selection)
+                {
+                    mixin("alias I." ~ func_name ~ " func;");
+
+                    ParamTypeTuple!(func) fargs;
+
+                    foreach(j, _; fargs)
+                        fargs[j] = cast(typeof(fargs[j])) args[j];
+
+                    return cast(Ret) func(fargs);
+                }
+
+            assert(false);
+        }
+    }
+}
 
 struct Allocate(int max_num_ptr)
 {

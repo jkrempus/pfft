@@ -6,7 +6,7 @@ import std.range, std.stdio, std.conv, std.complex, std.getopt,
     std.random, std.numeric, std.math, std.algorithm,
     std.exception, std.typetuple, std.traits, std.string : toUpper, toStringz;
 
-import core.bitop;
+import core.bitop, core.stdc.string;
 
 import core.time;
 
@@ -30,7 +30,7 @@ auto len(A)(A a){ return a.length; }
 
 template st(alias a){ enum st = cast(size_t) a; }
 
-enum Transfer { fft, rfft /*, fst*/ }
+enum Transform { fft, rfft /*, fst*/ }
 
 version(JustDirect)
     enum justDirect = true;
@@ -51,18 +51,21 @@ version(BenchClib)
     enum benchClib = true;
 else
     enum benchClib = false;
-    
-auto gc_aligned_array(A)(size_t n)
+
+auto gc_aligned_array(A = void)(size_t n)
 {
+    A[] r;
     version(NoGC)
     {
-        return (cast(A*)PfftC!().allocate(A.sizeof*n / T.sizeof))[0..n];
+        r = (cast(A*)PfftC!().allocate(A.sizeof*n / T.sizeof))[0..n];
     }
     else
     {
         import core.memory;
-        return (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
+        r = (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
     }
+    //writefln("Allocated memory between %s and %s", r.ptr, r.ptr + n);
+    return r;
 }
 
 bool isIn(A, B...)(A a, B b)
@@ -72,6 +75,14 @@ bool isIn(A, B...)(A a, B b)
             return true;
     
     return false;
+}
+
+template ntransforms(Api)
+{
+    static if(is(typeof({ Api.multi; })))
+        alias Api.multi ntransforms;
+    else
+        enum ntransforms = 1;
 }
 
 mixin template ElementAccess()
@@ -99,7 +110,7 @@ mixin template splitElementAccess()
 
     void fill(Dg fRe, Dg fIm) 
     {
-        foreach(i; 0 .. st!1 << log2n)
+        foreach(i; 0 .. ntransforms!(typeof(this)) << log2n)
         {
             _re[i] = fRe(i);
             _im[i] = fIm(i);
@@ -114,32 +125,88 @@ mixin template splitElementAccess()
 
 mixin template realElementAccessImpl()
 {
+    size_t _n;
+    size_t[] _log2n_cumulative;
+
+    void initRealElementAccessImpl(uint[] log2n)
+    {
+        _log2n_cumulative = new size_t[log2n.length + 1];
+        _log2n_cumulative[$ - 1] = 0;
+        
+        foreach(i; 0 .. log2n.length)
+            _log2n_cumulative[$ - 2 - i] = 
+                _log2n_cumulative[$ - 1 - i] + log2n.retro[i];
+
+        _n = st!1 << _log2n_cumulative[0];
+    }
+
+    size_t _dim_size(size_t dim)
+    {
+        return st!1 << (_log2n_cumulative[dim] - _log2n_cumulative[dim + 1]);
+    }
+
+    size_t _index(size_t i, size_t dim)
+    {
+        return (i & ((st!1 << _log2n_cumulative[dim]) - 1)) >>
+            _log2n_cumulative[dim + 1];
+    }
+
+    private bool _mirrored(size_t i)
+    {
+        return _index(i, half_dim) > _dim_size(half_dim) / 2;
+    }
+
+    private auto _mirror(size_t i, size_t dim)
+    {
+        return (_dim_size(dim) - i) & (_dim_size(dim) - 1);
+    }
+
+    private bool _is_real(size_t i)
+    {
+        foreach(dim; 0 .. _log2n_cumulative.length - 1)
+        {
+            auto idx = _index(i, dim);
+            if(_mirror(idx, dim) != idx)
+                return false;
+        }
+
+        return true;
+    }
+
+    private auto _icomplex(size_t i)
+    {
+        size_t r = 0;
+    
+        foreach(dim; 0 .. _log2n_cumulative.length - 1)
+        {
+            r *= (dim == half_dim) ? _dim_size(dim) / 2 + 1  : _dim_size(dim);
+            auto idx = _index(i, dim);
+            r += _mirrored(i) ? _mirror(idx, dim) : idx;
+        }
+        return r;
+    }
+
     auto timeRe(size_t i){ return data[i]; }
     auto timeIm(size_t i){ return to!T(0); }
-
-    private @property _n(){ return st!1 << log2n; } 
-
-    auto freqRe(size_t i)
-    {
-        return re(min(i, _n - i));
-    }
-    
+    auto freqRe(size_t i) { return re(_icomplex(i)); }
     auto freqIm(size_t i)
     {
-        return i < _n / 2 ? im(i) :  -im(_n - i);
+        return im(_icomplex(i)) * (_mirrored(i) ? -1 : 1);
     }
 
+    alias T delegate(size_t) Dg;
     static if(isInverse)
     {
-        alias T delegate(size_t) Dg;
-
         void fill(Dg fRe, Dg fIm) 
         {
-            foreach(i; 0 .. _n / 2 + 1)
+            foreach(i; 0 .. _n)
             {
-                re(i) = fRe(i);
-                im(i) = (i == 0 || i == _n / 2) ? 0.0 : fIm(i);
-            }             
+                if(!_mirrored(i))
+                {
+                    re(_icomplex(i)) = fRe(i);                   
+                    im(_icomplex(i)) = fIm(i);
+                }
+            }
         }
 
         alias timeRe outRe;
@@ -149,12 +216,10 @@ mixin template realElementAccessImpl()
     }
     else
     {
-        alias T delegate(size_t) Dg;
-
         void fill(Dg fRe, Dg fIm) 
         {
             foreach(i; 0 .. _n)
-                data[i] = fRe(i);     
+                data[i] = fRe(i);
         }
         
         alias timeRe inRe;
@@ -166,19 +231,9 @@ mixin template realElementAccessImpl()
 
 mixin template realSplitElementAccess()
 {
-    private T _first_im = 0;
-    private T _last_im = 0; 
+    enum half_dim= 0;
     ref re(size_t i){ return data[i]; }
-    
-    ref im(size_t i)
-    {
-        auto n = (st!1 << log2n);
- 
-        return 
-            i == 0 ? _first_im : 
-            i == n / 2 ? _last_im : data[n / 2 + i];
-    }
-
+    ref im(size_t i){ return data[$ / 2 + i]; }
     mixin realElementAccessImpl!();
 }
 
@@ -234,8 +289,8 @@ static if(!dynamicC)
         import direct = pfft.impl_float;
 }
 
-struct DirectApi(Transfer transfer, bool isInverse) 
-if(transfer == Transfer.fft)
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.fft && !isMulti)
 {
     import core.memory; 
     alias direct d; 
@@ -269,47 +324,154 @@ if(transfer == Transfer.fft)
     mixin splitElementAccess!();
 }
 
-struct DirectApi(Transfer transfer, bool isInverse)
-if(transfer == Transfer.rfft)
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.fft && isMulti)
 {
     import core.memory; 
     alias direct d; 
-   
-    T[] data;
-    direct.ITable itable;
-    direct.RTable rtable;
-    direct.Table table;
+
+    T[] _re;
+    T[] _im;
+    d.MultiTable table;
     int log2n;
-    
+
+    static @property multi(){ return d.multi_fft_ntransforms(); }
+
     this(uint[] log2ns)
     {
         enforce(log2ns.length == 1);
-        auto log2n = log2ns.front;
-        auto n = st!1 << log2n;
-        data = gc_aligned_array!T(n);
-        data[] = 0;
+        log2n = log2ns.front;
+        _re = gc_aligned_array!T(multi << log2n);
+        _im = gc_aligned_array!T(multi << log2n);
+        _re[] = 0;
+        _im[] = 0;
+        auto size = d.multi_fft_table_size(log2n);
+        table = d.multi_fft_table(log2n, GC.malloc(size));
+    }
     
-        this.log2n = log2n;
-        itable = d.interleave_table(log2n, GC.malloc(d.itable_size(log2n))); 
-        rtable = d.rfft_table(log2n, GC.malloc(d.fft_table_size(log2n)));
-        table = d.fft_table(log2n - 1, GC.malloc(d.fft_table_size(log2n - 1)));
+    void compute()
+    {
+        static if(isInverse)
+            d.multi_fft(_im.ptr, _re.ptr, table);
+        else 
+            d.multi_fft(_re.ptr, _im.ptr, table);
+    }
+
+    mixin splitElementAccess!();
+}
+
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.rfft && !isMulti)
+{
+    import core.memory; 
+    alias direct d; 
+
+    T[] data;
+    d.RealMultidimTable table;
+
+    this(uint[] log2ns)
+    {
+        initRealElementAccessImpl(log2ns); 
+        log2ns = log2ns.dup;
+        auto log2m = 0.reduce!sum(log2ns[1 .. $]);
+        auto log2n = log2m + log2ns.front;
+        log2ns.front -= 1;
+        data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
+        data[] = 0;
+
+        auto size = d.multidim_rfft_table_size(log2ns);
+        table = d.multidim_rfft_table(log2ns, gc_aligned_array(size).ptr);
+    }
+
+    void compute()
+    {
+        static if(isInverse)
+            d.multidim_irfft(data.ptr, table);
+        else
+            d.multidim_rfft(data.ptr, table);
+    }
+
+    mixin realSplitElementAccess!();
+}
+
+struct DirectApi(Transform transform, bool isInverse, bool isMulti)
+if(transform == Transform.rfft && isMulti)
+{
+    import core.memory; 
+    alias direct d; 
+
+    T[] data;
+    d.MultiTable table;
+    d.MultiRTable rtable;
+    d.MultiITable itable;
+    uint log2multi;
+    uint log2n;
+
+    static @property multi(){ return d.multi_rfft_ntransforms(); }
+
+    this(uint[] log2ns)
+    {
+        enforce(log2ns.length == 1);
+        log2multi = bsr(multi);
+        log2n = log2ns.front;
+        data = gc_aligned_array!T(multi * ((st!1 << log2n) + 2));
+        data[] = 0;
+        auto size = d.multi_fft_table_size(log2n - 1);
+        table = d.multi_fft_table(log2n - 1, GC.malloc(size));
+        auto rsize = d.multi_rtable_size(log2n);
+        rtable = d.multi_rfft_table(log2n, GC.malloc(rsize));
+        auto isize = d.multi_itable_size(log2n);
+        itable = d.multi_interleave_table(log2n, GC.malloc(isize));
     }
     
     void compute()
     {
         static if(isInverse)
         {
-            d.irfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
-            d.interleave(data.ptr, log2n, itable);    
+//            d.multi_fft(_im.ptr, _re.ptr, table);
         }
-        else
+        else 
         {
-            d.deinterleave(data.ptr, log2n, itable);    
-            d.rfft(data.ptr, data[$ / 2 .. $].ptr, table, rtable); 
+            d.multi_rfft_complete(data.ptr, table, rtable, itable);
         }
     }
-    
-    mixin realSplitElementAccess!();
+
+    alias T delegate(size_t) Dg;
+    void fill(Dg fRe, Dg fIm) 
+    {
+        foreach(i; 0 .. multi << log2n)
+            data[i] = fRe(i);
+    }
+
+    T inRe(size_t i){ return data[i]; }
+    T inIm(size_t i){ return 0; }
+    T outRe(size_t i)
+    {
+        size_t n = st!1 << log2n;
+        size_t j = i >> log2multi;
+        size_t k = i & ((1 << log2multi) - 1);
+
+        if(j > n / 2)
+            j = n - j;
+
+        return data[(j << log2multi) | k]; 
+    }
+
+    T outIm(size_t i)
+    {
+        size_t n = st!1 << log2n;
+        size_t j = i >> log2multi;
+        size_t k = i & ((1 << log2multi) - 1);
+
+        T sign = 1;
+        if(j > n / 2)
+        {
+            j = n - j;
+            sign = -1;
+        }
+
+        return sign * data[((n / 2 + 1 + j) << log2multi) | k]; 
+    }
 }
 
 template PfftC()
@@ -343,7 +505,7 @@ template PfftC()
         struct RTable {}
 
         T* function(size_t) allocate;
-        Table* function(size_t, void*) table;
+        Table* function(size_t*, size_t, void*) table;
         RTable* function(size_t, void*) rtable;
         void function(Table*) table_free;
         void function(RTable*) rtable_free;
@@ -404,8 +566,8 @@ template PfftC()
     }
 }
 
-struct CApi(Transfer transfer, bool isInverse) 
-if(transfer == Transfer.fft)
+struct CApi(Transform transform, bool isInverse) 
+if(transform == Transform.fft)
 {
     alias PfftC!() Impl;
 
@@ -416,13 +578,19 @@ if(transfer == Transfer.fft)
     
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        _re = Impl.allocate(1 << log2n);
-        _im = Impl.allocate(1 << log2n);
-        _re[0 .. 1 << log2n] = 0;
-        _im[0 .. 1 << log2n] = 0;
-        table = Impl.table(cast(size_t) 1 << log2n, null);
+        auto ns = new size_t[](log2ns.length);
+        log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        auto n = st!1 << log2n;
+        table = Impl.table(ns.ptr, ns.length, null);
+        _re = Impl.allocate(n);
+        _im = Impl.allocate(n);
+        _re[0 .. n] = 0;
+        _im[0 .. n] = 0;
     }
 
     ~this()
@@ -443,43 +611,51 @@ if(transfer == Transfer.fft)
     mixin splitElementAccess!();
 }
 
-struct CApi(Transfer transfer, bool isInverse) 
-if(transfer == Transfer.rfft)
+struct CApi(Transform transform, bool isInverse) 
+if(transform == Transform.rfft)
 {
     alias PfftC!() Impl;
    
     int log2n;
     Impl.RTable* table;
-    T* data;
+    T[] data;
     
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        data = Impl.allocate(1 << log2n);
-        data[0 .. 1 << log2n] = 0;
-        table = Impl.rtable(1 << log2n, null); 
+        initRealElementAccessImpl(log2ns);
+        auto ns = new size_t[](log2ns.length);
+        log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        auto n = st!1 << log2n;
+        table = Impl.rtable(ns.ptr, ns.length, null);
+        auto len = (st!1 << log2n) + (st!2 << (log2n - log2ns[0]));
+        data = Impl.allocate(len)[0 .. len];
+        data[] = 0;
     }
     
     ~this()
     {
         Impl.rtable_free(table);
-        Impl.free(data);
+        Impl.free(data.ptr);
     }
     
     void compute()
     {
         static if(isInverse)
-            Impl.irfft(data, table);
+            Impl.irfft(data.ptr, table);
         else 
-            Impl.rfft(data, table);
+            Impl.rfft(data.ptr, table);
     }
     
     mixin realSplitElementAccess!();
 }
 
 
-struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
+struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.fft)
 {
     import pfft.pfft;
    
@@ -517,22 +693,28 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.fft)
     mixin splitElementAccess!();
 }
 
-struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
+struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rfft)
 {
     import pfft.pfft;
    
     alias Rfft!(T) F;
-    int log2n;
     F f;
     F.Array data;
     
     this(uint[] log2ns)
     {
-        enforce(log2ns.length == 1);
-        log2n = log2ns.front;
-        size_t n = 1U << log2n; 
-        f = new F(n);
-        data = F.Array(n);
+        initRealElementAccessImpl(log2ns);
+        auto ns = new size_t[](log2ns.length);
+        size_t log2n = 0;
+        foreach(i; 0 .. log2ns.length)
+        {
+            ns[i] = st!1 << log2ns[i];
+            log2n += log2ns[i]; 
+        }
+        auto n = st!1 << log2n;
+        f = new F(ns);
+        auto len = (st!1 << log2n) + (st!2 << (log2n - log2ns[0]));
+        data = F.Array(len);
         data[] = 0;
     }
     
@@ -547,14 +729,15 @@ struct PfftApi(Transfer transfer, bool isInverse) if(transfer == Transfer.rfft)
     mixin realSplitElementAccess!();
 }
 
-struct SimpleFft(T, Transfer transfer, bool isInverse)
-if(isIn(transfer, Transfer.rfft, Transfer.fft))
-{    
+struct SimpleFft(T, Transform transform, bool isInverse)
+if(isIn(transform, Transform.rfft, Transform.fft))
+{
     Complex!(T)[] a;
     Complex!(T)[] w;
     int log2n;
     uint[] log2ns;
-    
+    size_t multi;
+
     private static void bit_reverse(A)(int log2n, A a)
     {
         import core.bitop;
@@ -623,28 +806,26 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
                 swap(e.re, e.im);
     }
 
-    private static void multidim()(
-        Complex!(T)[] a,
-        Complex!(T)[] w,
-        uint[] log2ns)
+    private static void multidim(A, W)(A a, W w, uint[] log2ns)
     {
         if(log2ns.length == 1)
             return fft(a, w);
 
         size_t m = st!1 << log2ns[1 .. $].reduce!sum;
-        foreach(i; 0 .. m)
-            fft(a[i .. $].stride(m), w);
-
         foreach(i; 0 .. st!1 << log2ns.front)
             multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
+
+        foreach(i; 0 .. m)
+            fft(a[i .. $].stride(m), w);
     }
 
-    this(uint[] log2ns)
+    this(uint[] log2ns, size_t multi = 1)
     {
+        this.multi = multi;
         this.log2ns = log2ns;
         log2n = log2ns.reduce!sum;
         
-        a = gc_aligned_array!(Complex!T)(st!1 << log2n);
+        a = gc_aligned_array!(Complex!T)(multi << log2n);
         a[] = Complex!T(0, 0);
 
         w = table(log2ns.reduce!max);
@@ -652,7 +833,11 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
    
     void compute()
     {
-        multidim(a, w, log2ns);
+        if (multi == 1)
+            multidim(a, w, log2ns);
+        else 
+            foreach(i; 0 .. multi)
+                multidim(a[i .. $].stride(multi), w, log2ns);
     }
     
     alias T delegate(size_t) Dg;
@@ -672,15 +857,15 @@ if(isIn(transfer, Transfer.rfft, Transfer.fft))
     auto outIm(size_t i){ return a[i].im; }
 }
 
-struct SimpleFft(T, Transfer transfer, bool isInverse)
+struct SimpleFft(T, Transform transform, bool isInverse)
 if(false)
 {
-    mixin GenericFst!(SimpleFft!(T, Transfer.fft, false));
+    mixin GenericFst!(SimpleFft!(T, Transform.fft, false));
 }
 
 auto toComplex(T a){ return complex(a, cast(T) 0); }
 
-struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
+struct StdApi(bool usePhobos = false, Transform transform, bool isInverse)
 {
     static if(usePhobos)
         import std.numeric;
@@ -689,9 +874,9 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
        
     enum{ normalizedInverse };
 
-    static if(transfer == Transfer.rfft)
+    static if(transform == Transform.rfft)
         T[] a;
-    else static if(transfer == Transfer.fft)
+    else static if(transform == Transform.fft)
         Complex!(T)[] a;
     else
         static assert(0);
@@ -707,9 +892,9 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
         a = gc_aligned_array!(typeof(a[0]))(st!1 << log2n);
         r = gc_aligned_array!(Complex!T)(st!1 << log2n);
 
-        static if(transfer == Transfer.rfft)
+        static if(transform == Transform.rfft)
             a[] = cast(T) 0;
-        else static if(transfer == Transfer.fft)
+        else static if(transform == Transform.fft)
             (cast(T[])a)[] = cast(T) 0; // work around a dmd bug
         else
             static assert(0);
@@ -721,7 +906,7 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
     { 
         static if(isInverse)
         {
-            static if(usePhobos && transfer == Transfer.rfft)
+            static if(usePhobos && transform == Transform.rfft)
             {
                 fft.inverseFft(map!toComplex(a), r);
             }
@@ -732,7 +917,7 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
             fft.fft(a, r); 
     }
     
-    static if(transfer == Transfer.rfft)
+    static if(transform == Transform.rfft)
     {
         alias T delegate(size_t) Dg;
 
@@ -747,7 +932,7 @@ struct StdApi(bool usePhobos = false, Transfer transfer, bool isInverse)
         auto outRe(size_t i){ return r[i].re; }
         auto outIm(size_t i){ return r[i].im; }
     }
-    else static if(transfer == Transfer.fft)
+    else static if(transform == Transform.fft)
         mixin ElementAccess!();
     else
         static assert(0);
@@ -762,15 +947,15 @@ static if(benchFftw)
         extern(C) void* fftwf_malloc(size_t);
         extern(C) void* fftwf_plan_dft_1d(int, Complex!(float)*, Complex!(float)*, int, uint);
         extern(C) void* fftwf_plan_dft(int, int*, Complex!(float)*, Complex!(float)*, int, uint);
-        extern(C) void* fftwf_plan_dft_r2c_1d(int, float*, Complex!(float)*, uint);
-        extern(C) void* fftwf_plan_dft_c2r_1d(int, Complex!(float)*, float*, uint);
+        extern(C) void* fftwf_plan_dft_r2c(int, int*, float*, Complex!(float)*, uint);
+        extern(C) void* fftwf_plan_dft_c2r(int, int*, Complex!(float)*, float*, uint);
         extern(C) void fftwf_execute(void *);
         
         alias fftwf_malloc fftw_malloc;
         alias fftwf_plan_dft_1d fftw_plan_dft_1d;
         alias fftwf_plan_dft fftw_plan_dft;
-        alias fftwf_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
-        alias fftwf_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
+        alias fftwf_plan_dft_r2c fftw_plan_dft_r2c;
+        alias fftwf_plan_dft_c2r fftw_plan_dft_c2r;
         alias fftwf_execute fftw_execute;
     }
     else static if(is(T == double))
@@ -780,8 +965,8 @@ static if(benchFftw)
         extern(C) void* fftw_malloc(size_t);
         extern(C) void* fftw_plan_dft_1d(int, Complex!(double)*, Complex!(double)*, int, uint);
         extern(C) void* fftw_plan_dft(int, int*, Complex!(double)*, Complex!(double)*, int, uint);
-        extern(C) void* fftw_plan_dft_r2c_1d(int, double*, Complex!(double)*, uint);
-        extern(C) void* fftw_plan_dft_c2r_1d(int, Complex!(double)*, double*, uint);
+        extern(C) void* fftw_plan_dft_r2c(int, int*, double*, Complex!(double)*, uint);
+        extern(C) void* fftw_plan_dft_c2r(int, int*, Complex!(double)*, double*, uint);
         extern(C) void fftw_execute(void *);
     }
     else
@@ -791,15 +976,15 @@ static if(benchFftw)
         extern(C) void* fftwl_malloc(size_t);
         extern(C) void* fftwl_plan_dft_1d(int, Complex!(real)*, Complex!(real)*, int, uint);
         extern(C) void* fftwl_plan_dft(int, int*, Complex!(real)*, Complex!(real)*, int, uint);
-        extern(C) void* fftwl_plan_dft_r2c_1d(int, real*, Complex!(real)*, uint);
-        extern(C) void* fftwl_plan_dft_c2r_1d(int, Complex!(real)*, real*, uint);
+        extern(C) void* fftwl_plan_dft_r2c(int, int*, real*, Complex!(real)*, uint);
+        extern(C) void* fftwl_plan_dft_c2r(int, int*, Complex!(real)*, real*, uint);
         extern(C) void fftwl_execute(void *);
         
         alias fftwl_malloc fftw_malloc;
         alias fftwl_plan_dft_1d fftw_plan_dft_1d;
         alias fftwl_plan_dft fftw_plan_dft;
-        alias fftwl_plan_dft_r2c_1d fftw_plan_dft_r2c_1d;
-        alias fftwl_plan_dft_c2r_1d fftw_plan_dft_c2r_1d;
+        alias fftwl_plan_dft_r2c fftw_plan_dft_r2c;
+        alias fftwl_plan_dft_c2r fftw_plan_dft_c2r;
         alias fftwl_execute fftw_execute;
     }
 
@@ -816,8 +1001,8 @@ static if(benchFftw)
     enum FFTW_MEASURE = 0U;
     enum FFTW_PATIENT = 1U << 5;
 
-    struct FFTW(Transfer transfer, bool isInverse, int flags) 
-        if(transfer == Transfer.fft)
+    struct FFTW(Transform transform, bool isInverse, int flags) 
+        if(transform == Transform.fft)
     {        
         Complex!(T)[] a;
         Complex!(T)[] r;
@@ -831,7 +1016,10 @@ static if(benchFftw)
             a[] = Complex!T(0, 0);
             r = fftw_array!(Complex!T)(n);
             auto dir = isInverse ? FFTW_BACKWARD : FFTW_FORWARD;
-            auto ns = log2ns.map!(a => 1 << a).array;
+            auto ns = new int[log2ns.length]; 
+            foreach(i; 0 .. log2ns.length)
+                ns[i] = 1 << log2ns[i];
+
             p = fftw_plan_dft(ns.length.to!int, ns.ptr, a.ptr, r.ptr, dir, flags);
         }
         
@@ -840,50 +1028,60 @@ static if(benchFftw)
         mixin ElementAccess!();
     }
 
-    struct FFTW(Transfer transfer, bool isInverse, int flags)
-        if(transfer == Transfer.rfft)
+    struct FFTW(Transform transform, bool isInverse, int flags)
+        if(transform == Transform.rfft)
     {        
         T[] a;
         Complex!(T)[] r;
         void* p;
         int log2n;
-        
+        int ndim;
+
         this(uint[] log2ns)
         {
-            enforce(log2ns.length == 1);
-            log2n = log2ns.front;
+            initRealElementAccessImpl(log2ns); 
+            log2n = log2ns.reduce!"a+b";
             auto n = st!1 << log2n;
             a = fftw_array!T(n);
             a[] = 0;
-            r = fftw_array!(Complex!T)(n / 2 + 1);
+            r = fftw_array!(Complex!T)(
+                n / 2 + (st!1 << (log2n - log2ns.back)));
+           
+            ndim = log2ns.length.to!int;
             
+            auto ns = new int[ndim];
+            foreach(i; 0 .. ndim)
+                ns[i] = 1 << log2ns[i];
+
             static if(isInverse)
-                p = fftw_plan_dft_c2r_1d(to!int(n), r.ptr, a.ptr, flags);
+                p = fftw_plan_dft_c2r(ndim, ns.ptr, r.ptr, a.ptr, flags);
             else
-                p = fftw_plan_dft_r2c_1d(to!int(n), a.ptr, r.ptr, flags);
+                p = fftw_plan_dft_r2c(ndim, ns.ptr, a.ptr, r.ptr, flags);
         }
-        
+
         void compute(){ fftw_execute(p); }
-        
+
         ref re(size_t i){ return r[i].re; }
         ref im(size_t i){ return r[i].im; }
-        
+
         alias a data;
+        @property half_dim(){ return ndim - 1; }
         mixin realElementAccessImpl!();
     }
 }
 
 
-void speed(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
-{    
+void speed(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
+{
     auto f = F(log2n);
    
     auto zero = delegate(size_t i){ return to!(typeof(F.init.inRe(0)))(0); };
  
     f.fill(zero, zero);
 
-    ulong flopsPerIter = 5UL * log2n.reduce!sum * (1UL << log2n.reduce!sum) / 
-        (transfer == Transfer.fft ? 1 : 2); 
+    ulong flopsPerIter = 
+        ntransforms!F * 5UL * log2n.reduce!sum * (1UL << log2n.reduce!sum) /
+        (transform == Transform.fft ? 1 : 2); 
     ulong niter = flops / flopsPerIter;
     niter = niter ? niter : 1;
         
@@ -896,7 +1094,7 @@ void speed(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     writefln("%f", to!double(niter * flopsPerIter) / tick.nsecs());
 }
 
-//void initialization(F, Transfer transfer, bool isInverse)(int[] log2n, long flops)
+//void initialization(F, Transform transform, bool isInverse)(int[] log2n, long flops)
 //{    
 //    auto niter = 100_000_000 / (1 << log2n);
 //    niter = niter ? niter : 1;
@@ -913,31 +1111,44 @@ void speed(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
 //    writefln("%.3e", tick.nsecs() * 1e-9 / niter);
 //}
 
-void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
+void precision(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
 {
-    alias SimpleFft!(real, transfer, isInverse) S;
+    alias SimpleFft!(real, transform, isInverse) S;
     alias typeof(S.init.inRe(0)) ST;
     alias typeof(F.init.inRe(0)) FT;
 
     auto n = st!1 << log2n.reduce!sum;
     auto tested = F(log2n);
-    auto simple = S(log2n);
+    auto simple = S(log2n, ntransforms!F);
     
     rndGen.seed(1);
-    auto rnd = delegate(size_t i){ return to!FT(uniform(0.0, 1.0)); };
-    tested.fill(rnd, rnd);
-    auto re = (size_t a){ return cast(ST) tested.inRe(a); };
-    auto im = (size_t a){ return cast(ST) tested.inIm(a); };
-    simple.fill(re, im);
     
+    static if(isInverse &&  transform == Transform.rfft)
+    {
+        auto tmp = SimpleFft!(real, Transform.rfft, false)(log2n, ntransforms!F);
+        tmp.fill(i => to!ST(uniform(0.0, 1.0)), a => to!ST(0));
+        tmp.compute();
+        tested.fill(a => tmp.inRe(a).to!FT, a => tmp.inIm(a).to!FT);
+    }
+    else
+    {
+        auto rnd = delegate (size_t i) => to!FT(uniform(0.0, 1.0));
+        tested.fill(rnd, rnd);
+    }
+
+    simple.fill(a => tested.inRe(a).to!ST, a => tested.inIm(a).to!ST);
+   
     simple.compute();
     tested.compute();
-    
-    
+
+//    writefln("simple\n%(%s\t%)\n", simple.a);
+//    static if(is(typeof(tested.data)))
+//        writefln("tested\n%(%s\t%)\n", tested.data);
+
     real sumSqDiff = 0.0;
     real sumSqAvg = 0.0;
     
-    foreach(i; 0 .. n)
+    foreach(i; 0 .. n * ntransforms!F)
     {
         auto tre = tested.outRe(i);
         auto tim = tested.outIm(i);
@@ -951,7 +1162,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
             sim /= n;
         }        
 
-        //writefln("%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", sre, tre, sim, tim, 0.0, sim - tim);
+//        writefln("%s\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e\t%.2e", i, sre, tre, sim, tim, 0.0, sim - tim);
         
         sumSqDiff += (sre - tre) ^^ 2 + (sim - tim) ^^ 2; 
         sumSqAvg += sre ^^ 2 + sim ^^ 2; 
@@ -959,7 +1170,7 @@ void precision(F, Transfer transfer, bool isInverse)(uint[] log2n, long flops)
     writeln(cast(double) std.math.sqrt(sumSqDiff / sumSqAvg));
 }
 
-void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
+void runTest(bool testSpeed, Transform transform, bool isInverse)(
     uint[] log2n, string impl, long mflops)
 {
     static if(testSpeed)
@@ -971,30 +1182,38 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
  
     static if(!justDirect && (benchClib || dynamicC))
         if(impl == "c")
-            return f!(CApi!(transfer, isInverse), transfer, isInverse)(
+            return f!(CApi!(transform, isInverse), transform, isInverse)(
                 log2n, flops);
 
-    static if(!dynamicC) 
+    static if(!dynamicC)
+    {
         if(impl == "direct")
-            return f!(DirectApi!(transfer, isInverse), transfer, isInverse)(
+            return f!(DirectApi!(transform, isInverse, false), transform, isInverse)(
                 log2n, flops);
+
+        if(impl == "direct-multi")
+            return f!(
+                DirectApi!(transform, isInverse, true),
+                Transform.fft,
+                isInverse)(log2n, flops);
+    }
     
     static if(!justDirect && !dynamicC)
     { 
         if(impl == "simple")
-            return f!(SimpleFft!(T, transfer, isInverse), transfer, isInverse)(
+            return f!(SimpleFft!(T, transform, isInverse), transform, isInverse)(
                     log2n, flops);
         
         if(impl == "std")
-            return f!(StdApi!(false, transfer, isInverse), transfer, isInverse)(
+            return f!(StdApi!(false, transform, isInverse), transform, isInverse)(
                     log2n, flops);
         
         if(impl == "phobos")
-            return f!(StdApi!(true, transfer, isInverse), transfer, isInverse)(
+            return f!(StdApi!(true, transform, isInverse), transform, isInverse)(
                     log2n, flops);
         
         if(impl == "pfft")
-            return f!(PfftApi!(transfer, isInverse), transfer, isInverse)(
+            return f!(PfftApi!(transform, isInverse), transform, isInverse)(
                     log2n, flops);
         
     }
@@ -1003,12 +1222,12 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
     {
         if(impl == "fftw")
             return f!(
-                FFTW!(transfer, isInverse, FFTW_PATIENT), transfer, isInverse)(
+                FFTW!(transform, isInverse, FFTW_PATIENT), transform, isInverse)(
                 log2n, flops);
 
         if(impl == "fftw-measure")
             return f!(
-                FFTW!(transfer, isInverse, FFTW_MEASURE), transfer, isInverse)(
+                FFTW!(transform, isInverse, FFTW_MEASURE), transform, isInverse)(
                 log2n, flops);
     }
     
@@ -1017,7 +1236,6 @@ void runTest(bool testSpeed, Transfer transfer, bool isInverse)(
 }
 
 template Group(A...){ alias A Members; }
-
 auto callInstance(alias f, int n, alias FParams = Group!(), Params...)(
     Params params)
 {
@@ -1137,12 +1355,12 @@ void main(string[] args)
         enforce(args.length >= 3, 
             "There must be at least two non option arguments.");
 
-        auto transfer = 
-            r ? Transfer.rfft : 
-            /*st ? Transfer.fst :*/ Transfer.fft;
+        auto transform = 
+            r ? Transform.rfft : 
+            /*st ? Transform.fst :*/ Transform.fft;
 
         auto log2n = args[2 .. $].map!(to!uint).array;
-        callInstance!(runTest, 3)(s, transfer, i, log2n, args[1], mflops);
+        callInstance!(runTest, 3)(s, transform, i, log2n, args[1], mflops);
     }
     catch(Exception e)
     {

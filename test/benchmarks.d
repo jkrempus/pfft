@@ -171,10 +171,13 @@ void main(string[] args)
 
     auto versions = ["sse-avx", "sse"];
 
-    makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
-    makePlot("pfft-fftw-double.png", "-s", "double", ["pfft", "fftw"], versions);
-    makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
-    makePlot("pfft-fftw-real-double.png", "-s -r", "double", ["pfft", "fftw"], versions);
+
+    makePlot("pfft-float-sse-scalar.png", "-s", "float", ["pfft"], ["sse", "scalar"], ["dmd"]);
+
+//    makePlot("pfft-fftw-float.png", "-s", "float", ["pfft", "fftw"], versions);
+//    makePlot("pfft-fftw-double.png", "-s", "double", ["pfft", "fftw"], versions);
+//    makePlot("pfft-fftw-real-float.png", "-s -r", "float", ["pfft", "fftw"], versions);
+//    makePlot("pfft-fftw-real-double.png", "-s -r", "double", ["pfft", "fftw"], versions);
     
     /*makePlot("pfft-std-phobos-float-scalar.png", "-s", "float", ["pfft", "std", "phobos"], ["scalar"]);
     makePlot("pfft-std-phobos-float-sse.png", "-s", "float", ["pfft", "std", "phobos"], ["sse"]);
