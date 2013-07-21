@@ -30,7 +30,7 @@ struct Tuple(A...)
     alias a this;
 }
 
-version(GNU)
+version(none/*GNU*/)
 {
     public import gcc.attribute;
     enum noinline = attribute("noinline");

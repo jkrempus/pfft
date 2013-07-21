@@ -1030,49 +1030,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     @always_inline size_t log2_multi()()
     {
-        return log2(MSFFT.T.sizeof / MSFFT.Twiddle.sizeof);
-    }
-
-    static if(!isScalar)
-    {
-        alias MSFFT.Table MultiTable;
-        alias MSFFT.fft_table_size multi_fft_table_size;
-        alias MSFFT.fft_table multi_fft_table;
-        
-        void multi_fft()(T* re, T* im, MultiTable table)
-        {
-            MSFFT.fft(
-                cast(MSFFT.T*) re,
-                cast(MSFFT.T*) im,
-                cast(MSFFT.Table) table);
-        }
-
-        size_t multi_fft_ntransforms()()
-        {
-            return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
-        }
-
-        alias MSFFT.RTable MultiRTable;
-        alias MSFFT.rtable_size multi_rtable_size;
-        alias MSFFT.rfft_table multi_rfft_table;
-        alias MSFFT.ITable MultiITable;
-        alias MSFFT.itable_size multi_itable_size;
-        alias MSFFT.interleave_table multi_interleave_table;
-        
-        void multi_rfft_complete()(
-            T* data, MultiTable table, MultiRTable rtable, MultiITable itable)
-        {
-            MSFFT.rfft_complete(
-                cast(MSFFT.T*) data,
-                cast(MSFFT.Table) table,
-                cast(MSFFT.RTable) rtable,
-                cast(MSFFT.ITable) itable);
-        }
-
-        size_t multi_rfft_ntransforms()()
-        {
-            return MSFFT.T.sizeof / MSFFT.Twiddle.sizeof;
-        }
+        return log2(T.sizeof / Twiddle.sizeof);
     }
 
     alias Twiddle* RTable;
@@ -1373,7 +1331,6 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 rmt.multidim_table = tc.create(log2n, ptr);
                 auto s = multidim_multi_selection(log2n, 0);
                 rmt.rtable = multi!"rfft_table"(s, log2n[0] + 1, rtable_memory);
-                
                 rmt.itable = multi!"interleave_table"(
                     s, log2n[0] + 1, itable_memory);
 
@@ -1457,19 +1414,6 @@ template FFT(alias V, alias Options, bool disable_large = false)
         Table table,
         TransposeBuffer buffer)
     {
-        static if(!isScalar)
-            if(multidim_use_multiscalar(log2m))
-            {
-                enum log2vs = log2(vec_size);
-                return MSFFT.fft_transposed(
-                    v(re), 
-                    v(im), 
-                    log2stride - log2vs,
-                    log2m - log2vs,
-                    cast(MSFFT.Table) table,
-                    cast(MSFFT.TransposeBuffer) buffer);
-            }
-
         auto n = st!1 << table.log2n;
         auto m = st!1 << log2m;
         auto stride = st!1 << log2stride;
@@ -1538,14 +1482,13 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             auto lm = multidim_log2ncolumns(log2n, i);
             auto ln = log2n[i];
-            auto selection = multidim_multi_selection(log2n, i);
-            auto l2m = multi!("log2_multi")(selection);
+            auto s = multidim_multi_selection(log2n, i);
             maxsz = max(
                 maxsz, 
-                (i == 0 ? 1 : 2) * multi!("column_buffer_size")(
-                    selection,
+                (i == 0 ? 1 : 2) * multi!"column_buffer_size"(
+                    s,
                     log2n[i], 
-                    multidim_log2ncolumns(log2n, i) - multi!("log2_multi")(selection)));
+                    multidim_log2ncolumns(log2n, i) - multi!"log2_multi"(s)));
         }
 
         return maxsz;
@@ -1637,7 +1580,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         if(tables.length == 0)
             return;
         else if(tables.length == 1)
-            return rfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
+            return irfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
 
         auto n = tables[0].log2n.exp2;
         auto log2ns = tables.map!(a => a.log2n);
@@ -1703,6 +1646,42 @@ template FFT(alias V, alias Options, bool disable_large = false)
         enum pow2vecsize = cast(size_t)1 << bsr(vec.sizeof);
         return max(min(pow2vecsize, pow2tsize << bsr(n)), (void*).sizeof);
     }
+    
+    alias MSFFT.Table MultiTable;
+    alias MSFFT.fft_table_size multi_fft_table_size;
+    alias MSFFT.fft_table multi_fft_table;
+    
+    void multi_fft()(T* re, T* im, MultiTable table)
+    {
+        MSFFT.fft(
+            cast(MSFFT.T*) re,
+            cast(MSFFT.T*) im,
+            cast(MSFFT.Table) table);
+    }
+
+    size_t multi_fft_ntransforms()()
+    {
+        return MSFFT.T.sizeof / T.sizeof;
+    }
+
+    alias MSFFT.RTable MultiRTable;
+    alias MSFFT.rtable_size multi_rtable_size;
+    alias MSFFT.rfft_table multi_rfft_table;
+    alias MSFFT.ITable MultiITable;
+    alias MSFFT.itable_size multi_itable_size;
+    alias MSFFT.interleave_table multi_interleave_table;
+    
+    void multi_rfft_complete()(
+        T* data, MultiTable table, MultiRTable rtable, MultiITable itable)
+    {
+        MSFFT.rfft_complete(
+            cast(MSFFT.T*) data,
+            cast(MSFFT.Table) table,
+            cast(MSFFT.RTable) rtable,
+            cast(MSFFT.ITable) itable);
+    }
+
+    size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
 }
 
 mixin template Instantiate()
