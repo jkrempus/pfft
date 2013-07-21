@@ -1311,18 +1311,16 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 foreach(i; 0 .. last)
                 {
                     auto l = log2n[i];
-                    auto selection = multidim_multi_selection(log2n, i);
-                    alloc.add(
-                        &table_map[i].twiddle, 
-                        SelectMulti.call!("twiddle_table_size")(selection, l));
+                    auto mms = multidim_multi_selection(log2n, i);
+                    alloc.add(&table_map[i].twiddle, 
+                        SelectMulti.call!("twiddle_table_size")(mms, l));
 
-                    alloc.add(
-                        &table_map[i].buffer,
-                        SelectMulti.call!("tmp_buffer_size")(selection, l));
+                    alloc.add(&table_map[i].buffer,
+                        SelectMulti.call!("tmp_buffer_size")(mms, l));
 
-                    alloc.add(
-                        &table_map[i].br,
-                        SelectMulti.call!("br_table_log2n")(selection, l));
+                    alloc.add(&table_map[i].br,
+                        SelectMulti.call!("BR.table_size")(
+                            mms, SelectMulti.call!("br_table_log2n")(mms, l)));
                 }
                 
                 alloc.add(&table_map[last].twiddle, twiddle_table_size(log2n[last]));
@@ -1539,13 +1537,10 @@ template FFT(alias V, alias Options, bool disable_large = false)
             auto ln = log2n[i];
             auto selection = multidim_multi_selection(log2n, i);
             auto l2m = SelectMulti.call!("log2_multi")(selection);
-            maxsz = max(
-                maxsz, 
-                SelectMulti.call!("column_buffer_size")(
-                    selection, 
-                    log2n[i], 
-                    multidim_log2ncolumns(log2n, i) - 
-                        SelectMulti.call!("log2_multi")(selection)));
+            maxsz = max( maxsz, SelectMulti.call!("column_buffer_size")(
+                selection, log2n[i], 
+                multidim_log2ncolumns(log2n, i) - 
+                    SelectMulti.call!("log2_multi")(selection)));
         }
 
         return maxsz;
