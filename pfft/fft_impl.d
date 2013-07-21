@@ -120,6 +120,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
         SelectImplementation!(FFT!(V, Options, disable_large), MSFFT).call
         multi; 
 
+    enum static_size_limit = 
+        2 * max(log2(vec_size), V.log2_bitreverse_chunk_size);
+
     import cmath = core.stdc.math;
 
     static if(is(Twiddle == float))
@@ -217,7 +220,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     void twiddle_table()(int log2n, Pair * r)
     {
-        if(log2n >= Options.large_limit || log2n < 2 * log2(vec_size))
+        if(log2n >= Options.large_limit || log2n < static_size_limit)
         {
             return sines_cosines!false(
                 r, st!1 << (log2n - 1), 0.0, -2 * _asin(1), true);
@@ -682,7 +685,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         profStop(Action.passes_last);
     }
-   
+  
     @always_inline void fractional_inner(bool do_prefetch)(
         ref vec ar,
         ref vec ai,
@@ -866,7 +869,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
                     table, tableI + 2 * i);
 
     }
-  
+
     void static_size_fft(int log2n_elem)(vec* pr, vec* pi, Twiddle* table)
     {
         enum log2n = log2n_elem - log2(vec_size);  
@@ -878,7 +881,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             ar[i] = pr[i];
             ai[i] = pi[i];
         }
-
+       
         foreach(i; powers_up_to!n)
         {
             enum m = n / i;
@@ -1010,9 +1013,6 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
             foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
                 case i: return SFFT.static_size_fft!i(re, im, table.twiddle);
-
-            enum static_size_limit = 
-                2 * max(log2(vec_size), V.log2_bitreverse_chunk_size);
 
             foreach(i; ints_up_to!(log2(vec_size) + 1, static_size_limit, 1))
                 case i: return static_size_fft!i(
@@ -1607,9 +1607,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
             &tables[0], buf, rmt.rtable, rmt.itable);
     }
 
-    static void scale(T* data, size_t n, Twiddle factor)
+    static void scale()(T* data, size_t n, Twiddle factor)
     {
-        auto k  = V.twiddle_to_vector(factor);
+        auto k = V.twiddle_to_vector(factor);
         
         foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
             e = e * k;
