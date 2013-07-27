@@ -356,12 +356,9 @@ Options:
                         and the resulting binaries will support testing the C API.
   --dynamic-tests       Buildt tests for the dynamic c library. Executables 
                         will be saved to ./test.
-  --no-pgo              Disable profile guided optimization. This flag can
-                        only be used with GDC. Using this flag will result
-                        in slightly worse performance, but the build will be 
-                        much faster. You must use this flag when cross
-                        compiling with GDC. This flag is ignored when building
-                        tests.
+  --pgo                 Enable profile guided optimization. This flag can
+                        only be used with GDC on Linux.This flag is ignored 
+                        when building tests.
   --dversion VERSION    Pass version flag VERSION to compiler. There can be multiple
                         --dversion flags.
   --flag FLAG           Prepend - to FLAG and pass it to compiler. There can be
@@ -389,12 +386,12 @@ void doit(string[] args)
     string[] types;
     string dccmd = "";
     bool clib;
-    bool nopgo;
     bool tests;
     bool dynamic;
     bool help;
     bool dbg;
     bool doc;
+    bool pgo;
     string fftw = null;
     string[] versions; 
     string[] flags; 
@@ -408,7 +405,7 @@ void doit(string[] args)
         "dc", &dc,
         "tests", &tests,
         "dynamic-tests", &dynamic,
-        "no-pgo", &nopgo,
+        "pgo", &pgo,
         "fftw", &fftw,
         "h|help", &help,
         "v|verbose", &verbose,
@@ -441,11 +438,6 @@ void doit(string[] args)
 
     types = array(uniq(sort(types)));
 
-    if(dc == Compiler.LDC)
-        // By default, ldc2 will generate code that can use all the features 
-        // of the host processor. That's usually not what we want.
-        dccmd = dccmd ~ " -mcpu=generic";
-   
     if(types.empty)
         types = ["double", "float", "real"];
 
@@ -468,15 +460,17 @@ void doit(string[] args)
     {
         Version v = parseVersion(simdOpt);
 
-        if(!isLinux)
-            // PGO currently only works on Linux.
-            nopgo = true;
-
-        if(dc == Compiler.GDC && !nopgo && !v.supportedOnHost)
+        if(pgo && !isLinux)
         {
-            nopgo = true;
+            stderr.writefln("PGO currently only works on Linux!");
+            pgo = false;
+        }
+
+        if(pgo && !v.supportedOnHost)
+        {
+            pgo = false;
             stderr.writefln(
-                "Building without the --no-pgo flag, but not all SIMD "
+                "Building with the --pgo flag, but not all SIMD "
                 "instruction sets needed for \"--simd %s\" are supported on "
                 "host. Continuing with build, but with PGO turned off.", 
                 v.name);
@@ -493,7 +487,7 @@ void doit(string[] args)
         if(clib)
             buildCObjects(dc, types, dcArgs);
         
-        if(dc == Compiler.GDC && !nopgo)
+        if(pgo)
             buildLibPgo(dc, v, types, dcArgs, clib);
         else 
             buildLib(dc, v, types, dcArgs, clib);
