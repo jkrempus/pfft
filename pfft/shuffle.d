@@ -555,7 +555,7 @@ template InterleaveImpl
        
         auto vp = cast(V.vec*) p;
         auto vn = n / V.vec_size;
- 
+
         if(vn < 4 * chunk_size)
             interleave_tiny(vp, vn);
         else
@@ -573,7 +573,7 @@ template InterleaveImpl
             }
         }  
     }
-    
+
     void interleaved_copy()
     (V.T* even, V.T* odd, V.T* interleaved, size_t n)
     if(!swap_even_odd)

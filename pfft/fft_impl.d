@@ -1458,7 +1458,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             auto s = multidim_multi_selection(log2n, i);
             maxsz = max(
                 maxsz, 
-                (i == 0 ? 1 : 2) * multi!"column_buffer_size"(
+                (i == 0 ? 2 : 1) * multi!"column_buffer_size"(
                     s,
                     log2n[i], 
                     multidim_log2ncolumns(log2n, i) - multi!"log2_multi"(s)));

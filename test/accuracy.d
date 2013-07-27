@@ -84,8 +84,15 @@ void test(string common = "", string api = "")
         if(2 * log2n < 22)
             f([log2n, log2n]);
 
-//        if(3 * log2n < 22)
-//            f([log2n, log2n, log2n]);
+        if(3 * log2n < 22)
+            f([log2n, log2n, log2n]);
+
+        foreach(i; 1 .. 5)
+            if(log2n + i < 17)
+            {
+                f([i, log2n]);
+                f([log2n, i]);
+            }
     }
 }
 
