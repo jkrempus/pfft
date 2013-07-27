@@ -1369,38 +1369,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             return table.multidim_table.memory;
         }
-
-        size_t size2(uint ndim)
-        {
-            return 
-                align_size!TableValue(MultidimTableValue.sizeof) + 
-                ndim * TableValue.sizeof;
-        }
-
-        MultidimTable table2(size_t ndim, void* ptr, TransposeBuffer buf)
-        {
-            auto mt = cast(MultidimTable) ptr;
-            auto t = cast(Table)(
-                ptr + align_size!TableValue(MultidimTableValue.sizeof));
-
-            mt.tables = t[0 .. ndim];
-            mt.buffer = buf;
-            mt.memory = ptr;
-            return mt;
-        }
-
-        void set(MultidimTable mt, size_t dim_index, Table table)
-        {
-            mt.tables[dim_index] = *table;
-        }
     }
 
     alias MultidimTableImpl!().table!false multidim_fft_table;
     alias MultidimTableImpl!().size!false multidim_fft_table_size;
     alias MultidimTableImpl!().memory multidim_fft_table_memory;
-    alias MultidimTableImpl!().table2 multidim_fft_table2;
-    alias MultidimTableImpl!().size2 multidim_fft_table2_size;
-    alias MultidimTableImpl!().set multidim_fft_table_set;
 
     alias MultidimTableImpl!().table!true multidim_rfft_table;
     alias MultidimTableImpl!().size!true multidim_rfft_table_size;
