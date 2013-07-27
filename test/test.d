@@ -297,9 +297,8 @@ if(transform == Transform.fft && !isMulti)
 
     T[] _re;
     T[] _im;
-    d.Table[] tables;
     d.TransposeBuffer tbuf;
-    d.MultidimTable table2;
+    d.MultidimTable table;
     int log2n;
 
     this(uint[] log2ns)
@@ -310,15 +309,15 @@ if(transform == Transform.fft && !isMulti)
         _re[] = 0;
         _im[] = 0;
         auto size = d.multidim_fft_table_size(log2ns);
-        table2 = d.multidim_fft_table(log2ns, GC.malloc(size));
+        table = d.multidim_fft_table(log2ns, GC.malloc(size));
     }
     
     void compute()
     {
         static if(isInverse)
-            d.multidim_fft(_im.ptr, _re.ptr, table2);
+            d.multidim_fft(_im.ptr, _re.ptr, table);
         else 
-            d.multidim_fft(_re.ptr, _im.ptr, table2);
+            d.multidim_fft(_re.ptr, _im.ptr, table);
     }
 
     mixin splitElementAccess!();
@@ -870,7 +869,7 @@ struct StdApi(bool usePhobos = false, Transform transform, bool isInverse)
     static if(usePhobos)
         import std.numeric;
     else
-        import pfft.stdapi;
+        import pfft.stdapi : Fft;
        
     enum{ normalizedInverse };
 

@@ -1511,6 +1511,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
         interleave(p, table.log2n + 1, itable);
     }
 
+    void raw_rfft()(T* re, T* im, RealMultidimTable rmt)
+    {
+        rfft(re, im, &rmt.multidim_table.tables[0], rmt.rtable);
+    }
+
     void multidim_rfft()(T* p, RealMultidimTable rmt)
     {
         auto multidim_table = rmt.multidim_table;

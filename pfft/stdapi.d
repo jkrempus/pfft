@@ -10,6 +10,8 @@ import  std.complex, std.traits, core.bitop, std.typetuple, std.range,
 
 import core.memory;
 
+private:
+
 // Current GDC branch for android insists on using sinl and friends when
 // std.math is imported, so we need to do this:
 version(GNU) version(ARM)
@@ -120,7 +122,8 @@ T* alignedScalarPtr(T, R)(R r, uint log2n)
     return isSupported && isAligned(&(r[0].re), log2n) ?  &(r[0].re) : null;
 }
 
-void deinterleave_array(R, T)(uint log2n, R r, T* re, T* im)
+void deinterleave_array(R, T)(
+    uint log2n, R r, T* re, T* im)
 {
     static if(is(typeof(r[0].re) == T))
         if(auto p = alignedScalarPtr!T(r, log2n))
@@ -144,7 +147,8 @@ void deinterleave_array(R, T)(uint log2n, R r, T* re, T* im)
     }
 }
 
-void interleave_array(R, T)(uint log2n, R r, T* re, T* im)
+void interleave_array(R, T)(
+    uint log2n, R r, T* re, T* im)
 {
     static if(is(typeof(r[0].re) == T))
         if(auto p = alignedScalarPtr!T(r, log2n))
@@ -167,6 +171,8 @@ void interleave_array(R, T)(uint log2n, R r, T* re, T* im)
         }
     }
 }
+
+T[] slice(T)(ref T a) { return (&a)[0 .. 1]; }
 
 struct Cached
 {
@@ -208,51 +214,39 @@ struct Cached
         return entries.ptr + nsizes * typeIndex!T + log2n;
     }
 
-    impl!T.Table table(T)(uint log2n)
+    impl!T.MultidimTable table(T)(uint log2n)
     {
         auto e = entry!T(log2n);
         if(!e.table)
         {
-            auto mem = GC.malloc(impl!T.fft_table_size(log2n));
-            e.table = cast(void*) impl!T.fft_table(log2n, mem);
+            auto mem = GC.malloc(impl!T.multidim_fft_table_size(log2n.slice));
+            e.table = cast(void*) impl!T.multidim_fft_table(log2n.slice, mem);
         }
 
         return cast(typeof(return)) e.table; 
     }
-    
-    impl!T.RTable rtable(T)(uint log2n)
+
+    impl!T.RealMultidimTable rtable(T)(uint log2n)
     {
         auto e = entry!T(log2n);
         if(!e.rtable)
         {
-            auto mem = GC.malloc(impl!T.rtable_size(log2n));
-            e.rtable = cast(void*) impl!T.rfft_table(log2n, mem);
+            auto mem = GC.malloc(impl!T.multidim_rfft_table_size(log2n.slice));
+            e.rtable = cast(void*) impl!T.multidim_rfft_table(log2n.slice, mem);
         }
-        
+
         return cast(typeof(return)) e.rtable; 
     }
     
-    T* re(T)(uint log2n)
+    T* re(T)(size_t n)
     {
-        return cast(typeof(return)) _re.get(T.sizeof << log2n); 
+        return cast(typeof(return)) _re.get(T.sizeof * n); 
     }
     
-    T* im(T)(uint log2n)
+    T* im(T)(size_t n)
     {
-        return cast(typeof(return)) _im.get(T.sizeof << log2n); 
+        return cast(typeof(return)) _im.get(T.sizeof * n); 
     }
-
-    impl!T.TransposeBuffer transposeBuffer(T)(uint[] log2n)
-    {
-        return cast(typeof(return)) _transposeBuffer
-            .get(impl!T.transpose_buffer_size(log2n)); 
-    } 
-
-    void* multidimMemory(T)(size_t ndim)
-    {
-        return cast(typeof(return)) _multidimMemory
-            .get(impl!T.multidim_fft_table2_size(cast(uint) ndim));
-    } 
 }
 
 /**
@@ -290,7 +284,7 @@ void main(string[] args)
 ---
  */
 
-final class Fft
+public final class Fft
 {
     import std.variant;
 
@@ -323,32 +317,22 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
-        uint log2nVal = bsr(n);
-        auto log2n = (&log2nVal)[0 .. 1];
+        uint log2n = bsr(n);
 
-        auto re = cached.re!T(log2n[0]);
-        auto im = cached.im!T(log2n[0]);
-        auto multidim_table = impl!T.multidim_fft_table2(
-            1, 
-            cached.multidimMemory!T(log2n.length),
-            cached.transposeBuffer!T(log2n));
+        auto re = cached.re!T(n);
+        auto im = cached.im!T(n);
+        auto multidim_table = cached.table!T(log2n);
 
-        // TODO: make this function support multidim 
-        foreach(i; 0 .. log2n.length)
-            impl!T.multidim_fft_table_set(
-                multidim_table, 
-                i, 
-                cached.table!T(log2n[i]));
 
         static if(isComplex!(ElementType!R))
-            deinterleave_array(log2n[0], r, re, im);
+            deinterleave_array(log2n, r, re, im);
         else
         {
             im[0 .. n] = 0;
             static if(is(ElementType!R == T) && (isPointer!R || isArray!R))
                 re[0 .. n] = r[0 .. n];
             else
-                for(T* p = re; p < re + n; re++, r.popFront())
+                for(T* p = re; !r.empty; re++, r.popFront())
                     *p = r.front;
         }
 
@@ -363,7 +347,7 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
             impl!(T).multidim_fft(re, im, multidim_table);
         }
 
-        interleave_array(log2n[0], ret, re, im);
+        interleave_array(log2n, ret, re, im);
     }
 
 /**
@@ -391,17 +375,16 @@ have the same number of elements and that number must be a power of two.
         n /= 2;
         auto log2n = bsr(n);
 
-        auto re = cached.re!T(log2n);
-        auto im = cached.im!T(log2n);
-        auto table = cached.table!T(log2n);
-        auto rtable = cached.rtable!T(log2n + 1);
+        auto re = cached.re!T(n);
+        auto im = cached.im!T(n);
+        auto rtable = cached.rtable!T(log2n);
 
         deinterleave_array(log2n, r, re, im);
-        impl!(T).rfft(re, im, table, rtable);
+        impl!(T).raw_rfft(re, im, rtable);
         interleave_array(log2n, ret, re, im);
 
-        ret[n] = complex(ret[0].im, 0);
         ret[0].im = 0;
+        ret[n] = complex(im[0], 0); 
 
         foreach(i; 1 .. n)
         {
