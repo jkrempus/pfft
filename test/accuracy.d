@@ -53,23 +53,39 @@ void test(string common = "", string api = "")
 
     foreach(flags;  ["", "-r", "-i", "-i -r"].p)
     foreach(impl;   (api == "" ? ["pfft", "c", "std"] : [api]).p)
-    foreach(type;   ["float", "double", "real"])
+    foreach(type;   ["float", "double", "real"].p)
     foreach(log2n;  iota(1, 21))
     {
-        auto path =  absolutePath(fm("test_%s", type));
-        auto cmd = fm(`%s %s %s "%s" %s`, path, flags, impl, log2n, common);
-        scope(failure)
-            writefln("Error when executing %s.", cmd);
+        void f(int[] sizes)
+        {
+            auto path =  absolutePath(fm("test_%s", type));
+            auto cmd = fm(`%s %s %s %(%s %) %s`, 
+                path, flags, impl, sizes, common);
 
-        auto output = vshell(cmd, 3, 4);
-        scope(failure)
-            writefln("Command output was %s", output);
-        auto err = to!double(strip(output));
-        auto tolerated = toleratedError[type];
+            scope(failure)
+                writefln("Error when executing %s.", cmd);
 
-        enforce(err < tolerated, fm(
-            "Command %s returned relative error %s, but only %s is tolerated for type %s",
-            cmd, err, tolerated, type));
+            auto output = vshell(cmd, 3, 4);
+            scope(failure)
+                writefln("Command %s has failed with output: %s", cmd, output);
+
+            auto err = to!double(strip(output));
+            auto tolerated = toleratedError[type];
+
+            enforce(err < tolerated, fm(
+                    "Command %s returned relative error %s, but only %s is tolerated for type %s",
+                    cmd, err, tolerated, type));
+        }
+
+        f([log2n]);
+        if(impl == "std")
+            continue;
+
+        if(2 * log2n < 22)
+            f([log2n, log2n]);
+
+//        if(3 * log2n < 22)
+//            f([log2n, log2n, log2n]);
     }
 }
 
