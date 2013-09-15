@@ -154,6 +154,12 @@ void cp(string src, string dst, string flags = "")
             throw e;
 }
 
+void cp(string[] src, string dst, string flags = "")
+{
+    foreach(s; src)
+        cp(s, dst, flags);
+}
+
 void cd(string path)
 {
     path = fn(path);

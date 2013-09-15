@@ -175,7 +175,13 @@ string buildAdditionalSIMD(
     return simd.name;
 }
 
-void buildLib(Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
+void buildLibImpl(
+    Compiler dc,
+    Version v,
+    string[] types,
+    ArgList dcArgs,
+    bool clib,
+    string[] addModule)
 {
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
@@ -188,7 +194,7 @@ void buildLib(Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
         .map!(s => buildAdditionalSIMD(dc, v, s, types, dcArgs, clib))
         .array;
 
-    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs, clib);
+    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs.module_(addModule), clib);
 
     dcArgs
         .genLib
@@ -209,10 +215,19 @@ void buildLib(Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
             .run(dc);
 }
 
-void buildLibPgo(
-    Compiler dc, Version v, string[] types, ArgList dcArgs, bool clib)
+void buildLib(
+    bool pgo, 
+    Compiler dc, 
+    Version v,
+    string[] types,
+    ArgList dcArgs,
+    bool clib,
+    string[] addModule)
 {
-    buildLib(dc, v, types, dcArgs.raw("-fprofile-generate"), clib);
+    if(!pgo)
+        return buildLibImpl(dc, v, types, dcArgs, clib, addModule);
+
+    buildLibImpl(dc, v, types, dcArgs.raw("-fprofile-generate"), clib, addModule);
 
     // benchmark with DynamicC when clib is true
     auto jd = argList.version_("JustDirect");
@@ -220,7 +235,7 @@ void buildLibPgo(
         dc, "..", null, clib); 
 
     runBenchmarks(types, v, clib ? "c" : "direct");
-    buildLib(dc, v, types, dcArgs.raw("-fprofile-use"), clib);
+    buildLibImpl(dc, v, types, dcArgs.raw("-fprofile-use"), clib, addModule);
 }
 
 void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
@@ -394,7 +409,8 @@ void doit(string[] args)
     bool pgo;
     string fftw = null;
     string[] versions; 
-    string[] flags; 
+    string[] flags;
+    string[] addModule; 
     Compiler dc = Compiler.GDC;
 
     getopt(args, 
@@ -412,7 +428,8 @@ void doit(string[] args)
         "doc", &doc,
         "debug", &dbg,
         "dversion", &versions,
-        "flag", &flags);
+        "flag", &flags,
+        "add-module", &addModule);
 
     tests = tests || dynamic;
 
@@ -487,10 +504,7 @@ void doit(string[] args)
         if(clib)
             buildCObjects(dc, types, dcArgs);
         
-        if(pgo)
-            buildLibPgo(dc, v, types, dcArgs, clib);
-        else 
-            buildLib(dc, v, types, dcArgs, clib);
+        buildLib(pgo, dc, v, types, dcArgs, clib, addModule);
 
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)

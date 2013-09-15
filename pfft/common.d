@@ -30,9 +30,10 @@ struct Tuple(A...)
     alias a this;
 }
 
-version(none/*GNU*/)
+version(GNU)
 {
     public import gcc.attribute;
+    enum private_decl = attribute("private");
     enum noinline = attribute("noinline");
     enum always_inline = attribute("forceinline");
 }
@@ -217,5 +218,8 @@ struct Allocate(int max_num_ptr)
         }
 
         iter!f(ptr, &this);
+//        import core.memory;
+//        foreach(i; 0 .. end)
+//            *buf[i].ptr = GC.malloc(buf[i].size);
     }
 }
