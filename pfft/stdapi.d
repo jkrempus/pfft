@@ -99,6 +99,7 @@ void saveIfForward(R)(ref R r)
 
 bool isAligned(T)(T* p, uint log2n)
 {
+    //TODO: parameter to alignment() may be wrong here.
     return ((cast(size_t)p) & (impl!(T).alignment(log2n) - 1)) == 0;
 }    
 

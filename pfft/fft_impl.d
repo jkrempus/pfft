@@ -1478,6 +1478,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         auto buf = multidim_table.buffer;
         auto log2ns = tables.map!(a => a.log2n);
+        auto len = st!1 << log2ns.sum;
         int log2m = log2ns.dropExactly(1).sum;
         auto m = log2m.exp2;
         auto next_table = MultidimTableValue(tables[1 .. $], buf, null);

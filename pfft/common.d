@@ -14,6 +14,13 @@ uint first_set_bit(size_t a)
     return a == 0 ? 8 * size_t.sizeof : bsf(a); 
 }
 
+size_t exp2(uint a){ return st!1 << a; }
+
+size_t next_pow2(size_t a)
+{
+    return a == 0 ? 1 : exp2(bsr(2 * a - 1));
+}
+
 template select(bool select_first, alias first, alias second)
 {
     static if(select_first)
@@ -21,8 +28,6 @@ template select(bool select_first, alias first, alias second)
     else
         alias second select;
 }
-
-size_t exp2(uint a){ return st!1 << a; }
 
 struct Tuple(A...)
 {
