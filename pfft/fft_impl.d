@@ -1622,9 +1622,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     size_t alignment(size_t n)
     {
-        enum pow2tsize = cast(size_t)1 << bsr(2 * T.sizeof - 1);
-        enum pow2vecsize = cast(size_t)1 << bsr(2 * vec.sizeof - 1);
-        return max(min(pow2vecsize, pow2tsize << bsr(n)), (void*).sizeof);
+        return max(
+            min(next_pow2(vec.sizeof), next_pow2(T.sizeof * n)), 
+            (void*).sizeof);
     }
     
     alias MSFFT.Table MultiTable;
