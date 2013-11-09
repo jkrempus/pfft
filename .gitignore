@@ -24,3 +24,13 @@ generated
 generated-c
 examples/*_example
 test/benchmark-results
+*.exe
+*.gz
+*.log
+*.txt
+*core
+*.pyc
+*.swo
+.*
+*.gimple
+tmp
