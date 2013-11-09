@@ -70,15 +70,13 @@ else
 
         enum cache_line = 64;       
 
-            return pagesize(); // TODO: fix this
- 
         if(n < 5 * page_size)
             // align to cache line at most to avoid wasting memory 
             return min(max(n, F.alignment(n)), cache_line);
         else
             // aligne to page size, the increase of memory size isn't that
-            // signifficant in this case and this can improve performance
-            return pagesize();
+            // significant in this case and this can improve performance
+            return pagesize;
     }
 }
 

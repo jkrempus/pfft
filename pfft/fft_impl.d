@@ -1459,6 +1459,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
             auto s = multidim_multi_selection(log2n, i);
             maxsz = max(
                 maxsz, 
+                // for first dimension, make the buffer two times as large,
+                // so that a real transform can use the same buffer as 
+                // a complex transform that is half its size.
                 (i == 0 ? 2 : 1) * multi!"column_buffer_size"(
                     s,
                     log2n[i], 

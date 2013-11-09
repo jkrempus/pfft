@@ -367,10 +367,7 @@ struct Columns(alias V)
     private static size_t block_size(size_t nrows, size_t ncolumns)
     {
         // TODO: the optimal value for this parameter depends on transform size
-        // TODO: this causes a bug when V.T.sizeof is not a power of 2
-        // return nrows.min(ncolumns).min(512 / V.T.sizeof); 
         return nrows.min(ncolumns).min(512 / next_pow2(V.T.sizeof)); 
-        
     }
 
     static size_t buffer_size(size_t nrows, size_t ncolumns)
