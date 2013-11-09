@@ -425,7 +425,7 @@ private void runCompiler(Compiler dc, immutable(Arg)[] flags)
         auto noOutputFlag = false;
         foreach(f; flags) 
         {
-            if([genLib, genDynlib, genObj].canFind(f.type))
+            if(f.ofType!(genLib, genDynlib, genObj))
             {
                 enforce(outputType == none, 
                     "there can only be one argument of type genLib, genDynlib, or genObj");
@@ -514,7 +514,8 @@ private auto generateDeps(immutable(Arg)[] args, Compiler c)
     
     auto re = regex(`^([\w.]+) \(([^\)]+)\) : \w+ : ([\w.]+) \(([^\)]+)\)`, `gm`);
 
-    return match(std.file.readText(depsFile).fixBackslashes, re)
+    // calling array on result of match() solves all my problems
+    return match(std.file.readText(depsFile).fixBackslashes, re).array
         .map!(capt => Quad(
             capt[1] == srcModule ? "" : capt[1], 
             capt[2], 
