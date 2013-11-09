@@ -42,7 +42,10 @@ mixin(
     stub!"_D10TypeInfo_k6__initZ" ~
     stub!"_D10TypeInfo_v6__initZ" ~
     stub!"_D16TypeInfo_Pointer6__vtblZ" ~
-    stub!"_D13TypeInfo_Enum6__vtblZ");
+    stub!"_D13TypeInfo_Enum6__vtblZ" ~ 
+    stub!"_D14TypeInfo_Array6__vtblZ" ~
+    stub!"_adEq2" ~
+    stub!"_D6object10_xopEqualsFxPvxPvZb");
 
 version(GNU)
     mixin(stub!"__gdc_personality_v0");

@@ -5,7 +5,6 @@
 
 module pfft.fft_impl;
 
-import std.stdio;
 public import pfft.shuffle;
 
 enum Action
