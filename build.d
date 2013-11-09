@@ -465,6 +465,7 @@ void doit(string[] args)
         .compileCmd(dccmd)
         .version_(versions)
         .conditional(dbg, argList.debug_, optimizeFlags)
+        .conditional(dc == Compiler.GDC, argList.raw("-fno-strict-aliasing"))
         .raw(flags.map!(a => "-"~a).array);
 
     auto buildDir = (clib && !tests) ? "generated-c" : "generated";
