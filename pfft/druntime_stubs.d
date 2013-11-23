@@ -1,8 +1,8 @@
 module pfft.druntime_stubs;
 
 version(Windows)
-    version(GNU)
-        version = MinGW;
+    version(GNU) 
+        version = MinGW_;
 
 extern(C):
 
@@ -17,7 +17,7 @@ template stub(string name)
 void `~name~`()
 {
     enum message = "`~name~` should not be called!\n";
-    version(MinGW)
+    version(MinGW_)
     {
         puts(message);
     }

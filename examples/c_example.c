@@ -6,6 +6,7 @@ int main(int argc, char **argv)
 {
     int n = atoi(argv[1]);
     PfftTableF tab = pfft_table_f(n, 0);
+    puts("asdf");
     float *re = pfft_allocate_f(n);
     float *im = pfft_allocate_f(n);
     

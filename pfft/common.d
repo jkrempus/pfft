@@ -35,7 +35,7 @@ struct Tuple(A...)
     alias a this;
 }
 
-version(GNU)
+version(none)
 {
     public import gcc.attribute;
     enum private_decl = attribute("private");
@@ -109,16 +109,18 @@ auto map(alias mapper, R)(R r)
 
 T reduce(alias reducer, T, R)(T seed, R a)
 {
-    foreach(e; a)
-        seed = reducer(seed, e);
-
+    foreach(e; a) seed = reducer(seed, e);
     return seed;
 }
 
+auto plus(T)(T a, T b){ return a + b; }
+
 auto sum(R)(R r)
 {
+    static int asdf;
+    asdf++;
     typeof(r.front) seed = 0;
-    return reduce!((a, e) => a + e)(seed, r); 
+    return reduce!plus(seed, r); 
 }
 
 R dropExactly(R)(R r, size_t n)
@@ -144,8 +146,6 @@ void insertion_sort(alias less, T)(T[] arr)
 
 template SelectImplementation(Implementations...)
 {
-    @always_inline: 
-
     template call(string func_name)
     {
         auto call(A...)(uint selection, A args)
@@ -172,6 +172,11 @@ template SelectImplementation(Implementations...)
     }
 }
 
+auto compare_alignment(T)(T a, T b)
+{
+    return first_set_bit(a.size) > first_set_bit(b.size);
+}
+
 struct Allocate(int max_num_ptr)
 {
     struct Entry
@@ -194,8 +199,7 @@ struct Allocate(int max_num_ptr)
 
     void iter(alias f, Args...)(Args args)
     {
-        insertion_sort!((a, b) => 
-            first_set_bit(a.size) > first_set_bit(b.size))(buf[0 .. end]);
+        insertion_sort!(compare_alignment)(buf[0 .. end]);
 
         size_t istart = 0;
         foreach(i; 0 ..end)

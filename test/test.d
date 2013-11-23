@@ -780,7 +780,7 @@ if(isIn(transform, Transform.rfft, Transform.fft))
         {
             auto table = w.save;
             size_t m = m2 + m2;
-            for(auto p = a.save; !p.empty; p = p[m .. $])
+            for(auto p = a.save; !p.empty; p = p[m .. p.length])
             {
                 T wr = table.front.re;
                 T wi = table.front.im;
@@ -810,12 +810,12 @@ if(isIn(transform, Transform.rfft, Transform.fft))
         if(log2ns.length == 1)
             return fft(a, w);
 
-        size_t m = st!1 << log2ns[1 .. $].reduce!sum;
+        size_t m = st!1 << log2ns[1 .. log2ns.length].reduce!sum;
         foreach(i; 0 .. st!1 << log2ns.front)
             multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
 
         foreach(i; 0 .. m)
-            fft(a[i .. $].stride(m), w);
+            fft(a[i .. a.length].stride(m), w);
     }
 
     this(uint[] log2ns, size_t multi = 1)

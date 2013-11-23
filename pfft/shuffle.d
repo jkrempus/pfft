@@ -19,8 +19,6 @@ struct BitReversedPairs(int shift)
     uint i0;
     uint i1;
 
-    @always_inline:
-
     @property front()(){ return Tuple!(uint, uint)(i0, i1); }
 
     void popFront()()
@@ -41,7 +39,7 @@ struct BitReversedPairs(int shift)
     @property empty()(){ return i0 == n; } 
 }
 
-@always_inline auto bit_reversed_pairs(int shift = 0)(uint log2n)
+auto bit_reversed_pairs(int shift = 0)(uint log2n)
 {
     auto nn = 1 << (log2n + shift);
     return BitReversedPairs!shift(nn, nn / 2, nn / 4, 0, 0);
@@ -70,7 +68,7 @@ template BRChunks(alias V, bool br_rows_columns)
     enum vec_per_chunk = l / V.vec_size;
     alias RepeatType!(V.vec, l * vec_per_chunk) Chunks;
     
-    @always_inline void copy(bool load)(ref Chunks c, V.T* p, size_t m)
+    void copy(bool load)(ref Chunks c, V.T* p, size_t m)
     {
         foreach(i; ints_up_to!l)
             foreach(j; ints_up_to!vec_per_chunk)
@@ -146,7 +144,7 @@ template BitReverse(alias V, alias Options)
             }
     }
    
-    @always_inline void bit_reverse_small()(T*  p, uint log2n, uint*  table)
+    void bit_reverse_small()(T*  p, uint log2n, uint*  table)
     {
         alias BRChunks!(V, false) C;
 
@@ -184,7 +182,7 @@ template BitReverse(alias V, alias Options)
         return maxpower;     
     }
 
-    @always_inline void swap_some(int n, TT)(TT* a, TT* b)
+    void swap_some(int n, TT)(TT* a, TT* b)
     {
         RepeatType!(TT, 2 * n) tmp;
         
@@ -199,7 +197,7 @@ template BitReverse(alias V, alias Options)
             a[i] = tmp[i + n];
     }
 
-    @always_inline void swap_array(int len, TT)(TT *  a, TT *  b)
+    void swap_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert(len*TT.sizeof % vec.sizeof == 0);
         
@@ -209,7 +207,7 @@ template BitReverse(alias V, alias Options)
             swap_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
    
-    @always_inline void copy_some(int n, TT)(TT* dst, TT* src)
+    void copy_some(int n, TT)(TT* dst, TT* src)
     {
         RepeatType!(TT, n) a;
         
@@ -219,7 +217,7 @@ template BitReverse(alias V, alias Options)
             dst[i] = a[i];
     }
 
-    @always_inline void copy_array(int len, TT)(TT *  a, TT *  b)
+    void copy_array(int len, TT)(TT *  a, TT *  b)
     {
         static assert((len * TT.sizeof % vec.sizeof == 0));
         
@@ -229,7 +227,7 @@ template BitReverse(alias V, alias Options)
             copy_some!n((cast(vec*)a) + n * i, (cast(vec*)b) + n * i);
     }
     
-    @always_inline void strided_copy
+    void strided_copy
     (size_t chunk_size, bool prefetch_src, TT)
     (TT* dst, TT* src, size_t dst_stride, size_t src_stride, size_t nchunks)
     {
@@ -306,13 +304,13 @@ struct Columns(alias V)
 
     @property column(){ return buffer + n * icolumn; }
 
-    @always_inline void load()
+    void load()
     {
         if(icolumn == 0)
             transposed_copy!false(p, stride, n, l, buffer);
     }
 
-    @always_inline void save()
+    void save()
     {
         icolumn++;
         if(icolumn == l)
@@ -323,7 +321,7 @@ struct Columns(alias V)
         } 
     }
 
-    @always_inline private static void transposed_copy(bool inverse)(
+    private static void transposed_copy(bool inverse)(
         V.T* src, size_t sstride, size_t n, size_t m, V.T* dst)
     {
         alias n dstride;

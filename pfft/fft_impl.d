@@ -22,17 +22,19 @@ enum Action
 import pfft.profile;
 mixin ProfileMixin!Action;
 
-//nothrow:
-//pure:
-
 version(DontUseTwoPasses)
     enum useTwoPasses = false;
 else
     enum useTwoPasses = true;
 
+version(Windows)
+    enum isWin64 = size_t.sizeof == 8;
+else
+    enum isWin64 = false;
+
 version(GNU)
     version(Windows)
-        version = MinGW;  
+        version = MinGW_;  
 
 template Scalar(_T, A...)
 {
@@ -131,7 +133,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         alias cmath.cosf _cos;
         alias cmath.asinf _asin;
     }
-    else static if(is(Twiddle == double))
+    else static if(is(Twiddle == double) || isWin64)
     {
         alias cmath.sin _sin;
         alias cmath.cos _cos;
@@ -443,7 +445,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         pi[k3] = i3;
     };
  
-    @always_inline void fft_pass_bit_reversed()(
+    void fft_pass_bit_reversed()(
         vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -465,7 +467,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
  
-    @always_inline void fft_two_passes_bit_reversed()(
+    void fft_two_passes_bit_reversed()(
         vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -491,7 +493,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    @always_inline void first_fft_passes()(vec* pr, vec* pi, size_t n)
+    void first_fft_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
 
@@ -523,7 +525,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
         
-    @always_inline void fft_pass()(
+    void fft_pass()(
         vec *pr, vec *pi, vec *pend, Twiddle *table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -546,7 +548,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    @always_inline void fft_two_passes(Tab...)(
+    void fft_two_passes(Tab...)(
         vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
@@ -606,7 +608,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    @always_inline void fft_passes_bit_reversed()(
+    void fft_passes_bit_reversed()(
         vec* re, vec* im, size_t N, vec* table, size_t start_stride)
     {
         //version(DigitalMars)
@@ -632,7 +634,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
     
-    @always_inline void fft_passes(bool compact_table)(
+    void fft_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, Twiddle* table)
     {
         vec * pend = re + N;
@@ -686,7 +688,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.passes_last);
     }
   
-    @always_inline void fractional_inner(bool do_prefetch)(
+    void fractional_inner(bool do_prefetch)(
         ref vec ar,
         ref vec ai,
         ref vec br,
@@ -720,7 +722,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         V.interleave(ai, bi, ai, bi);
     }
 
-    @always_inline void fft_passes_fractional()(
+    void fft_passes_fractional()(
         vec * pr, vec * pi, vec * pend, Twiddle * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
@@ -750,7 +752,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             }
     }
 
-    @always_inline void fft_passes_strided(int l, int chunk_size)(
+    void fft_passes_strided(int l, int chunk_size)(
         vec * pr,
         vec * pi, 
         size_t N , 
@@ -805,7 +807,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.strided_copy2);
     }
 
-    @always_inline void fft_passes_recursive_last()(
+    void fft_passes_recursive_last()(
         vec* pr, vec*  pi, size_t N, Twiddle* table, size_t tableI)
     {
         profStart(Action.passes_last);
@@ -1004,7 +1006,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.bit_reverse);
     }
 
-    @noinline void fft()(T * re, T * im, Table table)
+    void fft()(T * re, T * im, Table table)
     {
         uint log2n = table.log2n;
         switch(log2n)
@@ -1012,11 +1014,15 @@ template FFT(alias V, alias Options, bool disable_large = false)
             case 0: return;
 
             foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
+	    {
                 case i: return SFFT.static_size_fft!i(re, im, table.twiddle);
+	    }
 
             foreach(i; ints_up_to!(log2(vec_size) + 1, static_size_limit, 1))
+	    {
                 case i: return static_size_fft!i(
                     cast(vec*) re, cast(vec*) im, table.twiddle);
+	    }
             
             default:
         }
@@ -1028,7 +1034,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 fft_large(re, im, log2n, table);
     }
 
-    @always_inline size_t log2_multi()()
+    size_t log2_multi()()
     {
         return log2(T.sizeof / Twiddle.sizeof);
     }
@@ -1233,17 +1239,17 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     alias RealMultidimTableValue* RealMultidimTable;
 
-    @always_inline uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
+    uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
     {
         return log2n.dropExactly(dim_index + 1).sum;
     }
 
-    @always_inline bool multidim_use_multiscalar(uint log2ncolumns)
+    bool multidim_use_multiscalar(uint log2ncolumns)
     {
         return log2ncolumns >= log2(vec_size);
     }
 
-    @always_inline uint multidim_multi_selection(Range)(
+    uint multidim_multi_selection(Range)(
         Range log2n, size_t dim_index)
     {
         return multidim_log2ncolumns(log2n, dim_index) >= log2(vec_size) ?
@@ -1379,7 +1385,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     alias MultidimTableImpl!().size!true multidim_rfft_table_size;
     alias MultidimTableImpl!().real_memory multidim_rfft_table_memory;
 
-    @always_inline void fft_transposed()(
+    void fft_transposed()(
         T* re,
         T* im,
         int log2stride, 
@@ -1409,7 +1415,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     //TODO: use multi-scalar
-    @always_inline void rfft_transposed_impl(bool inverse)(
+    void rfft_transposed_impl(bool inverse)(
         T* p,
         int log2stride, 
         int log2m,
@@ -1669,7 +1675,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 mixin template Instantiate()
 {
     static if(is(typeof(implementation)))
-        alias impl = implementation.get;
+        alias implementation.get impl;
     else
         enum impl = 0;
 
