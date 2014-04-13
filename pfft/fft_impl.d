@@ -1666,18 +1666,12 @@ template FFT(alias V, alias Options, bool disable_large = false)
     size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
 }
 
-mixin template Instantiate()
+mixin template Instantiate(string impl_name)
 {
     static if(is(typeof(implementation)))
         alias impl = implementation.get;
     else
         enum impl = 0;
-
-    void set_implementation(int i)
-    {
-        static if(is(typeof(implementation.set)))
-            implementation.set(i);
-    }
 
     alias FFTs[0] FFT0;
     alias FFT0.T T;
@@ -1685,7 +1679,14 @@ mixin template Instantiate()
     template Api()
     {
         import decl = pfft.instantiate_declarations;
-        mixin decl.Instantiate!();
+        mixin decl.Instantiate!(impl_name);
+    }
+
+    pragma(mangle, Api!().set_implementation.mangleof)
+    void set_implementation(int i)
+    {
+        static if(is(typeof(implementation.set)))
+            implementation.set(i);
     }
 
     template code(names ...)
@@ -1705,7 +1706,8 @@ mixin template Instantiate()
                 is(typeof(member) == function) && 
                 __traits(hasMember, FFT0, name))
             {
-                enum current = 
+                enum current =
+                    "pragma(mangle, \""~member.mangleof~"\") "~ 
                     "auto "~name~"("~generate_arg_list!(member, true)~
                     "){ return cast("~ ReturnType!member.stringof~
                     ") SelectImplementation!FFTs.call!(\""~name~"\")(impl, "~

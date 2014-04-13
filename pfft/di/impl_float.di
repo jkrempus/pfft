@@ -4,4 +4,4 @@ import pfft.instantiate_declarations;
     
 alias float T;
 
-mixin Instantiate!();
+mixin Instantiate!"float";

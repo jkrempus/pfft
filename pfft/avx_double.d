@@ -170,12 +170,12 @@ version(SSE_AVX)
     {
         import pfft.fft_impl;
         alias TypeTuple!(FFT!(Vector!(), Options!())) FFTs;
-        mixin Instantiate!();
+        mixin Instantiate!"double_avx";
     }
     else
     {
         import pfft.instantiate_declarations;
         alias double T;
-        mixin Instantiate!();
+        mixin Instantiate!"double_avx";
     }
 }

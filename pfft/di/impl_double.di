@@ -4,4 +4,4 @@ import pfft.instantiate_declarations;
     
 alias double T;
 
-mixin Instantiate!();
+mixin Instantiate!"double";

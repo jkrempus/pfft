@@ -4,4 +4,4 @@ import pfft.instantiate_declarations;
     
 alias real T;
 
-mixin Instantiate!();
+mixin Instantiate!"real";

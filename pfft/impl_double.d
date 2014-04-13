@@ -42,5 +42,5 @@ else
     alias TypeTuple!F FFTs;
 }
 
-mixin Instantiate!();
+mixin Instantiate!"double";
 
