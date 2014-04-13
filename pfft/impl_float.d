@@ -9,12 +9,11 @@ import pfft.fft_impl;
 
 version(SSE_AVX)
 {
-    import 
-        sse = pfft.sse_float, 
-        avx = pfft.avx_float, 
-        implementation = pfft.detect_avx;  
+    import pfft.detect_avx;
+    import sse = pfft.sse_float, avx = pfft.avx_float; 
     
-    alias TypeTuple!(FFT!(sse.Vector!(), sse.Options!()), avx) FFTs;
+    mixin Instantiate!(
+        "float", get, FFT!(sse.Vector!(), sse.Options!()), avx);
 }
 else
 {
@@ -29,8 +28,5 @@ else
     else version(SSE)
         import pfft.sse_float;
     
-    alias FFT!(Vector!(),Options!()) F;
-    alias TypeTuple!F FFTs;
+    mixin Instantiate!("float", 0, FFT!(Vector!(),Options!()));
 }
-
-mixin Instantiate!"float";

@@ -273,8 +273,7 @@ version(SSE_AVX)
     version(InstantiateAdditionalSimd)
     {
         import pfft.fft_impl;
-        alias TypeTuple!(FFT!(Vector!(), Options!())) FFTs;
-        mixin Instantiate!"float_avx";
+        mixin Instantiate!("float_avx", 0, FFT!(Vector!(), Options!()));
     }
     else
     {

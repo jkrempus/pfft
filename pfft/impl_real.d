@@ -7,5 +7,4 @@ module pfft.impl_real;
 
 import pfft.scalar_real, pfft.fft_impl;
 
-alias TypeTuple!(FFT!(Vector!(), Options!())) FFTs;
-mixin Instantiate!"real";
+mixin Instantiate!("real", 0, FFT!(Vector!(), Options!()));

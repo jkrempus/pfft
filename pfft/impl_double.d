@@ -8,39 +8,25 @@ import pfft.fft_impl;
 
 version(SSE_AVX)
 {
-    import 
-        sse = pfft.sse_double, 
-        avx = pfft.avx_double, 
-        implementation = pfft.detect_avx;
+    import pfft.detect_avx;
+    import sse = pfft.sse_double, avx = pfft.avx_double;
 
-    alias TypeTuple!(FFT!(sse.Vector!(), sse.Options!()), avx) FFTs;
+    mixin Instantiate!(
+        "double", get, FFT!(sse.Vector!(), sse.Options!()), avx);
 }
 else
 {
     version(Scalar)
-    {
         import pfft.scalar_double;
-    }
     else version(Neon)
-    {
         import pfft.neon_double;
-    }
     else version(StdSimd)
-    {
         import pfft.stdsimd;
-    }
     else version(AVX)
-    {
         import pfft.avx_double;
-    }
     else
-    {
         import pfft.sse_double;
-    }
     
-    alias FFT!(Vector!(),Options!()) F;
-    alias TypeTuple!F FFTs;
+    mixin Instantiate!("double", 0, FFT!(Vector!(),Options!()));
 }
-
-mixin Instantiate!"double";
 

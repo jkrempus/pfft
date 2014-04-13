@@ -1666,18 +1666,13 @@ template FFT(alias V, alias Options, bool disable_large = false)
     size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
 }
 
-mixin template Instantiate(string impl_name)
+template Instantiate(string api_name, alias impl, FFTs...)
 {
-    static if(is(typeof(implementation)))
-        alias impl = implementation.get;
-    else
-        enum impl = 0;
-
     alias FFTs[0] FFT0;
     alias FFT0.T T;
 
     import pfft.declarations;
-    alias Declarations!(impl_name, T) api;
+    alias Declarations!(api_name, T) api;
 
     pragma(mangle, api.set_implementation.mangleof)
     void set_implementation(int i)

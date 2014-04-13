@@ -507,6 +507,7 @@ void doit(string[] args)
         
         buildLib(pgo, dc, v, types, dcArgs, clib, addModule);
 
+        version(none)
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 rm(e.name);
