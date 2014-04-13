@@ -1,7 +1,5 @@
 module pfft.impl_real;
 
-import pfft.instantiate_declarations;
+import pfft.declarations;
     
-alias real T;
-
-mixin Instantiate!"real";
+mixin Declarations!("real", real);

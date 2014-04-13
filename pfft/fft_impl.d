@@ -1676,13 +1676,10 @@ mixin template Instantiate(string impl_name)
     alias FFTs[0] FFT0;
     alias FFT0.T T;
 
-    template Api()
-    {
-        import decl = pfft.instantiate_declarations;
-        mixin decl.Instantiate!(impl_name);
-    }
+    import pfft.declarations;
+    alias Declarations!(impl_name, T) api;
 
-    pragma(mangle, Api!().set_implementation.mangleof)
+    pragma(mangle, api.set_implementation.mangleof)
     void set_implementation(int i)
     {
         static if(is(typeof(implementation.set)))
@@ -1696,7 +1693,7 @@ mixin template Instantiate(string impl_name)
         else
         {
             enum name = names[0];
-            alias get_member!(Api!(), name) member;
+            alias get_member!(api, name) member;
 
             static if(is(member E : E*))
                 enum current = 
@@ -1720,5 +1717,5 @@ mixin template Instantiate(string impl_name)
         }
     }
 
-    mixin(code!(__traits(allMembers, Api!())));
+    mixin(code!(__traits(allMembers, api)));
 }

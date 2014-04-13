@@ -278,8 +278,7 @@ version(SSE_AVX)
     }
     else
     {
-        import pfft.instantiate_declarations;
-        alias float T;
-        mixin Instantiate!"float_avx";
+        import pfft.declarations;
+        mixin Declarations!("float_avx", float);
     }
 }

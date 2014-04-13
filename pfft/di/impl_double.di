@@ -1,7 +1,5 @@
 module pfft.impl_double;
 
-import pfft.instantiate_declarations;
+import pfft.declarations;
     
-alias double T;
-
-mixin Instantiate!"double";
+mixin Declarations!("double", double);

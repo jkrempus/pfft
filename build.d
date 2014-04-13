@@ -316,7 +316,7 @@ void copyIncludes(string[] types, bool clib)
     foreach(type; types)
         cp("../pfft/di/impl_"~type~".di", "include/pfft/");
  
-    cp("../pfft/instantiate_declarations.di", "include/pfft/");   
+    cp("../pfft/declarations.di", "include/pfft/");   
     cp("../pfft/stdapi.d", "include/pfft/");
     cp("../pfft/pfft.d", "include/pfft/");
     cp("../pfft/common_templates.d", "include/pfft/");

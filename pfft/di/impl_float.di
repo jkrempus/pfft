@@ -1,7 +1,5 @@
 module pfft.impl_float;
 
-import pfft.instantiate_declarations;
+import pfft.declarations;
     
-alias float T;
-
-mixin Instantiate!"float";
+mixin Declarations!("float", float);

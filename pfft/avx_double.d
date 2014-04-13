@@ -174,8 +174,7 @@ version(SSE_AVX)
     }
     else
     {
-        import pfft.instantiate_declarations;
-        alias double T;
-        mixin Instantiate!"double_avx";
+        import pfft.declarations;
+        mixin Declarations!("double_avx", double);
     }
 }
