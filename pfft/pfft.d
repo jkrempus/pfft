@@ -59,7 +59,7 @@ final class Fft(T)
 {
     mixin Import!T;
 
-    uint log2size;
+    size_t array_size;
     impl.MultidimTable table;
 
 /**
@@ -96,17 +96,15 @@ constructor.
  */
     this(size_t[] n...)
     {
-        auto log2n = new uint[n.length];
-        log2size = 0;
-        foreach(i; 0 .. log2n.length)
+        array_size = 1;
+        foreach(e; n)
         {
-            assert((n[i] & (n[i] - 1)) == 0);
-            log2n[i] = bsf(n[i]);
-            log2size += log2n[i];
+            assert((e & (e - 1)) == 0);
+            array_size *= e;
         }
 
-        auto size = impl.multidim_fft_table_size(log2n);
-        table = impl.multidim_fft_table(log2n, GC.malloc(size));
+        auto size = impl.multidim_fft_table_size(n.ptr, n.length);
+        table = impl.multidim_fft_table(n.ptr, n.length, GC.malloc(size));
     }
 
 /**
@@ -117,7 +115,7 @@ operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
     void fft(Array re, Array im)
     {
         assert(re.length == im.length); 
-        assert(re.length == (st!1 << log2size));
+        assert(re.length == array_size);
        
         impl.multidim_fft(re.ptr, im.ptr, table); 
     }
@@ -188,23 +186,22 @@ The Rfft constructor. The parameter is the size of data sets that $(D rfft) will
 operate on. I will refer to this number as n in the rest of the documentation
 for this class. All tables used in rfft are calculated in the constructor.
  */
-    this(size_t[] n ...)
+    this(size_t[] n_ ...)
     {
-        auto log2n = new uint[n.length];
+        auto n = n_.dup;
         size_t log2size = 0;
-        foreach(i; 0 .. log2n.length)
+        foreach(i; 0 .. n.length)
         {
             assert((n[i] & (n[i] - 1)) == 0);
-            log2n[i] = bsf(n[i]);
-            log2size += log2n[i];
+            log2size += bsf(n[i]);
         }
 
-        array_size = (st!1 << log2size) + (st!2 << (log2size - log2n[0]));
+        array_size = (st!1 << log2size) + (st!2 << (log2size - bsf(n[0])));
 
-        log2n[0]--;
+        n[0] /= 2;
 
-        auto size = impl.multidim_rfft_table_size(log2n);
-        table = impl.multidim_rfft_table(log2n, GC.malloc(size));
+        auto size = impl.multidim_rfft_table_size(n.ptr, n.length);
+        table = impl.multidim_rfft_table(n.ptr, n.length, GC.malloc(size));
     }
 
 /**

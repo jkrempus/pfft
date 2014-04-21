@@ -1687,6 +1687,15 @@ template FFT(alias V, alias Options, bool disable_large = false)
             table.itable);
     }
 
+    void multi_irfft()(T* data, RealMultiTable table)
+    {
+        MSFFT.irfft_complete(
+            cast(MSFFT.T*) data,
+            &table.multidim_table.tables[0],
+            table.rtable,
+            table.itable);
+    }
+
     size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
 }
 

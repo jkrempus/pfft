@@ -289,6 +289,8 @@ static if(!dynamicC)
         import direct = pfft.impl_float;
 }
 
+size_t[] pow2(uint[] a){ return a.map!("cast(size_t)1 << a").array; }
+
 struct DirectApi(Transform transform, bool isInverse, bool isMulti)
 if(transform == Transform.fft && !isMulti)
 {
@@ -308,8 +310,9 @@ if(transform == Transform.fft && !isMulti)
         _im = gc_aligned_array!T(1 << log2n);
         _re[] = 0;
         _im[] = 0;
-        auto size = d.multidim_fft_table_size(log2ns);
-        table = d.multidim_fft_table(log2ns, GC.malloc(size));
+        auto ns = pow2(log2ns);
+        auto size = d.multidim_fft_table_size(ns.ptr, ns.length);
+        table = d.multidim_fft_table(ns.ptr, ns.length, GC.malloc(size));
     }
     
     void compute()
@@ -344,8 +347,9 @@ if(transform == Transform.fft && isMulti)
         _im = gc_aligned_array!T(multi << log2n);
         _re[] = 0;
         _im[] = 0;
-        auto size = d.multi_fft_table_size(log2n);
-        table = d.multi_fft_table(log2n, GC.malloc(size));
+        auto n = cast(size_t) 1 << log2n;
+        auto size = d.multi_fft_table_size(n);
+        table = d.multi_fft_table(n, GC.malloc(size));
     }
     
     void compute()
@@ -378,8 +382,9 @@ if(transform == Transform.rfft && !isMulti)
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
         data[] = 0;
 
-        auto size = d.multidim_rfft_table_size(log2ns);
-        table = d.multidim_rfft_table(log2ns, gc_aligned_array(size).ptr);
+        auto ns = pow2(log2ns);
+        auto size = d.multidim_rfft_table_size(ns.ptr, ns.length);
+        table = d.multidim_rfft_table(ns.ptr, ns.length, gc_aligned_array(size).ptr);
     }
 
     void compute()
@@ -400,7 +405,6 @@ if(transform == Transform.rfft && isMulti)
     alias direct d; 
 
     T[] data;
-    d.MultiTable table;
     d.RealMultiTable real_table;
     uint log2multi;
     uint log2n;
@@ -414,18 +418,17 @@ if(transform == Transform.rfft && isMulti)
         log2n = log2ns.front;
         data = gc_aligned_array!T(multi * ((st!1 << log2n) + 2));
         data[] = 0;
-        auto size = d.multi_fft_table_size(log2n - 1);
-        table = d.multi_fft_table(log2n - 1, GC.malloc(size));
-        auto rsize = d.multi_real_table_size(log2n);
-        real_table = d.multi_rfft_table(log2n, GC.malloc(rsize));
+        auto n = cast(size_t) 1 << (log2n - 1);
+        auto rsize = d.multi_rtable_size(n);
+        real_table = d.multi_rfft_table(n, GC.malloc(rsize));
     }
 
     void compute()
     {
         static if(isInverse)
-            d.multi_fft(_im.ptr, _re.ptr, table);
+            enforce(0);
         else 
-            d.multi_rfft(data.ptr, rtable);
+            d.multi_rfft(data.ptr, real_table);
     }
 
     alias T delegate(size_t) Dg;
