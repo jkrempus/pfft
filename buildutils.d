@@ -499,7 +499,8 @@ private auto generateDeps(immutable(Arg)[] args, Compiler c)
 
     auto modules = args.filterType!(AT.module_);
 
-    args = args.excludeType!(AT.module_, AT.doc, AT.docDir, AT.docFile).array;
+    args = args.excludeType!(
+        AT.lib, AT.module_, AT.doc, AT.docDir, AT.docFile).array;
 
     auto depsFile = randomFileName();
     auto srcFile = randomFileName();

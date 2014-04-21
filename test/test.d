@@ -419,7 +419,7 @@ if(transform == Transform.rfft && isMulti)
         data = gc_aligned_array!T(multi * ((st!1 << log2n) + 2));
         data[] = 0;
         auto n = cast(size_t) 1 << (log2n - 1);
-        auto rsize = d.multi_rtable_size(n);
+        auto rsize = d.multi_rfft_table_size(n);
         real_table = d.multi_rfft_table(n, GC.malloc(rsize));
     }
 

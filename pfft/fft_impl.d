@@ -1668,7 +1668,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     alias MSFFT.RealMultidimTable RealMultiTable;
 
-    size_t multi_rtable_size()(size_t n)
+    size_t multi_rfft_table_size()(size_t n)
     {
         return MSFFT.multidim_rfft_table_size(&n, 1); 
     }
