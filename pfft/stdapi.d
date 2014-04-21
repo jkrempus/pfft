@@ -373,24 +373,23 @@ have the same number of elements and that number must be a power of two.
 
         auto n = numberOfElements(r);
         assert((n & (n - 1)) == 0);
-        n /= 2;
         auto log2n = bsr(n);
 
-        auto re = cached.re!T(n);
-        auto im = cached.im!T(n);
+        auto re = cached.re!T(n / 2);
+        auto im = cached.im!T(n / 2);
         auto rtable = cached.rtable!T(n);
 
-        deinterleave_array(log2n, r, re, im);
+        deinterleave_array(log2n - 1, r, re, im);
         impl!(T).raw_rfft1d(re, im, rtable);
-        interleave_array(log2n, ret, re, im);
+        interleave_array(log2n - 1, ret, re, im);
 
         ret[0].im = 0;
-        ret[n] = complex(im[0], 0); 
+        ret[n / 2] = complex(im[0], 0); 
 
-        foreach(i; 1 .. n)
+        foreach(i; 1 .. n / 2)
         {
-            ret[2 * n - i].re = ret[i].re;
-            ret[2 * n - i].im = -ret[i].im;
+            ret[n - i].re = ret[i].re;
+            ret[n - i].im = -ret[i].im;
         }
     }
 

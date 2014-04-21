@@ -1393,6 +1393,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             uint[max_ndim] log2n_mem = void;
             auto log2n = compute_log2n_table(nptr[0 .. nlen], log2n_mem);
+            if(is_real) log2n[0] -= 1;
 
             Alloc alloc = void; alloc.initialize();
             TC!is_real tc = void;
@@ -1407,6 +1408,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             {
                 uint[max_ndim] log2n_mem = void;
                 auto log2n = compute_log2n_table(nptr[0 .. nlen], log2n_mem);
+                if(is_real) log2n[0] -= 1;
 
                 Alloc alloc = void; alloc.initialize();
                 TC!is_real tc = void;

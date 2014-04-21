@@ -198,8 +198,6 @@ for this class. All tables used in rfft are calculated in the constructor.
 
         array_size = (st!1 << log2size) + (st!2 << (log2size - bsf(n[0])));
 
-        n[0] /= 2;
-
         auto size = impl.rfft_table_size(n.ptr, n.length);
         table = impl.rfft_table(n.ptr, n.length, GC.malloc(size));
     }

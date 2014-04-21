@@ -378,7 +378,6 @@ if(transform == Transform.rfft && !isMulti)
         log2ns = log2ns.dup;
         auto log2m = 0.reduce!sum(log2ns[1 .. $]);
         auto log2n = log2m + log2ns.front;
-        log2ns.front -= 1;
         data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
         data[] = 0;
 
@@ -418,7 +417,7 @@ if(transform == Transform.rfft && isMulti)
         log2n = log2ns.front;
         data = gc_aligned_array!T(multi * ((st!1 << log2n) + 2));
         data[] = 0;
-        auto n = cast(size_t) 1 << (log2n - 1);
+        auto n = cast(size_t) 1 << log2n;
         auto rsize = d.multi_rfft_table_size(n);
         real_table = d.multi_rfft_table(n, GC.malloc(rsize));
     }
