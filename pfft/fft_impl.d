@@ -106,15 +106,15 @@ template FFT(alias V, alias Options, bool disable_large = false)
     alias V.Twiddle Twiddle;
 
     enum isScalar = is(typeof(V.isScalar));
-    static if(!isScalar)
-        alias FFT!(Scalar!(T, V), Options) SFFT;
-    else
+    static if(isScalar)
         alias FFT!(V, Options, disable_large) SFFT;
- 
-    static if(!isScalar)
-        alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
     else
+        alias FFT!(Scalar!(T, V), Options) SFFT; //TODO: Should I pass disable_large?
+ 
+    static if(isScalar)
         alias FFT!(V, Options, disable_large) MSFFT;
+    else
+        alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
 
     alias 
         SelectImplementation!(FFT!(V, Options, disable_large), MSFFT).call
@@ -1343,8 +1343,17 @@ template FFT(alias V, alias Options, bool disable_large = false)
             alias select!(is_real, RealTableCreator, TableCreator) TC;
         }
 
-        size_t size(bool is_real)(uint[] log2n)
+        uint[] compute_log2n_table(size_t[] n, uint[] log2n)
         {
+            foreach(i; 0 .. n.length) log2n[i] = bsf(n[i]);
+            return log2n[0 .. n.length];
+        }
+
+        size_t size(bool is_real)(size_t* nptr, size_t nlen)
+        {
+            uint[max_ndim] log2n_mem = void;
+            auto log2n = compute_log2n_table(nptr[0 .. nlen], log2n_mem);
+
             Alloc alloc = void; alloc.initialize();
             TC!is_real tc = void;
             tc.add_to(&alloc, log2n);
@@ -1354,8 +1363,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
         template table(bool is_real)
         {
             typeof(TC!is_real.create(null, null))
-            table(uint[] log2n, void* ptr)
+            table(size_t* nptr, size_t nlen, void* ptr)
             {
+                uint[max_ndim] log2n_mem = void;
+                auto log2n = compute_log2n_table(nptr[0 .. nlen], log2n_mem);
+
                 Alloc alloc = void; alloc.initialize();
                 TC!is_real tc = void;
                 tc.add_to(&alloc, log2n);
@@ -1628,11 +1640,19 @@ template FFT(alias V, alias Options, bool disable_large = false)
             min(next_pow2(vec.sizeof), next_pow2(T.sizeof * n)), 
             (void*).sizeof);
     }
-    
+   
     alias MSFFT.Table MultiTable;
-    alias MSFFT.fft_table_size multi_fft_table_size;
-    alias MSFFT.fft_table multi_fft_table;
     
+    size_t multi_fft_table_size()(size_t n)
+    {
+        return MSFFT.fft_table_size(bsf(n));
+    }
+
+    MultiTable multi_fft_table(size_t n, void* p)
+    {
+        return MSFFT.fft_table(bsf(n), p); 
+    }
+
     void multi_fft()(T* re, T* im, MultiTable table)
     {
         MSFFT.fft(
@@ -1646,21 +1666,25 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return MSFFT.T.sizeof / T.sizeof;
     }
 
-    alias MSFFT.RTable MultiRTable;
-    alias MSFFT.rtable_size multi_rtable_size;
-    alias MSFFT.rfft_table multi_rfft_table;
-    alias MSFFT.ITable MultiITable;
-    alias MSFFT.itable_size multi_itable_size;
-    alias MSFFT.interleave_table multi_interleave_table;
-    
-    void multi_rfft_complete()(
-        T* data, MultiTable table, MultiRTable rtable, MultiITable itable)
+    alias MSFFT.RealMultidimTable RealMultiTable;
+
+    size_t multi_rtable_size()(size_t n)
+    {
+        return MSFFT.multidim_rfft_table_size(&n, 1); 
+    }
+  
+    RealMultiTable multi_rfft_table()(size_t n, void* p)
+    {
+        return MSFFT.multidim_rfft_table(&n, 1, p);
+    }
+  
+    void multi_rfft()(T* data, RealMultiTable table)
     {
         MSFFT.rfft_complete(
             cast(MSFFT.T*) data,
-            cast(MSFFT.Table) table,
-            cast(MSFFT.RTable) rtable,
-            cast(MSFFT.ITable) itable);
+            &table.multidim_table.tables[0],
+            table.rtable,
+            table.itable);
     }
 
     size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
@@ -1699,7 +1723,7 @@ template Instantiate(string api_name, alias impl, FFTs...)
                 __traits(hasMember, FFT0, name))
             {
                 enum current =
-                    "pragma(mangle, \""~member.mangleof~"\") "~ 
+                    "extern(C) pragma(mangle, \""~member.mangleof~"\") "~ 
                     "auto "~name~"("~generate_arg_list!(member, true)~
                     "){ return cast("~ ReturnType!member.stringof~
                     ") SelectImplementation!FFTs.call!(\""~name~"\")(impl, "~

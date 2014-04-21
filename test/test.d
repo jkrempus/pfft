@@ -401,8 +401,7 @@ if(transform == Transform.rfft && isMulti)
 
     T[] data;
     d.MultiTable table;
-    d.MultiRTable rtable;
-    d.MultiITable itable;
+    d.RealMultiTable real_table;
     uint log2multi;
     uint log2n;
 
@@ -417,22 +416,16 @@ if(transform == Transform.rfft && isMulti)
         data[] = 0;
         auto size = d.multi_fft_table_size(log2n - 1);
         table = d.multi_fft_table(log2n - 1, GC.malloc(size));
-        auto rsize = d.multi_rtable_size(log2n);
-        rtable = d.multi_rfft_table(log2n, GC.malloc(rsize));
-        auto isize = d.multi_itable_size(log2n);
-        itable = d.multi_interleave_table(log2n, GC.malloc(isize));
+        auto rsize = d.multi_real_table_size(log2n);
+        real_table = d.multi_rfft_table(log2n, GC.malloc(rsize));
     }
-    
+
     void compute()
     {
         static if(isInverse)
-        {
-//            d.multi_fft(_im.ptr, _re.ptr, table);
-        }
+            d.multi_fft(_im.ptr, _re.ptr, table);
         else 
-        {
-            d.multi_rfft_complete(data.ptr, table, rtable, itable);
-        }
+            d.multi_rfft(data.ptr, rtable);
     }
 
     alias T delegate(size_t) Dg;

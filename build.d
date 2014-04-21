@@ -94,6 +94,7 @@ void buildTests(
     foreach(type; types)
         dcArgs
             .src(baseDir~"/test/test")
+            .module_("pfft.stdapi", "pfft.pfft")
             .version_(capitalize(type))
             .output("test_"~type)
             .conditional(dynamic,
@@ -109,7 +110,7 @@ void buildTests(
                 .version_("BenchFftw")
                 .linkTo("fftw3"~fftwSuffixes[type]))
             .conditional(isLinux, argList.linkTo("dl"))
-            .run(c);
+            .build(c, false);
 }
 
 void runBenchmarks(string[] types, Version v, string api = "")
@@ -187,7 +188,7 @@ void buildLibImpl(
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
         types.map!(t => "pfft.impl_"~t).array ~
         ["pfft.fft_impl", "pfft.shuffle", "pfft.common"] ~
-        when(!clib, ["pfft.stdapi", "pfft.pfft"]) ~ 
+        //when(!clib, ["pfft.stdapi", "pfft.pfft"]) ~ 
         when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
 
     auto implObjs = v.additionalSIMD

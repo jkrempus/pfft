@@ -21,6 +21,15 @@ template ParamTypeTuple(alias f)
         return R.init;
     }
 
+    extern(C) auto params_struct(Ret, Params...)(Ret function(Params) f) 
+    {
+        struct R
+        {
+            Params p;
+        }
+        return R.init;
+    }
+
     static if(is(typeof(params_struct(&f))))
         alias f f_instance;
     else

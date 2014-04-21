@@ -62,13 +62,7 @@ else
     {
         n = cast(size_t) 1 << bsr(n); 
 
-        static if(is(typeof(sysconf)) && is(typeof(_SC_PAGESIZE)))
-            size_t page_size = sysconf(_SC_PAGESIZE);
-        else
-            // just take a guees in this case
-            enum page_size = 4096;
-
-        enum cache_line = 64;       
+        size_t page_size = pagesize();       
 
         if(n < 5 * page_size)
             // align to cache line at most to avoid wasting memory 
@@ -124,14 +118,14 @@ package template cimpl(T)
 
     size_t table_size(size_t* n, size_t nlen)
     {
-        uint[8 * size_t.sizeof] log2n_mem;
+        uint[8 * size_t.sizeof] log2n_mem = void;
         auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
         return impl.multidim_fft_table_size(log2n);
     }
     
     Table!T * table(size_t* n, size_t nlen, void* mem)
     {
-        uint[8 * size_t.sizeof] log2n_mem;
+        uint[8 * size_t.sizeof] log2n_mem = void;
         auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
 
         if(mem is null)
@@ -163,7 +157,7 @@ package template cimpl(T)
 
     size_t rtable_size(size_t* n, size_t nlen)
     {
-        uint[8 * size_t.sizeof] log2n_mem;
+        uint[8 * size_t.sizeof] log2n_mem = void;
         auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
         log2n[0]--;
         return impl.multidim_rfft_table_size(log2n);
@@ -171,7 +165,7 @@ package template cimpl(T)
     
     RTable!T * rtable(size_t* n, size_t nlen, void* mem)
     {
-        uint[8 * size_t.sizeof] log2n_mem;
+        uint[8 * size_t.sizeof] log2n_mem = void;
         auto log2n = compute_log2n_table(n, nlen, log2n_mem.ptr);
         log2n[0]--;
 
