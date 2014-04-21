@@ -300,7 +300,7 @@ if(transform == Transform.fft && !isMulti)
     T[] _re;
     T[] _im;
     d.TransposeBuffer tbuf;
-    d.MultidimTable table;
+    d.Table table;
     int log2n;
 
     this(uint[] log2ns)
@@ -311,16 +311,16 @@ if(transform == Transform.fft && !isMulti)
         _re[] = 0;
         _im[] = 0;
         auto ns = pow2(log2ns);
-        auto size = d.multidim_fft_table_size(ns.ptr, ns.length);
-        table = d.multidim_fft_table(ns.ptr, ns.length, GC.malloc(size));
+        auto size = d.fft_table_size(ns.ptr, ns.length);
+        table = d.fft_table(ns.ptr, ns.length, GC.malloc(size));
     }
     
     void compute()
     {
         static if(isInverse)
-            d.multidim_fft(_im.ptr, _re.ptr, table);
+            d.fft(_im.ptr, _re.ptr, table);
         else 
-            d.multidim_fft(_re.ptr, _im.ptr, table);
+            d.fft(_re.ptr, _im.ptr, table);
     }
 
     mixin splitElementAccess!();
@@ -370,7 +370,7 @@ if(transform == Transform.rfft && !isMulti)
     alias direct d; 
 
     T[] data;
-    d.RealMultidimTable table;
+    d.RealTable table;
 
     this(uint[] log2ns)
     {
@@ -383,16 +383,16 @@ if(transform == Transform.rfft && !isMulti)
         data[] = 0;
 
         auto ns = pow2(log2ns);
-        auto size = d.multidim_rfft_table_size(ns.ptr, ns.length);
-        table = d.multidim_rfft_table(ns.ptr, ns.length, gc_aligned_array(size).ptr);
+        auto size = d.rfft_table_size(ns.ptr, ns.length);
+        table = d.rfft_table(ns.ptr, ns.length, gc_aligned_array(size).ptr);
     }
 
     void compute()
     {
         static if(isInverse)
-            d.multidim_irfft(data.ptr, table);
+            d.irfft(data.ptr, table);
         else
-            d.multidim_rfft(data.ptr, table);
+            d.rfft(data.ptr, table);
     }
 
     mixin realSplitElementAccess!();

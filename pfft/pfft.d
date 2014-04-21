@@ -60,7 +60,7 @@ final class Fft(T)
     mixin Import!T;
 
     size_t array_size;
-    impl.MultidimTable table;
+    impl.Table table;
 
 /**
 A struct that wraps an array of T. The reason behind this struct is
@@ -103,8 +103,8 @@ constructor.
             array_size *= e;
         }
 
-        auto size = impl.multidim_fft_table_size(n.ptr, n.length);
-        table = impl.multidim_fft_table(n.ptr, n.length, GC.malloc(size));
+        auto size = impl.fft_table_size(n.ptr, n.length);
+        table = impl.fft_table(n.ptr, n.length, GC.malloc(size));
     }
 
 /**
@@ -117,7 +117,7 @@ operates in place - the result is saved back to $(D_PARAM re) and $(D_PARAM im).
         assert(re.length == im.length); 
         assert(re.length == array_size);
        
-        impl.multidim_fft(re.ptr, im.ptr, table); 
+        impl.fft(re.ptr, im.ptr, table); 
     }
 
 /**
@@ -178,7 +178,7 @@ final class Rfft(T)
     mixin Import!T;
 
     size_t array_size;
-    impl.RealMultidimTable table;
+    impl.RealTable table;
     alias Fft!(T).Array Array;
 
 /**
@@ -200,8 +200,8 @@ for this class. All tables used in rfft are calculated in the constructor.
 
         n[0] /= 2;
 
-        auto size = impl.multidim_rfft_table_size(n.ptr, n.length);
-        table = impl.multidim_rfft_table(n.ptr, n.length, GC.malloc(size));
+        auto size = impl.rfft_table_size(n.ptr, n.length);
+        table = impl.rfft_table(n.ptr, n.length, GC.malloc(size));
     }
 
 /**
@@ -225,7 +225,7 @@ The length of the array must be equal to n.
     void rfft(Array data)
     {
         assert(data.length == array_size);
-        impl.multidim_rfft(data.ptr, table);
+        impl.rfft(data.ptr, table);
     }
 
 /**
@@ -243,7 +243,7 @@ The length of the array must be equal to n.
     void irfft(Array data)
     {
         assert(data.length == array_size);
-        impl.multidim_irfft(data.ptr, table);
+        impl.irfft(data.ptr, table);
     }
 
 /// An alias for Fft!T.scale

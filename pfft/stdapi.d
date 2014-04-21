@@ -215,25 +215,25 @@ struct Cached
         return entries.ptr + nsizes * typeIndex!T + log2n;
     }
 
-    impl!T.MultidimTable table(T)(size_t n)
+    impl!T.Table table(T)(size_t n)
     {
         auto e = entry!T(bsr(n));
         if(!e.table)
         {
-            auto mem = GC.malloc(impl!T.multidim_fft_table_size(&n, 1));
-            e.table = cast(void*) impl!T.multidim_fft_table(&n, 1, mem);
+            auto mem = GC.malloc(impl!T.fft_table_size(&n, 1));
+            e.table = cast(void*) impl!T.fft_table(&n, 1, mem);
         }
 
         return cast(typeof(return)) e.table; 
     }
 
-    impl!T.RealMultidimTable rtable(T)(size_t n)
+    impl!T.RealTable rtable(T)(size_t n)
     {
         auto e = entry!T(bsr(n));
         if(!e.rtable)
         {
-            auto mem = GC.malloc(impl!T.multidim_rfft_table_size(&n, 1));
-            e.rtable = cast(void*) impl!T.multidim_rfft_table(&n, 1, mem);
+            auto mem = GC.malloc(impl!T.rfft_table_size(&n, 1));
+            e.rtable = cast(void*) impl!T.rfft_table(&n, 1, mem);
         }
 
         return cast(typeof(return)) e.rtable; 
@@ -322,7 +322,7 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         auto re = cached.re!T(n);
         auto im = cached.im!T(n);
-        auto multidim_table = cached.table!T(n);
+        auto table = cached.table!T(n);
 
 
         static if(isComplex!(ElementType!R))
@@ -339,13 +339,13 @@ Fft constructor. nmax is there just for compatibility with std.numeric.Fft.
 
         static if(inverse)
         {
-            impl!(T).multidim_fft(im, re, multidim_table);
+            impl!(T).fft(im, re, table);
             impl!(T).scale(re, n, cast(T) 1 / n);
             impl!(T).scale(im, n, cast(T) 1 / n);
         }
         else
         {
-            impl!(T).multidim_fft(re, im, multidim_table);
+            impl!(T).fft(re, im, table);
         }
 
         interleave_array(log2n, ret, re, im);
@@ -381,7 +381,7 @@ have the same number of elements and that number must be a power of two.
         auto rtable = cached.rtable!T(n);
 
         deinterleave_array(log2n, r, re, im);
-        impl!(T).raw_rfft(re, im, rtable);
+        impl!(T).raw_rfft1d(re, im, rtable);
         interleave_array(log2n, ret, re, im);
 
         ret[0].im = 0;

@@ -5,6 +5,7 @@
 
 module pfft.fft_impl;
 
+import core.bitop, core.stdc.stdlib;
 public import pfft.shuffle;
 
 enum Action
@@ -20,6 +21,7 @@ enum Action
 }
 
 import pfft.profile;
+   
 mixin ProfileMixin!Action;
 
 //nothrow:
@@ -95,8 +97,6 @@ template FFT(alias V, alias Options, bool disable_large = false)
 {
     static assert(!(Options.passes_per_recursive_call & 1));
 
-    import core.bitop, core.stdc.stdlib;
-   
     alias BitReverse!(V, Options) BR;
     alias Columns!(V) Col;
     
@@ -111,15 +111,6 @@ template FFT(alias V, alias Options, bool disable_large = false)
     else
         alias FFT!(Scalar!(T, V), Options) SFFT; //TODO: Should I pass disable_large?
  
-    static if(isScalar)
-        alias FFT!(V, Options, disable_large) MSFFT;
-    else
-        alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
-
-    alias 
-        SelectImplementation!(FFT!(V, Options, disable_large), MSFFT).call
-        multi; 
-
     enum static_size_limit = 
         2 * max(log2(vec_size), V.log2_bitreverse_chunk_size);
 
@@ -300,7 +291,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    struct TableValue
+    struct Table1dValue
     {
         Twiddle* twiddle;
         void* buffer; 
@@ -308,7 +299,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         uint log2n;
     }
 
-    alias TableValue* Table;
+    alias Table1dValue* Table1d;
     alias void* TransposeBuffer;
     
     size_t twiddle_table_size()(int log2n)
@@ -339,8 +330,8 @@ template FFT(alias V, alias Options, bool disable_large = false)
             log2n : 2 * Options.log2_bitreverse_large_chunk_size;
     }
 
-    void fft_table_add_pointers(
-        Table table, Table* table_ptr, Allocate!4* alloc, uint log2n)
+    void fft1d_table_add_pointers(
+        Table1d table, Table1d* table_ptr, Allocate!4* alloc, uint log2n)
     {
         alloc.add(&table.twiddle, twiddle_table_size(log2n));
         alloc.add(&table.buffer, tmp_buffer_size(log2n));
@@ -348,15 +339,15 @@ template FFT(alias V, alias Options, bool disable_large = false)
         alloc.add(table_ptr, 1);
     }
 
-    size_t fft_table_size()(uint log2n)
+    size_t fft1d_table_size()(uint log2n)
     {
         Allocate!4 alloc = void; alloc.initialize();
-        TableValue tv;
-        fft_table_add_pointers(&tv, null, &alloc, log2n);
+        Table1dValue tv;
+        fft1d_table_add_pointers(&tv, null, &alloc, log2n);
         return alloc.size(); 
     }
   
-    void init_fft_table(uint log2n, Table t)
+    void init_fft1d_table(uint log2n, Table1d t)
     {
         t.log2n = log2n;
         if(log2n > 0)
@@ -368,21 +359,21 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    Table fft_table()(uint log2n, void * p)
+    Table1d fft1d_table()(uint log2n, void * p)
     {   
         Allocate!4 alloc = void; alloc.initialize();
-        TableValue tv;
-        Table t;
-        fft_table_add_pointers(&tv, &t, &alloc, log2n);
+        Table1dValue tv;
+        Table1d t;
+        fft1d_table_add_pointers(&tv, &t, &alloc, log2n);
         alloc.allocate(p);
         *t = tv;
-        init_fft_table(log2n, t); 
+        init_fft1d_table(log2n, t); 
         return t;
     }
 
-    uint fft_table_log2n(Table table){ return table.log2n; }
+    uint fft1d_table_log2n(Table1d table){ return table.log2n; }
 
-    void* fft_table_memory(Table table){ return cast(void*) table.twiddle; }
+    void* fft1d_table_memory(Table1d table){ return cast(void*) table.twiddle; }
 
     /*static void two_passes_inner(
         vec* pr, vec* pi, size_t k0, size_t k1, size_t k2, size_t k3,
@@ -443,7 +434,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         pi[k3] = i3;
     };
  
-    @always_inline void fft_pass_bit_reversed()(
+    @always_inline void fft1d_pass_bit_reversed()(
         vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -465,7 +456,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
  
-    @always_inline void fft_two_passes_bit_reversed()(
+    @always_inline void fft1d_two_passes_bit_reversed()(
         vec* pr, vec* pi, vec* pend, vec* table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -491,7 +482,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    @always_inline void first_fft_passes()(vec* pr, vec* pi, size_t n)
+    @always_inline void first_fft1d_passes()(vec* pr, vec* pi, size_t n)
     {
         size_t i0 = 0, i1 = i0 + n/4, i2 = i1 + n/4, i3 = i2 + n/4, iend = i1;
 
@@ -523,7 +514,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
         
-    @always_inline void fft_pass()(
+    @always_inline void fft1d_pass()(
         vec *pr, vec *pi, vec *pend, Twiddle *table, size_t m2)
     {
         size_t m = m2 + m2;
@@ -546,19 +537,19 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    @always_inline void fft_two_passes(Tab...)(
+    @always_inline void fft1d_two_passes(Tab...)(
         vec *pr, vec *pi, vec *pend, size_t m2, Tab tab)
     {
         // When this function is called with tab.length == 2 on DMD, it 
         // sometimes gives an incorrect result (for example when building with 
-        // SSE on 64 bit Linux and runnitg test_float  pfft "14".), so lets's 
-        // use fft_pass instead.
+        // SSE on 64 bit Linux and runnitg test_float  pfft1d "14".), so lets's 
+        // use fft1d_pass instead.
     
         version(DigitalMars)
             static if(tab.length == 2)
             {
-               fft_pass(pr, pi, pend, tab[0], m2);
-               fft_pass(pr, pi, pend, tab[1], m2 / 2);
+               fft1d_pass(pr, pi, pend, tab[0], m2);
+               fft1d_pass(pr, pi, pend, tab[1], m2 / 2);
                return;
             }
 
@@ -606,7 +597,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    @always_inline void fft_passes_bit_reversed()(
+    @always_inline void fft1d_passes_bit_reversed()(
         vec* re, vec* im, size_t N, vec* table, size_t start_stride)
     {
         //version(DigitalMars)
@@ -621,18 +612,18 @@ template FFT(alias V, alias Options, bool disable_large = false)
         static if(useTwoPasses)
             for(; m2 < N / 2; m2 <<= 2)
             {
-                fft_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
+                fft1d_two_passes_bit_reversed(re, im, re_end, table, m2 * 2);
                 table += 6 * m2;
             }
 
         for(; m2 < N; m2 <<= 1)
         {
-            fft_pass_bit_reversed(re, im, re_end, table, m2);
+            fft1d_pass_bit_reversed(re, im, re_end, table, m2);
             table += m2 + m2;
         }
     }
     
-    @always_inline void fft_passes(bool compact_table)(
+    @always_inline void fft1d_passes(bool compact_table)(
         vec* re, vec* im, size_t N, size_t end_stride, Twiddle* table)
     {
         vec * pend = re + N;
@@ -653,7 +644,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         if(m2 >= end_stride * 2)
         {
-            first_fft_passes(re, im, N);
+            first_fft1d_passes(re, im, N);
             
             m2 >>= 2;
 
@@ -667,9 +658,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
             for (; m2 >= end_stride * 2; m2 >>= 2)
             {
                 static if(compact_table)
-                    fft_two_passes(re, im, pend, m2, table, table);
+                    fft1d_two_passes(re, im, pend, m2, table, table);
                 else
-                    fft_two_passes(re, im, pend, m2, table);
+                    fft1d_two_passes(re, im, pend, m2, table);
 
                 nextRow(table, tableRowLen);
                 nextRow(table, tableRowLen);
@@ -679,7 +670,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         for (; m2 >= end_stride; m2 >>= 1)
         {
-            fft_pass(re, im, pend, table, m2);
+            fft1d_pass(re, im, pend, table, m2);
             nextRow(table, tableRowLen);
         }
 
@@ -720,7 +711,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         V.interleave(ai, bi, ai, bi);
     }
 
-    @always_inline void fft_passes_fractional()(
+    @always_inline void fft1d_passes_fractional()(
         vec * pr, vec * pi, vec * pend, Twiddle * table, size_t tableI)
     {
         static if(is(typeof(V.transpose!2)))
@@ -743,14 +734,14 @@ template FFT(alias V, alias Options, bool disable_large = false)
         else
             for (size_t m2 = vec_size >> 1; m2 > 0 ; m2 >>= 1)
             {
-                SFFT.fft_pass(
+                SFFT.fft1d_pass(
                     cast(T*) pr, cast(T*) pi, cast(T*)pend, table + tableI, m2);
                 
                 tableI *= 2;
             }
     }
 
-    @always_inline void fft_passes_strided(int l, int chunk_size)(
+    @always_inline void fft1d_passes_strided(int l, int chunk_size)(
         vec * pr,
         vec * pi, 
         size_t N , 
@@ -775,7 +766,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         if(tableI  == 0 && nPasses >= 2)
         {
-            first_fft_passes(rbuf, ibuf, l*chunk_size);
+            first_fft1d_passes(rbuf, ibuf, l*chunk_size);
             m2 >>= 1;
             tableI *= 2;
             m2 >>= 1;
@@ -785,7 +776,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         static if(useTwoPasses)
             for(; m2 > 2 * m2_limit; m2 >>= 2)
             {
-                fft_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
+                fft1d_two_passes(rbuf, ibuf, rbuf + l*chunk_size, m2, 
                     table + tableI, table + 2 * tableI);
 
                 tableI *= 4;
@@ -793,7 +784,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         else 
             for(; m2 > m2_limit; m2 >>= 1)
             {
-                fft_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
+                fft1d_pass(rbuf, ibuf, rbuf + l*chunk_size, table + tableI, m2);
                 tableI *= 2;
             }
         
@@ -805,7 +796,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.strided_copy2);
     }
 
-    @always_inline void fft_passes_recursive_last()(
+    @always_inline void fft1d_passes_recursive_last()(
         vec* pr, vec*  pi, size_t N, Twiddle* table, size_t tableI)
     {
         profStart(Action.passes_last);
@@ -813,19 +804,19 @@ template FFT(alias V, alias Options, bool disable_large = false)
        
         static if(useTwoPasses)
             for (; m2 > 1 ; m2 >>= 2, tableI *= 4)
-                fft_two_passes(pr, pi, pr + N, m2, table + tableI, 
+                fft1d_two_passes(pr, pi, pr + N, m2, table + tableI, 
                     table + 2 * tableI);
 
         for (; m2 > 0 ; m2 >>= 1, tableI *= 2)
-            fft_pass(pr, pi, pr + N, table + tableI, m2);
+            fft1d_pass(pr, pi, pr + N, table + tableI, m2);
        
         static if(!isScalar) 
-            fft_passes_fractional(pr, pi, pr + N, table, tableI);
+            fft1d_passes_fractional(pr, pi, pr + N, table, tableI);
 
         profStop(Action.passes_last);
     }
 
-    void fft_passes_recursive()(
+    void fft1d_passes_recursive()(
         vec* pr,
         vec*  pi,
         size_t N,
@@ -852,7 +843,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             tableI = tableIOld;
 
-            fft_passes_strided!(l, chunk_size)(
+            fft1d_passes_strided!(l, chunk_size)(
                 pr + i, pi + i, N, table, tableI, tmp_buffer, m, nPasses);
         }
 
@@ -860,17 +851,17 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         for(int i = 0; i < (1 << nPasses); i++)
             if(nextN > (1<<Options.log2_optimal_n))
-                fft_passes_recursive(
+                fft1d_passes_recursive(
                     pr + nextN * i, pi  + nextN * i, nextN, 
                     table, tableI + 2 * i, tmp_buffer);
             else
-                fft_passes_recursive_last(
+                fft1d_passes_recursive_last(
                     pr + nextN * i, pi  + nextN * i, nextN, 
                     table, tableI + 2 * i);
 
     }
 
-    void static_size_fft(int log2n_elem)(vec* pr, vec* pi, Twiddle* table)
+    void static_size_fft1d(int log2n_elem)(vec* pr, vec* pi, Twiddle* table)
     {
         enum log2n = log2n_elem - log2(vec_size);  
         enum n = 1 << log2n;
@@ -962,14 +953,14 @@ template FFT(alias V, alias Options, bool disable_large = false)
             }
     }
 
-    void fft_small()(T * re, T * im, uint log2n, Table table)
+    void fft1d_small()(T * re, T * im, uint log2n, Table1d table)
     {
         // assert(log2n >= 2*log2(vec_size));
 
         size_t N = (1<<log2n);
         size_t n_br = n_bit_reversed_passes(log2n);       
  
-        fft_passes!false(
+        fft1d_passes!false(
             v(re), v(im), N / vec_size, 
             1 << (n_br - log2(vec_size)),
             table.twiddle + 2);
@@ -982,7 +973,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStopStart(Action.bit_reverse, Action.br_passes);
 
         static if(vec_size > 1) 
-            fft_passes_bit_reversed(
+            fft1d_passes_bit_reversed(
                 v(re), v(im) , N / vec_size, 
                 cast(vec*) table.twiddle, 
                 (N / vec_size) >> n_br);
@@ -990,11 +981,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.br_passes);
     }
 
-    void fft_large()(T * re, T * im, uint log2n, Table table)
+    void fft1d_large()(T * re, T * im, uint log2n, Table1d table)
     {
         size_t N = (1<<log2n);
  
-        fft_passes_recursive(
+        fft1d_passes_recursive(
             v(re), v(im), N / vec_size, table.twiddle, 0, table.buffer);
 
         profStart(Action.bit_reverse);
@@ -1004,7 +995,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.bit_reverse);
     }
 
-    @noinline void fft()(T * re, T * im, Table table)
+    @noinline void fft1d()(T * re, T * im, Table1d table)
     {
         uint log2n = table.log2n;
         switch(log2n)
@@ -1012,25 +1003,20 @@ template FFT(alias V, alias Options, bool disable_large = false)
             case 0: return;
 
             foreach(i; ints_up_to!(1, log2(vec_size) + 1, 1))
-                case i: return SFFT.static_size_fft!i(re, im, table.twiddle);
+                case i: return SFFT.static_size_fft1d!i(re, im, table.twiddle);
 
             foreach(i; ints_up_to!(log2(vec_size) + 1, static_size_limit, 1))
-                case i: return static_size_fft!i(
+                case i: return static_size_fft1d!i(
                     cast(vec*) re, cast(vec*) im, table.twiddle);
             
             default:
         }
 
         if( log2n < Options.large_limit || disable_large)
-            return fft_small(re, im, log2n, table);
+            return fft1d_small(re, im, log2n, table);
         else 
             static if(!disable_large)
-                fft_large(re, im, log2n, table);
-    }
-
-    @always_inline size_t log2_multi()()
-    {
-        return log2(T.sizeof / Twiddle.sizeof);
+                fft1d_large(re, im, log2n, table);
     }
 
     alias Twiddle* RTable;
@@ -1048,14 +1034,14 @@ template FFT(alias V, alias Options, bool disable_large = false)
         V.unaligned_store(&a, v);
     }));
 
-    RTable rfft_table()(int log2n, void *p) if(supports_real)
+    RTable rfft1d_table()(int log2n, void *p) if(supports_real)
     {
         if(log2n < 2)
             return cast(RTable) p;
         else if(st!1 << log2n < 4 * vec_size)
         {
             static if(!isScalar)
-                return SFFT.rfft_table(log2n, p);
+                return SFFT.rfft1d_table(log2n, p);
         }
 
         auto r = (cast(Pair*) p)[0 .. (st!1 << (log2n - 2))];
@@ -1068,12 +1054,12 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return cast(RTable) r.ptr;
     }
 
-    auto rfft_table()(int log2n, void *p) if(!supports_real)
+    auto rfft1d_table()(int log2n, void *p) if(!supports_real)
     {
-        return SFFT.rfft_table(log2n, p);
+        return SFFT.rfft1d_table(log2n, p);
     }
 
-    void rfft()(T* rr, T* ri, Table table, RTable rtable) 
+    void rfft1d()(T* rr, T* ri, Table1d table, RTable rtable) 
     {
         auto log2n = table.log2n + 1;
         if(log2n == 0)
@@ -1086,12 +1072,12 @@ template FFT(alias V, alias Options, bool disable_large = false)
             return;
         }
 
-        fft(rr, ri, table);
-        rfft_last_pass!false(rr, ri, log2n, rtable);
+        fft1d(rr, ri, table);
+        rfft1d_last_pass!false(rr, ri, log2n, rtable);
     }
 
-    void irfft()(
-        T* rr, T* ri, Table table, RTable rtable) 
+    void irfft1d()(
+        T* rr, T* ri, Table1d table, RTable rtable) 
     {
         auto log2n = table.log2n + 1;
         if(log2n == 0)
@@ -1107,16 +1093,16 @@ template FFT(alias V, alias Options, bool disable_large = false)
             return;
         }
 
-        rfft_last_pass!true(rr, ri, log2n, rtable);
-        fft(ri, rr, table);
+        rfft1d_last_pass!true(rr, ri, log2n, rtable);
+        fft1d(ri, rr, table);
     }
 
-    void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    void rfft1d_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(supports_real)
     {
         static if(!isScalar)
             if(st!1 << log2n < 4 * vec_size)
-                return SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable);       
+                return SFFT.rfft1d_last_pass!inverse(rr, ri, log2n, rtable);       
  
         static vec* v(T* a){ return cast(vec*) a; }
 
@@ -1191,10 +1177,10 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
     
-    void rfft_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    void rfft1d_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
     if(!supports_real)
     {
-        SFFT.rfft_last_pass!inverse(rr, ri, log2n, rtable); 
+        SFFT.rfft1d_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
     alias bool* ITable;
@@ -1215,23 +1201,77 @@ template FFT(alias V, alias Options, bool disable_large = false)
     alias Interleave!(V, interleaveChunkSize, false).interleaved_copy interleave_array;
     alias Interleave!(V, interleaveChunkSize, true).interleaved_copy deinterleave_array;
 
-    struct MultidimTableValue
+    static void scale()(T* data, size_t n, Twiddle factor)
     {
-        TableValue[] tables;
+        auto k = V.twiddle_to_vector(factor);
+        
+        foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
+            e = e * k;
+
+        foreach(ref e;  data[ n & ~(vec_size - 1) .. n])
+            e = e * factor;
+    }
+
+    static void cmul(T* dr, T* di, T* sr, T* si, size_t n)
+    {
+        foreach(i; 0 .. n / vec_size)
+        {
+            auto _dr = (cast(vec*) dr)[i]; 
+            auto _di = (cast(vec*) di)[i]; 
+            auto _sr = (cast(vec*) sr)[i]; 
+            auto _si = (cast(vec*) si)[i];
+            (cast(vec*) dr)[i] = _dr * _sr - _di * _si;
+            (cast(vec*) di)[i] = _dr * _si + _di * _sr;
+        }
+        foreach(i; n / vec_size * vec_size .. n)
+        {
+            auto _dr = dr[i]; 
+            auto _di = di[i]; 
+            auto _sr = sr[i]; 
+            auto _si = si[i];
+            dr[i] = _dr * _sr - _di * _si;
+            di[i] = _dr * _si + _di * _sr;
+        }
+    }
+
+    size_t alignment(size_t n)
+    {
+        return max(
+            min(next_pow2(vec.sizeof), next_pow2(T.sizeof * n)), 
+            (void*).sizeof);
+    }
+   
+    static if(isScalar)
+        alias FFT!(V, Options, disable_large) MSFFT;
+    else
+        alias FFT!(MultiScalar!(V), MultiScalarOptions!(Options, vec_size)) MSFFT;
+
+    alias 
+        SelectImplementation!(FFT!(V, Options, disable_large), MSFFT).call
+        multi; 
+
+    @always_inline size_t log2_multi()()
+    {
+        return log2(T.sizeof / Twiddle.sizeof);
+    }
+
+    struct TableValue
+    {
+        Table1dValue[] tables;
         TransposeBuffer buffer;
         void* memory;
     }
 
-    alias MultidimTableValue* MultidimTable;
+    alias TableValue* Table;
 
-    struct RealMultidimTableValue
+    struct RealTableValue
     {
-        MultidimTable multidim_table;
+        Table multidim_table;
         RTable rtable;
         ITable itable;
     }
 
-    alias RealMultidimTableValue* RealMultidimTable;
+    alias RealTableValue* RealTable;
 
     @always_inline uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
     {
@@ -1250,17 +1290,17 @@ template FFT(alias V, alias Options, bool disable_large = false)
             1 : 0;
     }
 
-    template MultidimTableImpl()
+    template TableImpl()
     {
         enum max_ndim = size_t.sizeof * 8;
         alias Allocate!(3 * max_ndim + 3) Alloc;
-        alias TableValue[max_ndim] TableMap; 
+        alias Table1dValue[max_ndim] TableMap; 
 
         struct TableCreator
         {
             TableMap table_map;
-            Table tables;
-            MultidimTable mt;
+            Table1d tables;
+            Table mt;
             TransposeBuffer buf;
 
             void add_to(Alloc* alloc, uint[] log2n)
@@ -1297,11 +1337,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 {
                     tables[i] = table_map[i];
                     auto s = multidim_multi_selection(log2n, i);
-                    multi!("init_fft_table")(s, log2n[i], &tables[i]);
+                    multi!("init_fft1d_table")(s, log2n[i], &tables[i]);
                 }
                     
                 tables[last] = table_map[last];
-                init_fft_table(log2n[last], &tables[last]);
+                init_fft1d_table(log2n[last], &tables[last]);
 
                 mt.tables = tables[0 .. log2n.length];
                 mt.buffer = buf;
@@ -1314,7 +1354,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             void* itable_memory;
             void* rtable_memory;
-            RealMultidimTable rmt;
+            RealTable rmt;
             TableCreator tc;
 
             void add_to(Alloc* alloc, uint log2n[])
@@ -1330,7 +1370,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             {
                 rmt.multidim_table = tc.create(log2n, ptr);
                 auto s = multidim_multi_selection(log2n, 0);
-                rmt.rtable = multi!"rfft_table"(s, log2n[0] + 1, rtable_memory);
+                rmt.rtable = multi!"rfft1d_table"(s, log2n[0] + 1, rtable_memory);
                 rmt.itable = multi!"interleave_table"(
                     s, log2n[0] + 1, itable_memory);
 
@@ -1376,27 +1416,27 @@ template FFT(alias V, alias Options, bool disable_large = false)
             }
         }
 
-        void* memory(MultidimTable table) { return table.memory; }
-        void* real_memory(RealMultidimTable table)
+        void* memory(Table table) { return table.memory; }
+        void* real_memory(RealTable table)
         {
             return table.multidim_table.memory;
         }
     }
 
-    alias MultidimTableImpl!().table!false multidim_fft_table;
-    alias MultidimTableImpl!().size!false multidim_fft_table_size;
-    alias MultidimTableImpl!().memory multidim_fft_table_memory;
+    alias TableImpl!().table!false fft_table;
+    alias TableImpl!().size!false fft_table_size;
+    alias TableImpl!().memory fft_table_memory;
 
-    alias MultidimTableImpl!().table!true multidim_rfft_table;
-    alias MultidimTableImpl!().size!true multidim_rfft_table_size;
-    alias MultidimTableImpl!().real_memory multidim_rfft_table_memory;
+    alias TableImpl!().table!true rfft_table;
+    alias TableImpl!().size!true rfft_table_size;
+    alias TableImpl!().real_memory rfft_table_memory;
 
     @always_inline void fft_transposed()(
         T* re,
         T* im,
         int log2stride, 
         int log2m,
-        Table table,
+        Table1d table,
         TransposeBuffer buffer)
     {
         auto n = st!1 << table.log2n;
@@ -1413,7 +1453,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             foreach(i; 0 .. 2)
                 col[i].load();
 
-            fft(col[0].column, col[1].column, table);
+            fft1d(col[0].column, col[1].column, table);
 
             foreach(i; 0 .. 2)
                 col[i].save();
@@ -1425,7 +1465,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         T* p,
         int log2stride, 
         int log2m,
-        Table table,
+        Table1d table,
         TransposeBuffer buffer,
         RTable rtable,
         ITable itable)
@@ -1440,13 +1480,13 @@ template FFT(alias V, alias Options, bool disable_large = false)
             col.load();
             static if(inverse)
             {
-                irfft(col.column, col.column + n, table, rtable);
+                irfft1d(col.column, col.column + n, table, rtable);
                 interleave(col.column, table.log2n + 1, itable);
             }
             else
             {
                 deinterleave(col.column, table.log2n + 1, itable);
-                rfft(col.column, col.column + n, table, rtable);
+                rfft1d(col.column, col.column + n, table, rtable);
             }
             col.save();
         }
@@ -1482,22 +1522,22 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return maxsz;
     }
 
-    void multidim_fft()(T* re, T* im, MultidimTable multidim_table)
+    void fft()(T* re, T* im, Table multidim_table)
     {
         auto tables = multidim_table.tables;
         if(tables.length == 0)
             return;
         else if(tables.length == 1)
-            return fft(re, im, &tables[0]);
+            return fft1d(re, im, &tables[0]);
 
         auto buf = multidim_table.buffer;
         auto log2ns = tables.map!(a => a.log2n);
         auto len = st!1 << log2ns.sum;
         int log2m = log2ns.dropExactly(1).sum;
         auto m = log2m.exp2;
-        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        auto next_table = TableValue(tables[1 .. $], buf, null);
         foreach(i; 0 .. tables[0].log2n.exp2)
-            multidim_fft(re + i * m, im + i * m, &next_table);
+            fft(re + i * m, im + i * m, &next_table);
 
         auto selection = multidim_multi_selection(log2ns, 0);
         auto l2m = multi!("log2_multi")(selection);
@@ -1505,41 +1545,36 @@ template FFT(alias V, alias Options, bool disable_large = false)
             selection, re, im, log2m - l2m, log2m - l2m, &tables[0], buf);
     }
 
-    void rfft_complete()(
-        T* p, Table table, RTable rtable, ITable itable)
+    void rfft1d_complete()(
+        T* p, Table1d table, RTable rtable, ITable itable)
     {
         deinterleave(p, table.log2n + 1, itable);
         auto n = table.log2n.exp2;
-        rfft(p, p + n, table, rtable);
+        rfft1d(p, p + n, table, rtable);
         memmove(p + n + 2, p + n + 1, n * T.sizeof);
         p[n + 1] = 0;
         p[2 * n + 1] = 0;
     }
 
-    void irfft_complete()(
-        T* p, Table table, RTable rtable, ITable itable)
+    void irfft1d_complete()(
+        T* p, Table1d table, RTable rtable, ITable itable)
     {
         auto n = table.log2n.exp2;
         memmove(p + n + 1, p + n + 2, n * T.sizeof);
         p[2 * n] = 0;
         p[2 * n + 1] = 0;
-        irfft(p, p + n, table, rtable);
+        irfft1d(p, p + n, table, rtable);
         interleave(p, table.log2n + 1, itable);
     }
 
-    void raw_rfft()(T* re, T* im, RealMultidimTable rmt)
-    {
-        rfft(re, im, &rmt.multidim_table.tables[0], rmt.rtable);
-    }
-
-    void multidim_rfft()(T* p, RealMultidimTable rmt)
+    void rfft()(T* p, RealTable rmt)
     {
         auto multidim_table = rmt.multidim_table;
         auto tables = multidim_table.tables;
         if(tables.length == 0)
             return;
         else if(tables.length == 1)
-            return rfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
+            return rfft1d_complete(p, &tables[0], rmt.rtable, rmt.itable);
 
         auto n = tables[0].log2n.exp2;
         auto log2ns = tables.map!(a => a.log2n);
@@ -1562,19 +1597,19 @@ template FFT(alias V, alias Options, bool disable_large = false)
         memset(im_end - m, 0, m * T.sizeof);
         memset(im, 0, m * T.sizeof);
 
-        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        auto next_table = TableValue(tables[1 .. $], buf, null);
         foreach(i; 0 .. n + 1)
-            multidim_fft(p + i * m, im + i * m, &next_table);
+            fft(p + i * m, im + i * m, &next_table);
     }
 
-    void multidim_irfft()(T* p, RealMultidimTable rmt)
+    void irfft()(T* p, RealTable rmt)
     {
         auto multidim_table = rmt.multidim_table;
         auto tables = multidim_table.tables;
         if(tables.length == 0)
             return;
         else if(tables.length == 1)
-            return irfft_complete(p, &tables[0], rmt.rtable, rmt.itable);
+            return irfft1d_complete(p, &tables[0], rmt.rtable, rmt.itable);
 
         auto n = tables[0].log2n.exp2;
         auto log2ns = tables.map!(a => a.log2n);
@@ -1584,9 +1619,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
         auto im_end = im + m * (n + 1);
         auto buf = multidim_table.buffer;
 
-        auto next_table = MultidimTableValue(tables[1 .. $], buf, null);
+        auto next_table = TableValue(tables[1 .. $], buf, null);
         foreach(i; 0 .. n + 1)
-            multidim_fft(im + i * m, p + i * m, &next_table);
+            fft(im + i * m, p + i * m, &next_table);
 
         foreach(i; 0 .. n - 1)
             memcpy(im + i * m, im + (i + 1) * m, m * T.sizeof);
@@ -1601,64 +1636,21 @@ template FFT(alias V, alias Options, bool disable_large = false)
             &tables[0], buf, rmt.rtable, rmt.itable);
     }
 
-    static void scale()(T* data, size_t n, Twiddle factor)
-    {
-        auto k = V.twiddle_to_vector(factor);
-        
-        foreach(ref e; (cast(vec*) data)[0 .. n / vec_size])
-            e = e * k;
-
-        foreach(ref e;  data[ n & ~(vec_size - 1) .. n])
-            e = e * factor;
-    }
-
-    static void cmul(T* dr, T* di, T* sr, T* si, size_t n)
-    {
-        foreach(i; 0 .. n / vec_size)
-        {
-            auto _dr = (cast(vec*) dr)[i]; 
-            auto _di = (cast(vec*) di)[i]; 
-            auto _sr = (cast(vec*) sr)[i]; 
-            auto _si = (cast(vec*) si)[i];
-            (cast(vec*) dr)[i] = _dr * _sr - _di * _si;
-            (cast(vec*) di)[i] = _dr * _si + _di * _sr;
-        }
-        foreach(i; n / vec_size * vec_size .. n)
-        {
-            auto _dr = dr[i]; 
-            auto _di = di[i]; 
-            auto _sr = sr[i]; 
-            auto _si = si[i];
-            dr[i] = _dr * _sr - _di * _si;
-            di[i] = _dr * _si + _di * _sr;
-        }
-    }
-
-    size_t alignment(size_t n)
-    {
-        return max(
-            min(next_pow2(vec.sizeof), next_pow2(T.sizeof * n)), 
-            (void*).sizeof);
-    }
-   
-    alias MSFFT.Table MultiTable;
+    alias MSFFT.Table1d MultiTable;
     
     size_t multi_fft_table_size()(size_t n)
     {
-        return MSFFT.fft_table_size(bsf(n));
+        return MSFFT.fft1d_table_size(bsf(n));
     }
 
     MultiTable multi_fft_table(size_t n, void* p)
     {
-        return MSFFT.fft_table(bsf(n), p); 
+        return MSFFT.fft1d_table(bsf(n), p); 
     }
 
     void multi_fft()(T* re, T* im, MultiTable table)
     {
-        MSFFT.fft(
-            cast(MSFFT.T*) re,
-            cast(MSFFT.T*) im,
-            cast(MSFFT.Table) table);
+        MSFFT.fft1d(cast(MSFFT.T*) re, cast(MSFFT.T*) im, table);
     }
 
     size_t multi_fft_ntransforms()()
@@ -1666,21 +1658,21 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return MSFFT.T.sizeof / T.sizeof;
     }
 
-    alias MSFFT.RealMultidimTable RealMultiTable;
+    alias MSFFT.RealTable RealMultiTable;
 
     size_t multi_rfft_table_size()(size_t n)
     {
-        return MSFFT.multidim_rfft_table_size(&n, 1); 
+        return MSFFT.rfft_table_size(&n, 1); 
     }
   
     RealMultiTable multi_rfft_table()(size_t n, void* p)
     {
-        return MSFFT.multidim_rfft_table(&n, 1, p);
+        return MSFFT.rfft_table(&n, 1, p);
     }
   
     void multi_rfft()(T* data, RealMultiTable table)
     {
-        MSFFT.rfft_complete(
+        MSFFT.rfft1d_complete(
             cast(MSFFT.T*) data,
             &table.multidim_table.tables[0],
             table.rtable,
@@ -1689,7 +1681,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     void multi_irfft()(T* data, RealMultiTable table)
     {
-        MSFFT.irfft_complete(
+        MSFFT.irfft1d_complete(
             cast(MSFFT.T*) data,
             &table.multidim_table.tables[0],
             table.rtable,
@@ -1697,6 +1689,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
+
+    void raw_rfft1d()(T* re, T* im, RealTable rmt)
+    {
+        rfft1d(re, im, &rmt.multidim_table.tables[0], rmt.rtable);
+    }
 }
 
 template Instantiate(string api_name, alias impl, FFTs...)
