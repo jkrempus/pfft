@@ -36,11 +36,6 @@ version(JustDirect)
     enum justDirect = true;
 else
     enum justDirect = false;
-
-version(DynamicC)
-    enum dynamicC = true;
-else
-    enum dynamicC = false;
     
 version(BenchFftw)
     enum benchFftw = true;
@@ -54,18 +49,8 @@ else
 
 auto gc_aligned_array(A = void)(size_t n)
 {
-    A[] r;
-    version(NoGC)
-    {
-        r = (cast(A*)PfftC!().allocate(A.sizeof*n / T.sizeof))[0..n];
-    }
-    else
-    {
-        import core.memory;
-        r = (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
-    }
-    //writefln("Allocated memory between %s and %s", r.ptr, r.ptr + n);
-    return r;
+    import core.memory;
+    return (cast(A*)GC.malloc(A.sizeof*n))[0 .. n];
 }
 
 bool isIn(A, B...)(A a, B b)
@@ -279,15 +264,12 @@ else version(Double)
 else
     alias float T;
 
-static if(!dynamicC)
-{
-    static if(is(T == real))
-        import direct = pfft.impl_real;
-    else static if(is(T == double))
-        import direct = pfft.impl_double;
-    else
-        import direct = pfft.impl_float;
-}
+static if(is(T == real))
+    import direct = pfft.impl_real;
+else static if(is(T == double))
+    import direct = pfft.impl_double;
+else
+    import direct = pfft.impl_float;
 
 size_t[] pow2(uint[] a){ return a.map!("cast(size_t)1 << a").array; }
 
@@ -299,7 +281,6 @@ if(transform == Transform.fft && !isMulti)
 
     T[] _re;
     T[] _im;
-    d.TransposeBuffer tbuf;
     d.Table table;
     int log2n;
 
@@ -467,187 +448,6 @@ if(transform == Transform.rfft && isMulti)
         return sign * data[((n / 2 + 1 + j) << log2multi) | k]; 
     }
 }
-
-template PfftC()
-{
-    extern(C):
-    __gshared:
-
-    enum suffix = is(T == float) ? "f" : is(T == double) ? "d" : "l";
-       
-    version(Windows)
-    {
-        import core.sys.windows.windows;
-
-        void* loadLib(const(char)* name) { return LoadLibraryA(name); }
-        void* getFunc(void* lib, const(char)* name)
-        { 
-            return GetProcAddress(lib, name); 
-        }
-    }
-    else
-    {
-        import core.sys.posix.dlfcn;
-
-        void* loadLib(const(char)* name){ return dlopen(name, RTLD_NOW); }
-        void* getFunc(void* lib, const(char)* name) { return dlsym(lib, name); }
-    }
-
-    static if(dynamicC)
-    {
-        struct Table {}
-        struct RTable {}
-
-        T* function(size_t) allocate;
-        Table* function(size_t*, size_t, void*) table;
-        RTable* function(size_t, void*) rtable;
-        void function(Table*) table_free;
-        void function(RTable*) rtable_free;
-        void function(T*) free;
-        void function(T*, T*, Table*) fft; 
-        void function(T*, RTable*) rfft; 
-        void function(T*, T*, Table*) ifft; 
-        void function(T*, RTable*) irfft; 
-
-        void load(string[] args)
-        {
-            import std.path;
-            
-            version(linux)
-                auto libname = "libpfft-c.so";
-            else version(OSX)
-                auto libname = "libpfft-c.dylib";
-            else version(Windows)
-                auto libname = "pfft-c.dll";
-
-            auto lib = buildPath(
-                absolutePath(dirName(args[0])), 
-                "..", "generated-c", "lib", libname);
-
-            auto dl = loadLib(toStringz(lib));
-
-            allocate = cast(typeof(allocate)) getFunc(dl, toStringz("pfft_allocate_"~suffix));
-            table = cast(typeof(table)) getFunc(dl, toStringz("pfft_table_"~suffix));
-            rtable = cast(typeof(rtable)) getFunc(dl, toStringz("pfft_rtable_"~suffix));
-            table_free = cast(typeof(table_free)) getFunc(dl, toStringz("pfft_table_free_"~suffix));
-            rtable_free = cast(typeof(rtable_free)) getFunc(dl, toStringz("pfft_rtable_free_"~suffix));
-            free = cast(typeof(free)) getFunc(dl, toStringz("pfft_free_"~suffix));
-            fft = cast(typeof(fft)) getFunc(dl, toStringz("pfft_fft_"~suffix));
-            rfft = cast(typeof(rfft)) getFunc(dl, toStringz("pfft_rfft_"~suffix));
-            ifft = cast(typeof(ifft)) getFunc(dl, toStringz("pfft_ifft_"~suffix));
-            irfft = cast(typeof(irfft)) getFunc(dl, toStringz("pfft_irfft_"~suffix));
-        }
-    }
-    else
-    {
-        import pfft.clib;
-
-        mixin("alias PfftTable"~toUpper(suffix)~" Table;");
-        mixin("alias PfftRTable"~toUpper(suffix)~" RTable;");
-
-        mixin("alias pfft_allocate_"~suffix~" allocate;");
-        mixin("alias pfft_table_"~suffix~" table;");
-        mixin("alias pfft_rtable_"~suffix~" rtable;");
-        mixin("alias pfft_table_free_"~suffix~" table_free;");
-        mixin("alias pfft_rtable_free_"~suffix~" rtable_free;");
-        mixin("alias pfft_free_"~suffix~" free;");
-        mixin("alias pfft_fft_"~suffix~" fft;");
-        mixin("alias pfft_rfft_"~suffix~" rfft;");
-        mixin("alias pfft_ifft_"~suffix~" ifft;"); 
-        mixin("alias pfft_irfft_"~suffix~" irfft;"); 
-
-        void load(string[] args) { }
-    }
-}
-
-struct CApi(Transform transform, bool isInverse) 
-if(transform == Transform.fft)
-{
-    alias PfftC!() Impl;
-
-    T* _re;
-    T* _im;
-    Impl.Table* table;
-    int log2n;
-    
-    this(uint[] log2ns)
-    {
-        auto ns = new size_t[](log2ns.length);
-        log2n = 0;
-        foreach(i; 0 .. log2ns.length)
-        {
-            ns[i] = st!1 << log2ns[i];
-            log2n += log2ns[i]; 
-        }
-        auto n = st!1 << log2n;
-        table = Impl.table(ns.ptr, ns.length, null);
-        _re = Impl.allocate(n);
-        _im = Impl.allocate(n);
-        _re[0 .. n] = 0;
-        _im[0 .. n] = 0;
-    }
-
-    ~this()
-    {
-        Impl.table_free(table);
-        Impl.free(_re);
-        Impl.free(_im);
-    }
-    
-    void compute()
-    {
-        static if(isInverse)
-            Impl.ifft(_re, _im, table);
-        else 
-            Impl.fft(_re, _im, table);
-    }
-    
-    mixin splitElementAccess!();
-}
-
-struct CApi(Transform transform, bool isInverse) 
-if(transform == Transform.rfft)
-{
-    alias PfftC!() Impl;
-   
-    int log2n;
-    Impl.RTable* table;
-    T[] data;
-    
-    this(uint[] log2ns)
-    {
-        initRealElementAccessImpl(log2ns);
-        auto ns = new size_t[](log2ns.length);
-        log2n = 0;
-        foreach(i; 0 .. log2ns.length)
-        {
-            ns[i] = st!1 << log2ns[i];
-            log2n += log2ns[i]; 
-        }
-        auto n = st!1 << log2n;
-        table = Impl.rtable(ns.ptr, ns.length, null);
-        auto len = (st!1 << log2n) + (st!2 << (log2n - log2ns[0]));
-        data = Impl.allocate(len)[0 .. len];
-        data[] = 0;
-    }
-    
-    ~this()
-    {
-        Impl.rtable_free(table);
-        Impl.free(data.ptr);
-    }
-    
-    void compute()
-    {
-        static if(isInverse)
-            Impl.irfft(data.ptr, table);
-        else 
-            Impl.rfft(data.ptr, table);
-    }
-    
-    mixin realSplitElementAccess!();
-}
-
 
 struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.fft)
 {
@@ -1174,25 +974,17 @@ void runTest(bool testSpeed, Transform transform, bool isInverse)(
 
     long flops = mflops * 1000_000;
  
-    static if(!justDirect && (benchClib || dynamicC))
-        if(impl == "c")
-            return f!(CApi!(transform, isInverse), transform, isInverse)(
+    if(impl == "direct")
+        return f!(DirectApi!(transform, isInverse, false), transform, isInverse)(
                 log2n, flops);
 
-    static if(!dynamicC)
-    {
-        if(impl == "direct")
-            return f!(DirectApi!(transform, isInverse, false), transform, isInverse)(
-                log2n, flops);
-
-        if(impl == "direct-multi")
-            return f!(
+    if(impl == "direct-multi")
+        return f!(
                 DirectApi!(transform, isInverse, true),
                 Transform.fft,
                 isInverse)(log2n, flops);
-    }
     
-    static if(!justDirect && !dynamicC)
+    static if(!justDirect)
     { 
         if(impl == "simple")
             return f!(SimpleFft!(T, transform, isInverse), transform, isInverse)(
@@ -1313,9 +1105,6 @@ Options:
  
 void main(string[] args)
 {
-    static if(dynamicC)
-        PfftC!().load(args);
-
     try
     {
         bool s;
@@ -1342,9 +1131,8 @@ void main(string[] args)
             return;
         }
 
-        static if(!dynamicC) 
-            if(impl != -1)
-                direct.set_implementation(impl);
+        if(impl != -1)
+            direct.set_implementation(impl);
 
         enforce(args.length >= 3, 
             "There must be at least two non option arguments.");

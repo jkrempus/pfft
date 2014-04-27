@@ -5,7 +5,7 @@
 
 module pfft.fft_impl;
 
-import core.bitop, core.stdc.stdlib;
+import core.bitop;
 public import pfft.shuffle;
 
 enum Action

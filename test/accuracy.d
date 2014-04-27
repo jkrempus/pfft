@@ -52,7 +52,7 @@ void test(string common = "", string api = "")
         "real"  : 2e-18];
 
     foreach(flags;  ["", "-r", "-i", "-i -r"].p)
-    foreach(impl;   (api == "" ? ["pfft", "c", "std"] : [api]).p)
+    foreach(impl;   (api == "" ? ["pfft", "std", "direct"] : [api]).p)
     foreach(type;   ["float", "double", "real"].p)
     foreach(log2n;  iota(1, 21))
     {
