@@ -6,6 +6,7 @@
 
 import buildutils;
 import std.string: toLower, toUpper, capitalize;
+import std.process;
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
@@ -87,24 +88,18 @@ enum optimizeFlags = argList.optimize.inline.release.noboundscheck;
 
 void buildTests(
     string[] types, ArgList dcArgs, Compiler c, string baseDir, 
-    string fftw = null, bool dynamic = false, bool clib = false)
+    string fftw = null)
 {
     auto fftwSuffixes = ["float" : "f", "double" : "", "real" : "l"]; 
-    
+
     foreach(type; types)
         dcArgs
             .src(baseDir~"/test/test")
-            .module_("pfft.stdapi", "pfft.pfft")
             .version_(capitalize(type))
             .output("test_"~type)
-            .conditional(dynamic,
-                argList.version_("DynamicC"),
-                argList
-                    .ipath(baseDir~"/generated/include")
-                    .lib(baseDir~"/generated/lib/pfft")
-                    .conditional(clib, argList
-                        .src(baseDir~"/pfft/clib")
-                        .version_("BenchClib")))
+            .module_("pfft.stdapi", "pfft.pfft")
+            .ipath(baseDir~"/generated/include")
+            .lib(baseDir~"/generated/lib/pfft")
             .conditional(!!fftw, argList
                 .lpath(fftw)
                 .version_("BenchFftw")
@@ -176,44 +171,69 @@ string buildAdditionalSIMD(
     return simd.name;
 }
 
+string[] exportedSymbols(string[] types)
+{
+    import pfft.declarations;
+
+    string[] r = [];
+    foreach(t; types)
+    {
+        if(t == "float")
+            r ~= mangledMemberNames!(Declarations!("float", float));
+        else if(t == "double")
+            r ~= mangledMemberNames!(Declarations!("double", double));
+        else if(t == "real")
+            r ~= mangledMemberNames!(Declarations!("real", real));
+        else 
+            enforce(0);
+    }
+
+    return r;
+}
+
 void buildLibImpl(
     Compiler dc,
     Version v,
     string[] types,
     ArgList dcArgs,
-    bool clib,
+    bool portable,
+    bool dynamic,
     string[] addModule)
 {
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
         types.map!(t => "pfft.impl_"~t).array ~
         ["pfft.fft_impl", "pfft.shuffle", "pfft.common"] ~
-        //when(!clib, ["pfft.stdapi", "pfft.pfft"]) ~ 
         when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
 
     auto implObjs = v.additionalSIMD
-        .map!(s => buildAdditionalSIMD(dc, v, s, types, dcArgs, clib))
+        .map!(s => buildAdditionalSIMD(dc, v, s, types, dcArgs, dynamic))
         .array;
 
-    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs.module_(addModule), clib);
+    buildObj(dc, src, "pfft", v, v.baseSIMD, dcArgs.module_(addModule), dynamic);
 
-    dcArgs
-        .genLib
-        .output("lib/pfft" ~ (clib ? "-c" : ""))
-        .obj("pfft")
-        .obj(implObjs)
-        .conditional(clib, argList.obj("druntime", "clib"))
-        .run(dc);
-    
-    if(clib)
-        dcArgs
-            .genDynlib
-            .output("lib/pfft-c")
-            .obj("pfft")
-            .obj(implObjs)
-            .obj("druntime", "clib")
-            .noDefaultLib
-            .run(dc);
+    if(portable)
+    {
+        auto objN = (string a) => objName(dc, a);
+
+        auto linked = objN("linked");
+        auto objs = chain(["druntime", "pfft"], implObjs).map!objN.array;
+
+        vexecute(["ld", "-r", "-o", linked] ~ objs);
+
+        vexecute(["objcopy", linked, objN("copied")] 
+            ~ exportedSymbols(types).map!(a => only("-G", a)).joiner().array);
+
+        auto common = argList.output("lib/pfft").obj("copied").noDefaultLib;
+        common.genLib.run(dc);
+        if(dynamic) common.genDynlib.run(dc);
+    }
+    else
+    {
+        auto common = dcArgs.output("lib/pfft").obj("pfft").obj(implObjs);
+        common.genLib.run(dc);
+        if(dynamic) common.genDynlib.run(dc);
+    }
 }
 
 void buildLib(
@@ -222,38 +242,30 @@ void buildLib(
     Version v,
     string[] types,
     ArgList dcArgs,
-    bool clib,
+    bool portable,
+    bool dynamic,
     string[] addModule)
 {
     if(!pgo)
-        return buildLibImpl(dc, v, types, dcArgs, clib, addModule);
+        return buildLibImpl(dc, v, types, dcArgs, portable, dynamic, addModule);
 
-    buildLibImpl(dc, v, types, dcArgs.raw("-fprofile-generate"), clib, addModule);
+    buildLibImpl(dc, v, types, dcArgs.raw("-fprofile-generate"), false, false, addModule);
 
-    // benchmark with DynamicC when clib is true
     auto jd = argList.version_("JustDirect");
-    buildTests(types, dcArgs.raw("-fprofile-generate").conditional(!clib, jd), 
-        dc, "..", null, clib); 
+    buildTests(types, dcArgs.raw("-fprofile-generate").version_("JustDirect"),
+        dc, "..", null); 
 
-    runBenchmarks(types, v, clib ? "c" : "direct");
-    buildLibImpl(dc, v, types, dcArgs.raw("-fprofile-use"), clib, addModule);
+    runBenchmarks(types, v, "direct");
+    buildLibImpl(dc, v, types, dcArgs.raw("-fprofile-use"), portable, dynamic, addModule);
 }
 
 void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
 {
-    auto common = dcArgs
+    dcArgs
         .genObj
         .optimize
         .pic
-        .ipath("include");
-
-    common
-        .output("clib")
-        .src("../pfft/clib")
-        .version_(types.map!(capitalize).array)
-        .build(dc, false);
- 
-    common
+        .ipath("include")
         .output("druntime")
         .src("../pfft/druntime_stubs")
         .conditional(dc == Compiler.LDC, argList.module_("core.bitop"))
@@ -285,9 +297,9 @@ q{
     void pfft_free_{suffix}({type}*);
 };
 
-void copyIncludes(string[] types, bool clib)
+void copyIncludes(string[] types, bool portable)
 {
-    if(clib)
+    if(portable)
     {
         auto suffixDict = [
             "float" : "f", 
@@ -341,8 +353,8 @@ void buildDoc(Compiler c, string ccmd)
 enum usage = `
 Usage: rdmd build [options]
 build.d is an rdmd script used to build the pfft library. It saves the 
-generated library and include files to ./generated or to ./generated-c when 
-building with --clib. The script must be run from the directory it resides in.
+generated library and include files to ./generated. 
+The script must be run from the directory it resides in.
 
 Options:
   --dc DC               Specifies D compiler to use. DC must be one of DMD, 
@@ -364,14 +376,13 @@ Options:
                         equivalent to --type float --type double --type real.
   --doc                 Build documentation. This will generate documentation html
                         files and put them in doc directory.
-  --clib                Build a C library. This doesn't currently work with DMD.
+  --portable            Build a portable library. A portable library is a library that can
+                        be used with any D or C compiler that supports the object format.
+                        This doesn't currently work with DMD on windows.
+  --dynamic             Build a dynamic library.
   --tests               Build tests. Executables will be saved to ./test. 
                         Can not be used when cross compiling. You must build the 
                         D library for selected types before building tests.
-                        If both --tests and --clib are present, tests will be built,
-                        and the resulting binaries will support testing the C API.
-  --dynamic-tests       Buildt tests for the dynamic c library. Executables 
-                        will be saved to ./test.
   --pgo                 Enable profile guided optimization. This flag can
                         only be used with GDC on Linux.This flag is ignored 
                         when building tests.
@@ -401,9 +412,9 @@ void doit(string[] args)
     auto simdOpt = "";
     string[] types;
     string dccmd = "";
-    bool clib;
-    bool tests;
+    bool portable;
     bool dynamic;
+    bool tests;
     bool help;
     bool dbg;
     bool doc;
@@ -418,10 +429,10 @@ void doit(string[] args)
         "simd", &simdOpt, 
         "type", &types, 
         "dc-cmd", &dccmd, 
-        "clib", &clib,
+        "portable", &portable,
+        "dynamic", &dynamic,
         "dc", &dc,
         "tests", &tests,
-        "dynamic-tests", &dynamic,
         "pgo", &pgo,
         "fftw", &fftw,
         "h|help", &help,
@@ -432,7 +443,6 @@ void doit(string[] args)
         "flag", &flags,
         "add-module", &addModule);
 
-    tests = tests || dynamic;
 
     if(dccmd == "")
         dccmd = [
@@ -446,8 +456,8 @@ void doit(string[] args)
     if(help)
         return writeln(usage);
   
-    if(dc == Compiler.DMD && clib && !tests)
-        invalidCmd("Can not build the C library using DMD");
+    if(dc == Compiler.DMD && portable && !tests)
+        invalidCmd("Can not build a portable library using DMD");
 
     if(fftw)
         stderr.writeln(
@@ -469,11 +479,11 @@ void doit(string[] args)
         .conditional(dc == Compiler.GDC, argList.raw("-fno-strict-aliasing"))
         .raw(flags.map!(a => "-"~a).array);
 
-    auto buildDir = (clib && !tests) ? "generated-c" : "generated";
+    auto buildDir = "generated";
     if(tests)
     {
         cd("test");
-        buildTests(types, dcArgs, dc, "..", fftw, dynamic, clib);
+        buildTests(types, dcArgs, dc, "..", fftw);
     }
     else
     {
@@ -501,20 +511,17 @@ void doit(string[] args)
         mkdir("lib");
         mkdir("include");
 
-        copyIncludes(types, clib);
+        copyIncludes(types, portable);
 
-        if(clib)
+        if(portable)
             buildCObjects(dc, types, dcArgs);
         
-        buildLib(pgo, dc, v, types, dcArgs, clib, addModule);
+        buildLib(pgo, dc, v, types, dcArgs, portable, dynamic, addModule);
 
         version(none)
         foreach(e; dirEntries(".", SpanMode.shallow, false))
             if(e.isFile)
                 rm(e.name);
-
-        if(clib)
-            rm("include/pfft", "-rf");
     }
 }
 

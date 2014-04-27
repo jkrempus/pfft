@@ -62,6 +62,19 @@ auto vshell(string cmd)
     return r;
 }
 
+auto vexecute(string[] cmd)
+{
+    if(verbose)
+        stderr.writeln(cmd);
+
+    auto r = execute(cmd);
+
+    if(verbose)
+        stderr.writeln(r);
+
+    return r;
+}
+
 private string fn(string prefix, string path, string suffix)
 {
     import std.path;
@@ -720,3 +733,16 @@ struct ArgList
 }
 
 enum argList = ArgList([]);
+
+string[] mangledMemberNames(alias parent)()
+{
+    string[] r = [];
+    foreach(memberName; __traits(allMembers, parent))
+    {
+        mixin("alias parent."~memberName~" member;");
+        static if(is(typeof(&member)))
+            r ~= member.mangleof;
+    }
+
+    return r;
+}
