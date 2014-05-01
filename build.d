@@ -179,11 +179,11 @@ string[] exportedSymbols(string[] types)
     foreach(t; types)
     {
         if(t == "float")
-            r ~= mangledMemberNames!(Declarations!("float", float));
+            r ~= mangledMemberNames!(Declarations!("f", float));
         else if(t == "double")
-            r ~= mangledMemberNames!(Declarations!("double", double));
+            r ~= mangledMemberNames!(Declarations!("d", double));
         else if(t == "real")
-            r ~= mangledMemberNames!(Declarations!("real", real));
+            r ~= mangledMemberNames!(Declarations!("l", real));
         else 
             enforce(0);
     }

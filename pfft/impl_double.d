@@ -12,7 +12,7 @@ version(SSE_AVX)
     import sse = pfft.sse_double, avx = pfft.avx_double;
 
     mixin Instantiate!(
-        "double", get, FFT!(sse.Vector!(), sse.Options!()), avx);
+        "d", get, FFT!(sse.Vector!(), sse.Options!()), avx);
 }
 else
 {
@@ -27,6 +27,6 @@ else
     else
         import pfft.sse_double;
     
-    mixin Instantiate!("double", 0, FFT!(Vector!(),Options!()));
+    mixin Instantiate!("d", 0, FFT!(Vector!(),Options!()));
 }
 

@@ -169,11 +169,11 @@ version(SSE_AVX)
     version(InstantiateAdditionalSimd)
     {
         import pfft.fft_impl;
-        mixin Instantiate!("double_avx", 0, FFT!(Vector!(), Options!()));
+        mixin Instantiate!("d_avx", 0, FFT!(Vector!(), Options!()));
     }
     else
     {
         import pfft.declarations;
-        mixin Declarations!("double_avx", double);
+        mixin Declarations!("d_avx", double);
     }
 }

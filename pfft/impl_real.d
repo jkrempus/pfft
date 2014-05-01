@@ -7,4 +7,4 @@ module pfft.impl_real;
 
 import pfft.scalar_real, pfft.fft_impl;
 
-mixin Instantiate!("real", 0, FFT!(Vector!(), Options!()));
+mixin Instantiate!("l", 0, FFT!(Vector!(), Options!()));
