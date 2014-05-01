@@ -10,6 +10,9 @@ import  std.complex, std.traits, core.bitop, std.typetuple, std.range,
 
 import core.memory;
 
+extern(C) void* memmove(void*, void*, size_t);
+extern(C) void* memcpy(void*, void*, size_t);
+
 private:
 
 // Current GDC branch for android insists on using sinl and friends when
@@ -127,8 +130,9 @@ void deinterleave_array(R, T)(
     uint log2n, R r, T* re, T* im)
 {
     static if(is(typeof(r[0].re) == T))
-        if(auto p = alignedScalarPtr!T(r, log2n))
-            return impl!(T).deinterleave_array(re, im, p, st!1 << log2n);
+        if(isAligned(re, log2n) && isAligned(im, log2n))
+            if(auto p = alignedScalarPtr!T(r, log2n))
+                return impl!(T).deinterleave_array(re, im, p, st!1 << log2n);
 
     foreach(i; 0 .. st!1 << log2n)
     {
@@ -152,8 +156,9 @@ void interleave_array(R, T)(
     uint log2n, R r, T* re, T* im)
 {
     static if(is(typeof(r[0].re) == T))
-        if(auto p = alignedScalarPtr!T(r, log2n))
-            return impl!(T).interleave_array(re, im, p, st!1 << log2n);
+        if(isAligned(re, log2n) && isAligned(im, log2n))
+            if(auto p = alignedScalarPtr!T(r, log2n))
+                return impl!(T).interleave_array(re, im, p, st!1 << log2n);
 
     foreach(i; 0 .. st!1 << log2n)
     {
@@ -206,7 +211,7 @@ struct Cached
     enum nsizes = size_t.sizeof * 8;
     Entry[nsizes * 3] entries;
     MemoryBlock _transposeBuffer;
-    MemoryBlock _multidimMemory;
+    MemoryBlock _rfft_memory;
     MemoryBlock _re;
     MemoryBlock _im;
 
@@ -375,16 +380,36 @@ have the same number of elements and that number must be a power of two.
         assert((n & (n - 1)) == 0);
         auto log2n = bsr(n);
 
-        auto re = cached.re!T(n / 2);
-        auto im = cached.im!T(n / 2);
-        auto rtable = cached.rtable!T(n);
+        version(all)
+        {
+            auto re = cached.re!T(n / 2);
+            auto im = cached.im!T(n / 2);
+            auto rtable = cached.rtable!T(n);
+            deinterleave_array(log2n - 1, r, re, im);
+            impl!(T).raw_rfft1d(re, im, rtable);
+            interleave_array(log2n - 1, ret, re, im);
 
-        deinterleave_array(log2n - 1, r, re, im);
-        impl!(T).raw_rfft1d(re, im, rtable);
-        interleave_array(log2n - 1, ret, re, im);
+            ret[0].im = 0;
+            ret[n / 2] = complex(im[0], 0);
+        }
+        else
+        {
+            auto re = cached.re!T(n + 2);
+            auto rtable = cached.rtable!T(n);
+            static if(is(typeof(r) == T[]))
+                memcpy(re, &r[0], n * T.sizeof);
+            else
+                foreach(i; 0 .. n)
+                {
+                    re[i] = r.front;
+                    r.popFront();
+                }
 
-        ret[0].im = 0;
-        ret[n / 2] = complex(im[0], 0); 
+            impl!(T).rfft(re, rtable);
+            ret[n / 2] = complex(re[n / 2], re[n + 1]);
+            memmove(re + n / 2, re + n / 2 + 1, T.sizeof * n / 2);
+            interleave_array(log2n - 1, ret, re, re + n / 2);
+        }
 
         foreach(i; 1 .. n / 2)
         {
