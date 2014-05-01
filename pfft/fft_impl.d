@@ -291,7 +291,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    struct Table1dValue
+    struct Table1d
     {
         Twiddle* twiddle;
         void* buffer; 
@@ -299,8 +299,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         uint log2n;
     }
 
-    alias Table1dValue* Table1d;
-    alias void* TransposeBuffer;
+    alias void TransposeBuffer;
     
     size_t twiddle_table_size()(int log2n)
     {
@@ -331,7 +330,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     void fft1d_table_add_pointers(
-        Table1d table, Table1d* table_ptr, Allocate!4* alloc, uint log2n)
+        Table1d* table, Table1d** table_ptr, Allocate!4* alloc, uint log2n)
     {
         alloc.add(&table.twiddle, twiddle_table_size(log2n));
         alloc.add(&table.buffer, tmp_buffer_size(log2n));
@@ -342,12 +341,12 @@ template FFT(alias V, alias Options, bool disable_large = false)
     size_t fft1d_table_size()(uint log2n)
     {
         Allocate!4 alloc = void; alloc.initialize();
-        Table1dValue tv;
+        Table1d tv;
         fft1d_table_add_pointers(&tv, null, &alloc, log2n);
         return alloc.size(); 
     }
   
-    void init_fft1d_table(uint log2n, Table1d t)
+    void init_fft1d_table(uint log2n, Table1d* t)
     {
         t.log2n = log2n;
         if(log2n > 0)
@@ -359,11 +358,11 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    Table1d fft1d_table()(uint log2n, void * p)
+    Table1d* fft1d_table()(uint log2n, void * p)
     {   
         Allocate!4 alloc = void; alloc.initialize();
-        Table1dValue tv;
-        Table1d t;
+        Table1d tv;
+        Table1d* t;
         fft1d_table_add_pointers(&tv, &t, &alloc, log2n);
         alloc.allocate(p);
         *t = tv;
@@ -371,9 +370,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return t;
     }
 
-    uint fft1d_table_log2n(Table1d table){ return table.log2n; }
+    uint fft1d_table_log2n(Table1d* table){ return table.log2n; }
 
-    void* fft1d_table_memory(Table1d table){ return cast(void*) table.twiddle; }
+    void* fft1d_table_memory(Table1d* table){ return cast(void*) table.twiddle; }
 
     /*static void two_passes_inner(
         vec* pr, vec* pi, size_t k0, size_t k1, size_t k2, size_t k3,
@@ -953,7 +952,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             }
     }
 
-    void fft1d_small()(T * re, T * im, uint log2n, Table1d table)
+    void fft1d_small()(T * re, T * im, uint log2n, Table1d* table)
     {
         // assert(log2n >= 2*log2(vec_size));
 
@@ -981,7 +980,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.br_passes);
     }
 
-    void fft1d_large()(T * re, T * im, uint log2n, Table1d table)
+    void fft1d_large()(T * re, T * im, uint log2n, Table1d* table)
     {
         size_t N = (1<<log2n);
  
@@ -995,7 +994,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         profStop(Action.bit_reverse);
     }
 
-    @noinline void fft1d()(T * re, T * im, Table1d table)
+    @noinline void fft1d()(T * re, T * im, Table1d* table)
     {
         uint log2n = table.log2n;
         switch(log2n)
@@ -1019,7 +1018,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
                 fft1d_large(re, im, log2n, table);
     }
 
-    alias Twiddle* RTable;
+    alias Twiddle RTable;
  
     auto rtable_size()(int log2n)
     {
@@ -1034,10 +1033,9 @@ template FFT(alias V, alias Options, bool disable_large = false)
         V.unaligned_store(&a, v);
     }));
 
-    RTable rfft1d_table()(int log2n, void *p) if(supports_real)
+    RTable* rfft1d_table()(int log2n, void *p) if(supports_real)
     {
-        if(log2n < 2)
-            return cast(RTable) p;
+        if(log2n < 2) return cast(RTable*) p;
         else if(st!1 << log2n < 4 * vec_size)
         {
             static if(!isScalar)
@@ -1051,7 +1049,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
         complex_array_to_vector(r.ptr, r.length);
 
-        return cast(RTable) r.ptr;
+        return cast(RTable*) r.ptr;
     }
 
     auto rfft1d_table()(int log2n, void *p) if(!supports_real)
@@ -1059,7 +1057,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return SFFT.rfft1d_table(log2n, p);
     }
 
-    void rfft1d()(T* rr, T* ri, Table1d table, RTable rtable) 
+    void rfft1d()(T* rr, T* ri, Table1d* table, RTable* rtable) 
     {
         auto log2n = table.log2n + 1;
         if(log2n == 0)
@@ -1077,7 +1075,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     void irfft1d()(
-        T* rr, T* ri, Table1d table, RTable rtable) 
+        T* rr, T* ri, Table1d* table, RTable* rtable) 
     {
         auto log2n = table.log2n + 1;
         if(log2n == 0)
@@ -1097,7 +1095,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         fft1d(ri, rr, table);
     }
 
-    void rfft1d_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    void rfft1d_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable* rtable) 
     if(supports_real)
     {
         static if(!isScalar)
@@ -1177,13 +1175,13 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
     
-    void rfft1d_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable rtable) 
+    void rfft1d_last_pass(bool inverse)(T* rr, T* ri, int log2n, RTable* rtable) 
     if(!supports_real)
     {
         SFFT.rfft1d_last_pass!inverse(rr, ri, log2n, rtable); 
     }
 
-    alias bool* ITable;
+    alias bool ITable;
   
     version(MinGW)
         enum interleaveChunkSize = 4;
@@ -1255,23 +1253,19 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return log2(T.sizeof / Twiddle.sizeof);
     }
 
-    struct TableValue
+    struct Table
     {
-        Table1dValue[] tables;
-        TransposeBuffer buffer;
+        Table1d[] tables;
+        TransposeBuffer* buffer;
         void* memory;
     }
 
-    alias TableValue* Table;
-
-    struct RealTableValue
+    struct RealTable
     {
-        Table multidim_table;
-        RTable rtable;
-        ITable itable;
+        Table* multidim_table;
+        RTable* rtable;
+        ITable* itable;
     }
-
-    alias RealTableValue* RealTable;
 
     @always_inline uint multidim_log2ncolumns(Range)(Range log2n, size_t dim_index)
     {
@@ -1294,14 +1288,14 @@ template FFT(alias V, alias Options, bool disable_large = false)
     {
         enum max_ndim = size_t.sizeof * 8;
         alias Allocate!(3 * max_ndim + 3) Alloc;
-        alias Table1dValue[max_ndim] TableMap; 
+        alias Table1d[max_ndim] TableMap; 
 
         struct TableCreator
         {
             TableMap table_map;
-            Table1d tables;
-            Table mt;
-            TransposeBuffer buf;
+            Table1d* tables;
+            Table* mt;
+            TransposeBuffer* buf;
 
             void add_to(Alloc* alloc, uint[] log2n)
             {
@@ -1354,7 +1348,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         {
             void* itable_memory;
             void* rtable_memory;
-            RealTable rmt;
+            RealTable* rmt;
             TableCreator tc;
 
             void add_to(Alloc* alloc, uint log2n[])
@@ -1418,8 +1412,8 @@ template FFT(alias V, alias Options, bool disable_large = false)
             }
         }
 
-        void* memory(Table table) { return table.memory; }
-        void* real_memory(RealTable table)
+        void* memory(Table* table) { return table.memory; }
+        void* real_memory(RealTable* table)
         {
             return table.multidim_table.memory;
         }
@@ -1438,8 +1432,8 @@ template FFT(alias V, alias Options, bool disable_large = false)
         T* im,
         int log2stride, 
         int log2m,
-        Table1d table,
-        TransposeBuffer buffer)
+        Table1d* table,
+        TransposeBuffer* buffer)
     {
         auto n = st!1 << table.log2n;
         auto m = st!1 << log2m;
@@ -1467,10 +1461,10 @@ template FFT(alias V, alias Options, bool disable_large = false)
         T* p,
         int log2stride, 
         int log2m,
-        Table1d table,
-        TransposeBuffer buffer,
-        RTable rtable,
-        ITable itable)
+        Table1d* table,
+        TransposeBuffer* buffer,
+        RTable* rtable,
+        ITable* itable)
     {
         auto n = st!1 << table.log2n;
         auto m = st!1 << log2m;
@@ -1524,7 +1518,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return maxsz;
     }
 
-    void fft()(T* re, T* im, Table multidim_table)
+    void fft()(T* re, T* im, Table* multidim_table)
     {
         auto tables = multidim_table.tables;
         if(tables.length == 0)
@@ -1537,7 +1531,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         auto len = st!1 << log2ns.sum;
         int log2m = log2ns.dropExactly(1).sum;
         auto m = log2m.exp2;
-        auto next_table = TableValue(tables[1 .. $], buf, null);
+        auto next_table = Table(tables[1 .. $], buf, null);
         foreach(i; 0 .. tables[0].log2n.exp2)
             fft(re + i * m, im + i * m, &next_table);
 
@@ -1548,7 +1542,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     void rfft1d_complete()(
-        T* p, Table1d table, RTable rtable, ITable itable)
+        T* p, Table1d* table, RTable* rtable, ITable* itable)
     {
         deinterleave(p, table.log2n + 1, itable);
         auto n = table.log2n.exp2;
@@ -1559,7 +1553,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 
     void irfft1d_complete()(
-        T* p, Table1d table, RTable rtable, ITable itable)
+        T* p, Table1d* table, RTable* rtable, ITable* itable)
     {
         auto n = table.log2n.exp2;
         memmove(p + n + 1, p + n + 2, n * T.sizeof);
@@ -1569,7 +1563,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         interleave(p, table.log2n + 1, itable);
     }
 
-    void rfft()(T* p, RealTable rmt)
+    void rfft()(T* p, RealTable* rmt)
     {
         auto multidim_table = rmt.multidim_table;
         auto tables = multidim_table.tables;
@@ -1599,12 +1593,12 @@ template FFT(alias V, alias Options, bool disable_large = false)
         memset(im_end - m, 0, m * T.sizeof);
         memset(im, 0, m * T.sizeof);
 
-        auto next_table = TableValue(tables[1 .. $], buf, null);
+        auto next_table = Table(tables[1 .. $], buf, null);
         foreach(i; 0 .. n + 1)
             fft(p + i * m, im + i * m, &next_table);
     }
 
-    void irfft()(T* p, RealTable rmt)
+    void irfft()(T* p, RealTable* rmt)
     {
         auto multidim_table = rmt.multidim_table;
         auto tables = multidim_table.tables;
@@ -1621,7 +1615,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         auto im_end = im + m * (n + 1);
         auto buf = multidim_table.buffer;
 
-        auto next_table = TableValue(tables[1 .. $], buf, null);
+        auto next_table = Table(tables[1 .. $], buf, null);
         foreach(i; 0 .. n + 1)
             fft(im + i * m, p + i * m, &next_table);
 
@@ -1645,12 +1639,17 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return MSFFT.fft1d_table_size(bsf(n));
     }
 
-    MultiTable multi_fft_table(size_t n, void* p)
+    MultiTable* multi_fft_table(size_t n, void* p)
     {
         return MSFFT.fft1d_table(bsf(n), p); 
     }
 
-    void multi_fft()(T* re, T* im, MultiTable table)
+    void* multi_fft_table_memory(MultiTable* table)
+    {
+        return MSFFT.fft1d_table_memory(table); 
+    }
+
+    void multi_fft()(T* re, T* im, MultiTable* table)
     {
         MSFFT.fft1d(cast(MSFFT.T*) re, cast(MSFFT.T*) im, table);
     }
@@ -1667,12 +1666,17 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return MSFFT.rfft_table_size(&n, 1); 
     }
   
-    RealMultiTable multi_rfft_table()(size_t n, void* p)
+    RealMultiTable* multi_rfft_table()(size_t n, void* p)
     {
         return MSFFT.rfft_table(&n, 1, p);
     }
   
-    void multi_rfft()(T* data, RealMultiTable table)
+    void* multi_rfft_table_memory()(RealMultiTable* table)
+    {
+        return MSFFT.rfft_table_memory(table);
+    }
+
+    void multi_rfft()(T* data, RealMultiTable* table)
     {
         MSFFT.rfft1d_complete(
             cast(MSFFT.T*) data,
@@ -1681,7 +1685,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
             table.itable);
     }
 
-    void multi_irfft()(T* data, RealMultiTable table)
+    void multi_irfft()(T* data, RealMultiTable* table)
     {
         MSFFT.irfft1d_complete(
             cast(MSFFT.T*) data,
@@ -1692,9 +1696,14 @@ template FFT(alias V, alias Options, bool disable_large = false)
 
     size_t multi_rfft_ntransforms()(){ return MSFFT.T.sizeof / T.sizeof; }
 
-    void raw_rfft1d()(T* re, T* im, RealTable rmt)
+    void raw_rfft1d()(T* re, T* im, RealTable* rmt)
     {
         rfft1d(re, im, &rmt.multidim_table.tables[0], rmt.rtable);
+    }
+    
+    void raw_irfft1d()(T* re, T* im, RealTable* rmt)
+    {
+        irfft1d(re, im, &rmt.multidim_table.tables[0], rmt.rtable);
     }
 }
 
@@ -1722,10 +1731,8 @@ template Instantiate(string api_name, alias impl, FFTs...)
             enum name = names[0];
             alias get_member!(api, name) member;
 
-            static if(is(member E : E*))
-                enum current = 
-                    "struct "~name~"Value{}\n" ~
-                    "alias "~name~"Value* "~name~";\n";
+            static if(is(member == struct))
+                enum current = "struct "~name~"{}\n";
             else static if(
                 is(typeof(member) == function) && 
                 __traits(hasMember, FFT0, name))
