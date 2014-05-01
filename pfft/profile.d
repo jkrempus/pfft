@@ -75,8 +75,8 @@ template ProfileMixin(E)
     } 
     else
     {
-        void profStart(E e){}
-        void profStop(E e){}
-        void profStopStart(E e1, E e2){}
+        void profStart()(E e){}
+        void profStop()(E e){}
+        void profStopStart()(E e1, E e2){}
     }
 }
