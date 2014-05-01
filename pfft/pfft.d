@@ -60,7 +60,7 @@ final class Fft(T)
     mixin Import!T;
 
     size_t array_size;
-    impl.Table table;
+    impl.Table* table;
 
 /**
 A struct that wraps an array of T. The reason behind this struct is
@@ -178,7 +178,7 @@ final class Rfft(T)
     mixin Import!T;
 
     size_t array_size;
-    impl.RealTable table;
+    impl.RealTable* table;
     alias Fft!(T).Array Array;
 
 /**

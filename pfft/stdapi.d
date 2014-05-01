@@ -220,7 +220,7 @@ struct Cached
         return entries.ptr + nsizes * typeIndex!T + log2n;
     }
 
-    impl!T.Table table(T)(size_t n)
+    impl!T.Table* table(T)(size_t n)
     {
         auto e = entry!T(bsr(n));
         if(!e.table)
@@ -232,7 +232,7 @@ struct Cached
         return cast(typeof(return)) e.table; 
     }
 
-    impl!T.RealTable rtable(T)(size_t n)
+    impl!T.RealTable* rtable(T)(size_t n)
     {
         auto e = entry!T(bsr(n));
         if(!e.rtable)

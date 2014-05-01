@@ -281,7 +281,7 @@ if(transform == Transform.fft && !isMulti)
 
     T[] _re;
     T[] _im;
-    d.Table table;
+    d.Table* table;
     int log2n;
 
     this(uint[] log2ns)
@@ -315,7 +315,7 @@ if(transform == Transform.fft && isMulti)
 
     T[] _re;
     T[] _im;
-    d.MultiTable table;
+    d.MultiTable* table;
     int log2n;
 
     static @property multi(){ return d.multi_fft_ntransforms(); }
@@ -351,7 +351,7 @@ if(transform == Transform.rfft && !isMulti)
     alias direct d; 
 
     T[] data;
-    d.RealTable table;
+    d.RealTable* table;
 
     this(uint[] log2ns)
     {
@@ -385,7 +385,7 @@ if(transform == Transform.rfft && isMulti)
     alias direct d; 
 
     T[] data;
-    d.RealMultiTable real_table;
+    d.RealMultiTable* real_table;
     uint log2multi;
     uint log2n;
 
