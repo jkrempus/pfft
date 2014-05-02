@@ -6,7 +6,41 @@
 
 import buildutils;
 import std.string: toLower, toUpper, capitalize;
-import std.process;
+import std.process, std.traits;
+
+T or(T, U)(T a, lazy U b){ return a ? a : b; }
+T when(T)(bool condition, lazy T r){ return condition ? r : T.init; }
+
+string get_ctype(alias t)()
+{
+    static if(is(typeof(t) == string))
+        return t;
+    else 
+        return t.ctype;
+}
+
+string generate_capi(alias api)()
+{
+    string r = "";
+    foreach(member; api.elements)
+    {
+        r ~= "/**\n"~member.doc~"\n*/\n";
+        static if(member.kind == "func")
+        {
+            string[] argList = []; 
+            foreach(arg; member.args.elements)
+                argList ~= get_ctype!(arg.type)~" "~arg.name;
+
+            r ~= format("%s %s(%-(%s, %));\n\n", 
+                get_ctype!(member.ret), member.cname, argList);
+        }
+        else
+            r~= "struct "~member.cname~";\n\n";
+    }
+
+    return r;
+}
+
 
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
@@ -20,8 +54,6 @@ auto parseVersion(string simdOpt)
         "neon": Version.Neon,
         "scalar": Version.Scalar][simdOpt];
 }
-
-T when(T)(bool condition, lazy T r){ return condition ? r : T.init; }
 
 @property name(Version v) { return v.to!string.toLower.replace("_", "-"); }
 @property name(SIMD s) { return s.to!string.toLower; }
@@ -527,6 +559,10 @@ void doit(string[] args)
 
 void main(string[] args)
 {
+    import pfft.declarations;
+
+    //writeln(generate_capi!(api_!("f", "float")));
+
     try 
         doit(args);
     catch(Exception e)
