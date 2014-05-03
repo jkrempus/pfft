@@ -243,10 +243,12 @@ template generate_decls(string lang, alias api)
 {
     template decl_to_str(alias decl)
     {
+        enum name = (lang == "d" ? decl.dname : decl.cname);
+
         static if(decl.kind == "type")
             enum decl_to_str = 
                 (decl.doc == "" ? "" : "/**\n"~decl.doc~"\n*/\n")~
-                "struct "~decl.dname~";\n";
+                "struct "~name~";\n";
         else
         {
             enum arg_to_str(alias arg) = type_name!(lang, arg.type)~" "~arg.name;
@@ -254,7 +256,7 @@ template generate_decls(string lang, alias api)
             enum decl_to_str = 
                 "/**\n"~decl.doc~"\n*/\n"~
                 (lang == "d" ? "pragma(mangle, \""~decl.cname~"\") " : "")~
-                type_name!(lang, decl.ret)~" "~decl.dname~
+                type_name!(lang, decl.ret)~" "~name~
                 "("~ct_mapjoin!(arg_to_str, ", ", decl.args.elements)~");\n"; 
         }
     }

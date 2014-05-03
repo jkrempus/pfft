@@ -6,7 +6,7 @@
 
 import buildutils;
 import std.string: toLower, toUpper, capitalize;
-import std.process, std.traits;
+import std.process, std.traits, std.typetuple;
 
 T or(T, U)(T a, lazy U b){ return a ? a : b; }
 T when(T)(bool condition, lazy T r){ return condition ? r : T.init; }
@@ -281,57 +281,38 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
         .build(dc, false);
 }
 
-enum cHeaderTemplate = 
-q{
-    struct PfftTable{Suffix}Struct;
-    typedef struct PfftTable{Suffix}Struct* PfftTable{Suffix};
-
-    size_t pfft_table_size_{suffix}(size_t);
-    PfftTable{Suffix} pfft_table_{suffix}(size_t, void*);
-    void pfft_table_free_{suffix}(PfftTable{Suffix});
-    void pfft_fft_{suffix}({type}*, {type}*, PfftTable{Suffix});
-    void pfft_ifft_{suffix}({type}*, {type}*, PfftTable{Suffix});
-
-    struct PfftRTable{Suffix}Struct;
-    typedef struct PfftRTable{Suffix}Struct* PfftRTable{Suffix};
-
-    size_t pfft_rtable_size_{suffix}(size_t);
-    PfftRTable{Suffix} pfft_rtable_{suffix}(size_t, void*);
-    void pfft_rtable_free_{suffix}(PfftRTable{Suffix});
-    void pfft_rfft_{suffix}({type}*, PfftRTable{Suffix});
-    void pfft_irfft_{suffix}({type}*, PfftRTable{Suffix});
-
-    size_t pfft_alignment_{suffix}(size_t);
-    {type}* pfft_allocate_{suffix}(size_t);
-    void pfft_free_{suffix}({type}*);
-};
-
 void copyIncludes(string[] types, bool portable)
 {
+    import pfft.declarations;
+
     if(portable)
     {
-        auto suffixDict = [
-            "float" : "f", 
-            "double" : "d", 
-            "real" : "l"];
+        enum dtypes = ["float", "double", "real"];
+        enum t = ["float", "double", "long double"];
+        enum T = ["FLOAT", "DOUBLE", "LONGDOUBLE"];
+        enum s = ["f", "d", "l"];
 
-        auto typeDict = [
-            "float" : "float",
-            "double" : "double",
-            "real" : "long double"];
-
-        auto oStr = "";
-
-        foreach(type; types)
+        foreach(i; TypeTuple!(0, 1, 2))
         {
-            auto tmp = replace(cHeaderTemplate, "{type}", typeDict[type]);
-            auto s = suffixDict[type];
-            tmp = replace(tmp, "{suffix}", s);
-            tmp = replace(tmp, "{Suffix}", toUpper(s));
-            oStr ~= tmp;
-        }
+            if(!types.canFind(dtypes[i])) continue;
+
+            auto toplevel = std.file.readText(fixSeparators("../pfft/c/pfft.h"));
+            auto decls = std.file.readText(fixSeparators("../pfft/c/pfft_declarations.h"));
+
+            foreach(f; only(&toplevel, &decls))
+            {
+                *f = replace(*f, "{type}", t[i]);
+                *f = replace(*f, "{TYPE}", T[i]);
+                *f = replace(*f, "{suffix}", s[i]);
+                *f = replace(*f, "{Suffix}", toUpper(s[i]));
+            }
+
+            decls = replace(decls, "{declarations}", 
+                generate_decls!("c", api!(s[i], t[i])));
         
-        std.file.write(fixSeparators("include/pfft.h"), oStr);
+            std.file.write(fixSeparators("include/pfft_"~s[i]~".h"), toplevel);
+            std.file.write(fixSeparators("include/pfft_declarations_"~s[i]~".h"), decls);
+        }
     }
 
     mkdir("include/pfft");
@@ -536,8 +517,6 @@ void doit(string[] args)
 
 void main(string[] args)
 {
-    import pfft.declarations;
-
     //writeln(generate_decls!("c", api!("f", "float")));
 
     try 
