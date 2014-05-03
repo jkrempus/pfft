@@ -11,26 +11,25 @@ template ct_mapjoin(alias mapper, string separator, args...)
             ct_mapjoin!(mapper, separator, args[1..$]);
 }
 
-template get_type(string lang, alias t)
+template type_name(string lang, alias t)
 {
     static if(is(typeof(t) == string))
-        enum get_type = t;
+        enum type_name = t;
     else 
-        enum get_type = lang == "d" ? t.dtype : t.ctype;
+        enum type_name = lang == "d" ? t.dtype : t.ctype;
 }
 
 template dname_to_cname(string dname, decls...)
 {
     static if(decls.length == 0)
-    { 
-    }
+    { }
     else static if(decls[0].dname == dname)
         enum dname_to_cname = decls[0].cname;
     else
         enum dname_to_cname = dname_to_cname!(dname, decls[1..$]);
 }
 
-template api_(string suffix, string scalar)
+template api(string suffix, string scalar)
 {
     template list(args...){ alias elements = args; }
 
@@ -67,7 +66,7 @@ template api_(string suffix, string scalar)
     }
 
     enum scalar_ptr = scalar~"*";
-    alias api_ = list!(
+    alias api = list!(
         ty!("Table", 
             "The fft table"),
         fn!("fft_table_size",
@@ -240,25 +239,22 @@ in real_src and imag_src`),
     );
 }
 
-template generate_decls(alias api)
+template generate_decls(string lang, alias api)
 {
     template decl_to_str(alias decl)
     {
         static if(decl.kind == "type")
             enum decl_to_str = 
-                "/**\n"~decl.doc~"\n*/\n"~
+                (decl.doc == "" ? "" : "/**\n"~decl.doc~"\n*/\n")~
                 "struct "~decl.dname~";\n";
         else
         {
-            template arg_to_str(alias arg)
-            {
-                enum arg_to_str = get_type!("d", arg.type)~" "~arg.name;
-            }
+            enum arg_to_str(alias arg) = type_name!(lang, arg.type)~" "~arg.name;
 
             enum decl_to_str = 
                 "/**\n"~decl.doc~"\n*/\n"~
-                "pragma(mangle, \""~decl.cname~"\") "~
-                get_type!("d", decl.ret)~" "~decl.dname~
+                (lang == "d" ? "pragma(mangle, \""~decl.cname~"\") " : "")~
+                type_name!(lang, decl.ret)~" "~decl.dname~
                 "("~ct_mapjoin!(arg_to_str, ", ", decl.args.elements)~");\n"; 
         }
     }
@@ -270,5 +266,5 @@ template Declarations(string name, T, size_t = size_t)
 {
     extern(C):
 
-    mixin(generate_decls!(api_!(name, T.stringof)));
+    mixin(generate_decls!("d", api!(name, T.stringof)));
 }

@@ -273,7 +273,7 @@ version(SSE_AVX)
     version(InstantiateAdditionalSimd)
     {
         import pfft.fft_impl;
-        mixin Instantiate!("f_avx", 0, FFT!(Vector!(), Options!()));
+        mixin Instantiate!("f_avx", 0, i => 1, FFT!(Vector!(), Options!()));
     }
     else
     {

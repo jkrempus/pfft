@@ -43,24 +43,6 @@ template ReturnType(alias f)
     alias typeof(f(ParamTypeTuple!f.init)) ReturnType;
 }
 
-template generate_arg_list(alias fun, bool includeTypes)
-{
-    alias ParamTypeTuple!fun Params;
-
-    template arg_list(int i)
-    {
-        static if(i == 0)
-            enum arg_list = "";
-        else
-            enum arg_list = 
-                (i > 1 ? arg_list!(i - 1) ~ ", " : "") ~
-                (includeTypes ? Params[i - 1].stringof ~ " " : "") ~
-                "_" ~ i.stringof;
-    }
-
-    enum generate_arg_list = arg_list!(Params.length);
-}
-
 template st(alias a){ enum st = cast(size_t) a; }
 
 template ints_up_to(arg...)

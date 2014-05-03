@@ -1707,102 +1707,35 @@ template FFT(alias V, alias Options, bool disable_large = false)
     }
 }
 
-template Instantiate(string api_name, alias impl, FFTs...)
+template Instantiate(
+    string api_name, alias impl, alias set_impl, FFTs...)
 {
-    alias FFTs[0] FFT0;
-    alias FFT0.T T;
+    import pfft.declarations;
+    alias decls = api!(api_name, FFTs[0].T.stringof).elements;
 
-    version(none)
+    pragma(mangle, dname_to_cname!("set_implementation", decls))
+    void set_implementation(int i) { set_impl(i); }
+
+    template code(alias decl)
     {
-        import pfft.declarations;
-        alias Declarations!(api_name, T) api;
-
-        pragma(mangle, api.set_implementation.mangleof)
-        void set_implementation(int i)
+        static if(decl.kind == "type")
+            enum code = "struct "~decl.dname~"{}\n";
+        else static if(__traits(hasMember, FFTs[0], decl.dname))
         {
-            static if(is(typeof(implementation.set)))
-                implementation.set(i);
+            enum arg_to_str(alias arg) = type_name!("d", arg.type)~" "~arg.name;
+            enum arg_name(alias arg) = arg.name;
+
+            enum code =
+                "extern(C) pragma(mangle, \""~decl.cname~"\") "~ 
+                "auto "~decl.dname~"("~
+                ct_mapjoin!(arg_to_str, ", ", decl.args.elements)~
+                "){ return cast("~type_name!("d", decl.ret)~
+                ") SelectImplementation!FFTs.call!(\""~decl.dname~"\")(impl, "~
+                ct_mapjoin!(arg_name, ", ", decl.args.elements)~"); }\n";
         }
-
-        template code(names ...)
-        {
-            static if(names.length == 0)
-                enum code = "";
-            else
-            {
-                enum name = names[0];
-                alias get_member!(api, name) member;
-
-                static if(is(member == struct))
-                    enum current = "struct "~name~"{}\n";
-                else static if(
-                    is(typeof(member) == function) && 
-                    __traits(hasMember, FFT0, name))
-                {
-                    enum current =
-                        "extern(C) pragma(mangle, \""~member.mangleof~"\") "~ 
-                        "auto "~name~"("~generate_arg_list!(member, true)~
-                        "){ return cast("~ ReturnType!member.stringof~
-                        ") SelectImplementation!FFTs.call!(\""~name~"\")(impl, "~
-                        generate_arg_list!(member, false)~"); }\n";
-                }
-                else 
-                    enum current = "";
-
-                enum code = current ~ code!(names[1 .. $]);
-            }
-        }
-        
-        //pragma(msg, code!(__traits(allMembers, api)));
-        mixin(code!(__traits(allMembers, api)));
-    }
-    else
-    {
-        import pfft.declarations;
-        alias api_!(api_name, T.stringof) api;
-
-        pragma(mangle, dname_to_cname!("set_implementation", api.elements))
-        void set_implementation(int i)
-        {
-            static if(is(typeof(implementation.set)))
-                implementation.set(i);
-        }
-
-        template code(members...)
-        {
-            static if(members.length == 0)
-                enum code = "";
-            else
-            {
-                alias member = members[0];
-
-                static if(member.kind == "type")
-                    enum current = "struct "~member.dname~"{}\n";
-                else static if(__traits(hasMember, FFT0, member.dname))
-                {
-                    template arg_to_str(alias arg)
-                    {
-                        enum arg_to_str = get_type!("d", arg.type)~" "~arg.name;
-                    }
-
-                    template arg_name(alias arg){ enum arg_name = arg.name; }
-
-                    enum current =
-                        "extern(C) pragma(mangle, \""~member.cname~"\") "~ 
-                        "auto "~member.dname~"("~ct_mapjoin!(arg_to_str, ", ", member.args.elements)~
-                        "){ return cast("~get_type!("d", member.ret)~
-                        ") SelectImplementation!FFTs.call!(\""~member.dname~"\")(impl, "~
-                        ct_mapjoin!(arg_name, ", ", member.args.elements)~"); }\n";
-                }
-                else 
-                    enum current = "";
-
-                enum code = current ~ code!(members[1 .. $]);
-            }
-        }
-        
-        //pragma(msg, code!(__traits(allMembers, api)));
-        mixin(code!(api.elements));
+        else 
+            enum code = "";
     }
 
+    mixin(ct_mapjoin!(code, "\n", decls));
 }

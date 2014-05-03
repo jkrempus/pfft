@@ -19,29 +19,6 @@ string get_ctype(alias t)()
         return t.ctype;
 }
 
-string generate_capi(alias api)()
-{
-    string r = "";
-    foreach(member; api.elements)
-    {
-        r ~= "/**\n"~member.doc~"\n*/\n";
-        static if(member.kind == "func")
-        {
-            string[] argList = []; 
-            foreach(arg; member.args.elements)
-                argList ~= get_ctype!(arg.type)~" "~arg.name;
-
-            r ~= format("%s %s(%-(%s, %));\n\n", 
-                get_ctype!(member.ret), member.cname, argList);
-        }
-        else
-            r~= "struct "~member.cname~";\n\n";
-    }
-
-    return r;
-}
-
-
 enum Version{ AVX, SSE, Neon, Scalar, SSE_AVX }
 enum SIMD{ AVX, SSE, Neon, Scalar}
 
@@ -561,7 +538,7 @@ void main(string[] args)
 {
     import pfft.declarations;
 
-    //writeln(generate_capi!(api_!("f", "float")));
+    //writeln(generate_decls!("c", api!("f", "float")));
 
     try 
         doit(args);
