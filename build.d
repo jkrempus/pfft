@@ -285,17 +285,17 @@ void copyIncludes(string[] types, bool portable)
 {
     import pfft.declarations;
 
-    if(portable)
+    enum t = ["float", "double", "long double"];
+    enum T = ["FLOAT", "DOUBLE", "LONGDOUBLE"];
+    enum dtypes = ["float", "double", "real"];
+    enum s = ["f", "d", "l"];
+
+    mkdir("include/pfft");
+    foreach(i; TypeTuple!(0, 1, 2))
     {
-        enum dtypes = ["float", "double", "real"];
-        enum t = ["float", "double", "long double"];
-        enum T = ["FLOAT", "DOUBLE", "LONGDOUBLE"];
-        enum s = ["f", "d", "l"];
-
-        foreach(i; TypeTuple!(0, 1, 2))
+        if(!types.canFind(dtypes[i])) continue;
+        if(portable)
         {
-            if(!types.canFind(dtypes[i])) continue;
-
             auto toplevel = std.file.readText(fixSeparators("../pfft/c/pfft.h"));
             auto decls = std.file.readText(fixSeparators("../pfft/c/pfft_declarations.h"));
 
@@ -309,17 +309,18 @@ void copyIncludes(string[] types, bool portable)
 
             decls = replace(decls, "{declarations}", 
                 generate_decls!("c", api!(s[i], t[i])));
-        
+
             std.file.write(fixSeparators("include/pfft_"~s[i]~".h"), toplevel);
             std.file.write(fixSeparators("include/pfft_declarations_"~s[i]~".h"), decls);
         }
+
+        std.file.write(
+            fixSeparators("include/pfft/impl_"~dtypes[i]~".di"),
+            "module impl_"~dtypes[i]~";\n\n"~
+            "extern(C):\n\n"~
+            generate_decls!("d", api!(s[i], dtypes[i])));
     }
 
-    mkdir("include/pfft");
-    foreach(type; types)
-        cp("../pfft/di/impl_"~type~".di", "include/pfft/");
- 
-    cp("../pfft/declarations.di", "include/pfft/");   
     cp("../pfft/stdapi.d", "include/pfft/");
     cp("../pfft/pfft.d", "include/pfft/");
     cp("../pfft/common_templates.d", "include/pfft/");
