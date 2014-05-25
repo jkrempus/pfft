@@ -268,16 +268,8 @@ template Options()
     enum log2_recursive_passes_chunk_size = 4;
 }
 
-version(SSE_AVX)
+version(InstantiateAdditionalSimd)
 {
-    version(InstantiateAdditionalSimd)
-    {
-        import pfft.fft_impl;
-        mixin Instantiate!("f_avx", 0, i => 1, FFT!(Vector!(), Options!()));
-    }
-    else
-    {
-        import pfft.declarations;
-        mixin Declarations!("f_avx", float);
-    }
+    import pfft.fft_impl;
+    mixin Instantiate!("f_avx", 0, i => 1, FFT!(Vector!(), Options!()));
 }

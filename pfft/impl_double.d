@@ -8,11 +8,14 @@ import pfft.fft_impl;
 
 version(SSE_AVX)
 {
+    import pfft.declarations;
     import pfft.detect_avx;
     import sse = pfft.sse_double, avx = pfft.avx_double;
 
     mixin Instantiate!(
-        "d", get, set, FFT!(sse.Vector!(), sse.Options!()), avx);
+        "d", get, set,
+        FFT!(sse.Vector!(), sse.Options!()), 
+        Declarations!("d_avx", double));
 }
 else
 {
@@ -26,7 +29,7 @@ else
         import pfft.avx_double;
     else
         import pfft.sse_double;
-    
+
     mixin Instantiate!("d", 0, i => 0, FFT!(Vector!(),Options!()));
 }
 
