@@ -281,44 +281,62 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
         .build(dc, false);
 }
 
+template ScalarNames(string d_, string c_, string upper_, string suffix_)
+{
+    enum d = d_;
+    enum c = c_;
+    enum upper = upper_;
+    enum suffix = suffix_;
+}
+
+alias scalars = TypeTuple!(
+  ScalarNames!("float", "float", "FLOAT", "f"),
+  ScalarNames!("double", "double", "DOUBLE", "d"),
+  ScalarNames!("real", "long double", "LONGDOUBLE", "l"));
+
+enum decl_module_name(string lang, alias type) = 
+    lang == "c" ?  "pfft_declarations_"~type.suffix : "pfft.impl_"~type.d;
+
+string generate_decl_module(string lang, alias type)()
+{
+    import pfft.declarations;
+    return 
+        "module "~decl_module_name!(lang, type)~";\n\n"~
+        "extern(C):\n\n"~
+        generate_decls!(lang, api!(type.suffix, type.d));
+}
+
 void copyIncludes(string[] types, bool portable)
 {
     import pfft.declarations;
 
-    enum t = ["float", "double", "long double"];
-    enum T = ["FLOAT", "DOUBLE", "LONGDOUBLE"];
-    enum dtypes = ["float", "double", "real"];
-    enum s = ["f", "d", "l"];
-
     mkdir("include/pfft");
-    foreach(i; TypeTuple!(0, 1, 2))
+    foreach(type; scalars)
     {
-        if(!types.canFind(dtypes[i])) continue;
+        if(!types.canFind(type.d)) continue;
         if(portable)
         {
-            auto toplevel = std.file.readText(fixSeparators("../pfft/c/pfft.h"));
-            auto decls = std.file.readText(fixSeparators("../pfft/c/pfft_declarations.h"));
+            auto toplevel = rd(fixSeparators("../pfft/c/pfft.h"));
+            auto decls = rd(fixSeparators("../pfft/c/pfft_declarations.h"));
 
             foreach(f; only(&toplevel, &decls))
             {
-                *f = replace(*f, "{type}", t[i]);
-                *f = replace(*f, "{TYPE}", T[i]);
-                *f = replace(*f, "{suffix}", s[i]);
-                *f = replace(*f, "{Suffix}", toUpper(s[i]));
+                *f = replace(*f, "{type}", type.c);
+                *f = replace(*f, "{TYPE}", type.upper);
+                *f = replace(*f, "{suffix}", type.suffix);
+                *f = replace(*f, "{Suffix}", toUpper(type.suffix));
             }
 
             decls = replace(decls, "{declarations}", 
-                generate_decls!("c", api!(s[i], t[i])));
+                generate_decls!("c", api!(type.suffix, type.c)));
 
-            std.file.write(fixSeparators("include/pfft_"~s[i]~".h"), toplevel);
-            std.file.write(fixSeparators("include/pfft_declarations_"~s[i]~".h"), decls);
+            wr(toplevel, "include/pfft_"~type.suffix~".h");
+            wr(decls, "include/pfft_declarations_"~type.suffix~".h");
         }
 
-        std.file.write(
-            fixSeparators("include/pfft/impl_"~dtypes[i]~".di"),
-            "module impl_"~dtypes[i]~";\n\n"~
-            "extern(C):\n\n"~
-            generate_decls!("d", api!(s[i], dtypes[i])));
+        wr(
+            generate_decl_module!("d", type),
+            "include/pfft/impl_"~type.d~".di");
     }
 
     cp("../pfft/stdapi.d", "include/pfft/");
@@ -326,19 +344,32 @@ void copyIncludes(string[] types, bool portable)
     cp("../pfft/common_templates.d", "include/pfft/");
 }
 
-void buildDoc(Compiler c, string ccmd)
+void buildDoc(Compiler c, string ccmd, string[] types)
 {
+    auto list = ["pfft.pfft", "pfft.stdapi"];
+    foreach(type; scalars)
+        if(types.canFind(type.d))
+            foreach(lang; TypeTuple!("c", "d"))
+                list ~= decl_module_name!(lang, type);
+
     auto common = argList
         .compileCmd(ccmd)
         .noOutput
         .docInclude(
             "doc/candydoc/candy.ddoc", 
-            "doc/ddoc/modules.ddoc", 
+            writeToRandom("MODULES="~list.map!q{"$(MODULE "~a~")"}.join, ".ddoc"),
             "doc/ddoc/additional-macros.ddoc");
 
     common.src("pfft/pfft").docFile("doc/pfft.pfft.html").build(c, false);
     common.src("pfft/stdapi").docFile("doc/pfft.stdapi.html").build(c, false);
-    common.src("doc/ddoc/clib").docFile("doc/pfft.clib.html").build(c, false);
+
+    foreach(type; scalars)
+        if(types.canFind(type.d))
+            foreach(lang; TypeTuple!("c", "d"))
+                common
+                    .src(writeToRandom(generate_decl_module!(lang, type), ".d"))
+                    .docFile("doc/"~decl_module_name!(lang, type)~".html")
+                    .build(c, false);
 }
 
 enum usage = `
@@ -434,6 +465,10 @@ void doit(string[] args)
         "flag", &flags,
         "add-module", &addModule);
 
+    types = array(uniq(sort(types)));
+
+    if(types.empty)
+        types = ["double", "float", "real"];
 
     if(dccmd == "")
         dccmd = [
@@ -441,11 +476,9 @@ void doit(string[] args)
             Compiler.GDC : "gdc", 
             Compiler.LDC : "ldc2"][dc];
 
-    if(doc)
-        return buildDoc(dc, dccmd);
+    if(doc) return buildDoc(dc, dccmd, types);
 
-    if(help)
-        return writeln(usage);
+    if(help) return writeln(usage);
   
     if(dc == Compiler.DMD && portable && !tests)
         invalidCmd("Can not build a portable library using DMD");
@@ -454,11 +487,6 @@ void doit(string[] args)
         stderr.writeln(
             "Building with FFTW support enabled - the generated "
             "executable will be covered by the GPL (see FFTW's license).");
-
-    types = array(uniq(sort(types)));
-
-    if(types.empty)
-        types = ["double", "float", "real"];
 
     if(simdOpt == "")
         simdOpt = (dc != Compiler.DMD) ? "sse-avx" : "sse";
@@ -518,8 +546,6 @@ void doit(string[] args)
 
 void main(string[] args)
 {
-    //writeln(generate_decls!("c", api!("f", "float")));
-
     try 
         doit(args);
     catch(Exception e)

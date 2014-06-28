@@ -116,6 +116,20 @@ void rm(string path, string flags = "")
             throw e;
 }
 
+void wr(string src, string dst)
+{
+    dst = fn(dst);
+    if(verbose) stderr.writeln(`wr(..., "`~dst~`")`);
+    std.file.write(dst, src);
+} 
+
+string rd(string src)
+{
+    src = fn(src);
+    if(verbose) stderr.writeln(`rd("`~src~`")`);
+    return std.file.readText(src);
+}
+
 void cp(string src, string dst, string flags = "")
 {
     import std.path, std.file;
@@ -196,10 +210,17 @@ void mkdir(string path, string flags = "")
 
 string fixSeparators(string s) { return fn(s); }
 
-auto randomFileName()
+string randomFileName()
 {
     auto dir = std.file.tempDir();
     return buildPath(dir, "_" ~ randomUUID().toString().replace("-", ""));
+}
+
+string writeToRandom(string value, string suffix)
+{
+    auto f = randomFileName()~suffix;
+    wr(value, f);
+    return f;
 }
 
 string libName(Compiler c, string value)
@@ -517,9 +538,7 @@ private auto generateDeps(immutable(Arg)[] args, Compiler c)
 
     auto depsFile = randomFileName();
     auto srcFile = randomFileName();
-    std.file.write(
-        srcFile~".d",
-        modules.map!(a => "import "~a.value~";\n").join);
+    wr(modules.map!(a => "import "~a.value~";\n").join, srcFile~".d");
     
     runCompiler(c, args ~ [
         A(AT.src, srcFile), A(AT.deps, depsFile), A(AT.noOutput, null)]);
@@ -529,7 +548,7 @@ private auto generateDeps(immutable(Arg)[] args, Compiler c)
     auto re = regex(`^([\w.]+) \(([^\)]+)\) : \w+ : ([\w.]+) \(([^\)]+)\)`, `gm`);
 
     // calling array on result of match() solves all my problems
-    return match(std.file.readText(depsFile).fixBackslashes, re).array
+    return match(rd(depsFile).fixBackslashes, re).array
         .map!(capt => Quad(
             capt[1] == srcModule ? "" : capt[1], 
             capt[2], 
