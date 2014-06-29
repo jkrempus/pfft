@@ -227,6 +227,7 @@ void buildLibImpl(
 
         auto linked = objN("linked");
         auto objs = chain(["druntime", "pfft"], implObjs).map!objN.array;
+        if(dc == Compiler.LDC) objs ~= objN("dso_registry_stub");
 
         vexecute(["ld", "-r", "-o", linked] ~ objs);
 
@@ -279,6 +280,12 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
         .src("../pfft/druntime_stubs")
         .conditional(dc == Compiler.LDC, argList.module_("core.bitop"))
         .build(dc, false);
+
+    if(dc == Compiler.LDC)
+    {
+      auto src = writeToRandom("void _d_dso_registry(){ }", ".c");
+      vexecute(["gcc", "-c", src, "-o", objName(dc, "dso_registry_stub")]);
+    }
 }
 
 template ScalarNames(string d_, string c_, string upper_, string suffix_)

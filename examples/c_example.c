@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <pfft.h>
+#include <pfft_f.h>
 
 int main(int argc, char **argv)
 {
-    int n = atoi(argv[1]);
-    PfftTableF tab = pfft_table_f(n, 0);
+    size_t n = atoi(argv[1]);
+    PfftTableF* tab = pfft_fft_table_allocate_f(&n, 1);
     float *re = pfft_allocate_f(n);
     float *im = pfft_allocate_f(n);
     
@@ -20,5 +20,5 @@ int main(int argc, char **argv)
 
     pfft_free_f(re);
     pfft_free_f(im);
-    pfft_table_free_f(tab);
+    pfft_fft_table_free_f(tab);
 }

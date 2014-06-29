@@ -50,6 +50,9 @@ mixin(
 version(GNU)
     mixin(stub!"__gdc_personality_v0");
 
+version(LDC)
+    mixin(stub!"_D14TypeInfo_Const6__vtblZ");
+
 
 void _d_assert(string file, uint line)
 {

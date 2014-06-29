@@ -130,6 +130,15 @@ string rd(string src)
     return std.file.readText(src);
 }
 
+void mv(string src, string dst, string flags = "")
+{
+    if(verbose)
+        stderr.writeln(`mv("`~src~`", "`~dst~`", "`~flags~`")`);
+    
+    import std.file;
+    std.file.rename(fn(src), fn(dst));
+}
+
 void cp(string src, string dst, string flags = "")
 {
     import std.path, std.file;
