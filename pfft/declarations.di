@@ -230,15 +230,52 @@ in real_src and imag_src`),
 
         fn!("alignment",
             "size_t",
-            list!(arg!("n", "size_t")),
+            list!(),
             "Returns the required alignment for a block of n elements."),
         fn!("set_implementation",
             "void",
             list!(arg!("implementation", "int")),
             "Chooses fft implementation. For testing only, unsafe."),
+
+        fn!("recommended_alignment",
+            "size_t",
+            list!(arg!("n", "size_t"), arg!("page_size", "size_t")),
+            "Recomended alignment. The result of this function will be at least "
+            "as large as the result of alignment(). Using recommended_alignment "
+            "can sometimes slightly improve performance. The parameter n is the "
+            "size of the memory block we will be allocating with the alignment "
+            "this function returns. The parameter page_size is the page size "
+            "of the system. If it is different from zero, the function can use "
+            "it to make a better decision  when choosing optimal alignemnt."),
+
+        fn!("allocate",
+            "void*",
+            list!(
+              arg!("n", "size_t"), 
+              arg!("mem", "void*"), 
+              arg!("page_size", "size_t")),
+            "Takes a pointer to an allocated block of memory (mem) and returns "
+            "an aligned pointer. The size of the block of memory at mem must "
+            "be at least allocate_size(n, page_size). The return value ret will"
+            "such that the block of memory between ret and ret + n will be " 
+            "inside the block of memory pointed to by mem. The parameter "
+            "page_size should be either zero or the page size of the system. "
+            "If it is differt from zero, it can be used to make a better "
+            "decision about optimal alignment."),
+
+        fn!("allocate_size",
+            "size_t",
+            list!(arg!("n", "size_t"), arg!("page_size", "size_t")),
+            "Returns the minimal size of the memory block passed to allocate()."),
+
+        fn!("allocate_getmem",
+            "void*",
+            list!(arg!("p", "void*")),
+            "Takes the pointer returned by allocate() and returns the value "
+            "that was passed to allocate() as mem parameter.")
     );
 }
-
+    
 template generate_decls(string lang, alias api)
 {
     template decl_to_str(alias decl)

@@ -1232,12 +1232,7 @@ template FFT(alias V, alias Options, bool disable_large = false)
         }
     }
 
-    size_t alignment(size_t n)
-    {
-        return max(
-            min(next_pow2(vec.sizeof), next_pow2(T.sizeof * n)), 
-            (void*).sizeof);
-    }
+    size_t alignment() { return max(next_pow2(vec.sizeof), (void*).sizeof); }
    
     static if(isScalar)
         alias FFT!(V, Options, disable_large) MSFFT;
@@ -1705,6 +1700,37 @@ template FFT(alias V, alias Options, bool disable_large = false)
     {
         irfft1d(re, im, &rmt.multidim_table.tables[0], rmt.rtable);
     }
+
+    size_t recommended_nonnative_alignment()(size_t n, size_t page_size)
+    {
+        size_t cache_line = 64;
+        size_t minimal = alignment();
+        if(n < minimal) return minimal;
+        if(n < cache_line) return next_pow2(n);
+        if(!page_size || n < 8 * page_size) return cache_line;
+        else return page_size;
+    }
+
+    size_t recommended_alignment(size_t n, size_t page_size)
+    {
+        return min(page_size, max(alignment(), next_pow2(n)));
+    }
+
+    void* allocate()(size_t n, void* mem, size_t page_size)
+    {
+        size_t mask = recommended_nonnative_alignment(n, page_size) - 1;
+        size_t r = (((cast(size_t) mem) + (void*).sizeof + mask)) & ~mask;
+        (cast(void**) r)[-1] = mem;
+        return cast(void*) r;
+    }
+    
+    size_t allocate_size()(size_t n, size_t page_size)
+    {
+        size_t mask = recommended_nonnative_alignment(n, page_size) - 1;
+        return n + (void*).sizeof + mask;
+    }
+
+    void* allocate_getmem()(void* p) { return (cast(void**) p)[-1]; }
 }
 
 template Instantiate(

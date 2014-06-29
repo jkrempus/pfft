@@ -102,8 +102,7 @@ void saveIfForward(R)(ref R r)
 
 bool isAligned(T)(T* p, uint log2n)
 {
-    //TODO: parameter to alignment() may be wrong here.
-    return ((cast(size_t)p) & (impl!(T).alignment(log2n) - 1)) == 0;
+    return ((cast(size_t)p) & (impl!(T).alignment() - 1)) == 0;
 }    
 
 T* alignedScalarPtr(T, R)(R r, uint log2n)

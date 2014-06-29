@@ -4,7 +4,7 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 module pfft.pfft;
-import core.memory, core.bitop, std.array;
+import core.memory, core.bitop, std.array, std.algorithm;
 
 template Import(TT)
 {
@@ -63,7 +63,7 @@ final class Fft(T)
     impl.Table* table;
 
 /**
-A struct that wraps an array of T. The reason behind this struct is
+A struct that wraps an array of T. This struct's purpose is
 to ensure that the array will always be aligned properly for use with 
 other functions in this class. The memory layout of this struct is 
 identical to T[].
@@ -82,8 +82,8 @@ identical to T[].
         ///
         auto this(size_t n)
         {
-            auto p = cast(T*) GC.malloc(n * T.sizeof);
-            assert(((impl.alignment(n) - 1) & cast(size_t) p) == 0);
+            auto p = cast(T*) GC.malloc(max(n * T.sizeof, impl.alignment));
+            assert(((impl.alignment() - 1) & cast(size_t) p) == 0);
             _data = p[0 .. n];
         }
     }
