@@ -2,7 +2,7 @@
 #define _PFFT_{TYPE}_H_
 
 #include <stdint.h>
-#include "pfft_declarations.h"
+#include "pfft_declarations_{suffix}.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -14,8 +14,11 @@ extern "C"
 
 #include <stdlib.h>
 
-#if defined _POSIX_VERSION && _POSIX_VERSION > 200112L
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 #include <unistd.h>
+#endif
+
+#if defined _POSIX_VERSION && _POSIX_VERSION > 200112L
 static size_t pfft_pagesize(){ return sysconf(_SC_PAGESIZE); }
 #elif defined _MSC_VER
 #define WIN32_LEAN_AND_MEAN
@@ -30,95 +33,84 @@ static size_t pfft_pagesize()
 #endif
 
 #if defined _POSIX_VERSION && _POSIX_VERSION > 200112L
-#include <unistd.h>
 
-static void* pfft_aligned_alloc(size_t alignment, size_t size)
+static void* pfft_allocate_{suffix}(size_t sz)
 {
-    void* p;
-    if(posix_memalign(&p, alignment, size)) p = NULL;
-    return p;
+  void* p;
+  if(posix_memalign(
+      &p, pfft_recommended_alignment_{suffix}(sz, pfft_pagesize()), sz))
+  {
+      p = NULL;
+  }
+  
+  return p;
 }
 
-#define pfft_aligned_free free
-
-static void* pfft_recommended_alignment(size_t sz, size_t minimal_alignment)
-{
-    return pfft_recommended_alignment_native(
-        sz, minimal_alignment, pfft_pagesize());
-}
+#define pfft_free_{suffix} free
 
 #elif defined __STDC_VERSION__ && __STDC_VERSION__ > 201112L
-#define pfft_aligned_alloc aligned_alloc
-#define pfft_aligned_free free
-static void* pfft_recommended_alignment(size_t sz, size_t minimal_alignment)
+
+static void* pfft_allocate_{suffix}(size_t sz)
 {
-    return pfft_recommended_alignment_native(
-        sz, minimal_alignment, pfft_pagesize());
+  return aligned_alloc(
+      pfft_recommended_alignment_{suffix}(sz, pfft_pagesize()), sz);
 }
+
+#define pfft_free_{suffix} free
 #else
 
-static void* pfft_aligned_alloc(size_t alignment, size_t size)
+static void* pfft_allocate_{suffix}(size_t size)
 {
-    return pfft_align(alignment, size,
-        malloc(apfft_align_size(alignment, size)));
+    return pfft_align_memory(
+        size, malloc(pfft_align_memory_size(alignment, size)), pfft_pagesize());
 }
 
-static void* pfft_aligned_free(void* p) { free(pfft_memory(p)); }
-
-static void* pfft_recommended_alignment(size_t sz, size_t minimal_alignment)
-{
-    return pfft_recommended_alignment_non_native(
-        sz, minimal_alignment, 64, pfft_pagesize());
-}
+static void* pfft_free_{suffix}(void* p) { free(pfft_align_memory_retrieve(p)); }
 #endif
 #endif
 
-PfftTable{Suffix} pfft_fft_table_allocate_{suffix}(size_t* nptr, size_t nlen)
+PfftTable{Suffix}* pfft_fft_table_allocate_{suffix}(size_t* nptr, size_t nlen)
 {
-    size_t sz = pfft_fft_table_size_{suffix}(nptr, len);
-    size_t alignment = pfft_recommended_alignment(sz, pfft_alignment_{suffix}(sz));
-    return pfft_fft_table(nptr, nlen, pfft_aligned_alloc(alignment, sz));
+    size_t sz = pfft_fft_table_size_{suffix}(nptr, nlen);
+    return pfft_fft_table_{suffix}(nptr, nlen, pfft_allocate_{suffix}(sz));
 }
 
-void pfft_fft_table_free_{suffix}(PfftTable{Suffix} table)
+void pfft_fft_table_free_{suffix}(PfftTable{Suffix}* table)
 {
-    pfft_aligned_free(pfft_fft_table_memory_{suffix}(table));
+    pfft_free_{suffix}(pfft_fft_table_memory_{suffix}(table));
 }
 
-PfftRealTable{Suffix} pfft_rfft_table_allocate_{suffix}(size_t* nptr, size_t nlen)
+PfftRealTable{Suffix}* pfft_rfft_table_allocate_{suffix}(size_t* nptr, size_t nlen)
 {
-    size_t sz = pfft_fft_table_size_{suffix}(nptr, len);
-    size_t alignment = pfft_recommended_alignment(sz, pfft_alignment_{suffix}(sz));
-    return pfft_rfft_table(nptr, nlen, pfft_aligned_alloc(alignment, sz));
+    size_t sz = pfft_fft_table_size_{suffix}(nptr, nlen);
+    return pfft_rfft_table_{suffix}(nptr, nlen, pfft_allocate_{suffix}(sz));
 }
 
-void pfft_rfft_table_free_{suffix}(PfftRealTable{Suffix} table)
+void pfft_rfft_table_free_{suffix}(PfftRealTable{Suffix}* table)
 {
-    pfft_aligned_free(pfft_rfft_table_memory_{suffix}(table));
+    pfft_free_{suffix}(pfft_rfft_table_memory_{suffix}(table));
 }
 
-PfftMultiTable{Suffix} pfft_fft_table_allocate_{suffix}(size_t* nptr, size_t nlen)
+PfftMultiTable{Suffix}* pfft_multi_fft_table_allocate_{suffix}(size_t n)
 {
-    size_t sz = pfft_fft_table_size_{suffix}(nptr, len);
-    size_t alignment = pfft_recommended_alignment(sz, pfft_alignment_{suffix}(sz));
-    return pfft_fft_table(nptr, nlen, pfft_aligned_alloc(alignment, sz));
+    size_t sz = pfft_multi_fft_table_size_{suffix}(n);
+    return pfft_multi_fft_table_{suffix}(n, pfft_allocate_{suffix}(sz));
 }
 
-void pfft_fft_table_free_{suffix}(PfftMultiTable{Suffix} table)
+void pfft_multi_fft_table_free_{suffix}(PfftMultiTable{Suffix}* table)
 {
-    pfft_aligned_free(pfft_fft_table_memory_{suffix}(table));
+    pfft_free_{suffix}(pfft_multi_fft_table_memory_{suffix}(table));
 }
 
-PfftRealMultiTable{Suffix} pfft_rfft_table_allocate_{suffix}(size_t* nptr, size_t nlen)
+PfftRealMultiTable{Suffix}* pfft_multi_rfft_table_allocate_{suffix}(size_t n)
 {
-    size_t sz = pfft_fft_table_size_{suffix}(nptr, len);
-    size_t alignment = pfft_recommended_alignment(sz, pfft_alignment_{suffix}(sz));
-    return pfft_rfft_table(nptr, nlen, pfft_aligned_alloc(alignment, sz));
+    size_t sz = pfft_multi_rfft_table_size_{suffix}(n);
+    return pfft_multi_rfft_table_{suffix}(n, pfft_allocate_{suffix}(sz));
 }
 
-void pfft_rfft_table_free_{suffix}(PfftRealMultiTable{Suffix} table)
+void pfft_multi_rfft_table_free_{suffix}(PfftRealMultiTable{Suffix}* table)
 {
-    pfft_aligned_free(pfft_rfft_table_memory_{suffix}(table));
+    pfft_free_{suffix}(pfft_multi_rfft_table_memory_{suffix}(table));
 }
 
 #ifdef __cplusplus

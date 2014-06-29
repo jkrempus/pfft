@@ -248,7 +248,7 @@ in real_src and imag_src`),
             "of the system. If it is different from zero, the function can use "
             "it to make a better decision  when choosing optimal alignemnt."),
 
-        fn!("allocate",
+        fn!("align_memory",
             "void*",
             list!(
               arg!("n", "size_t"), 
@@ -256,23 +256,24 @@ in real_src and imag_src`),
               arg!("page_size", "size_t")),
             "Takes a pointer to an allocated block of memory (mem) and returns "
             "an aligned pointer. The size of the block of memory at mem must "
-            "be at least allocate_size(n, page_size). The return value ret will"
-            "such that the block of memory between ret and ret + n will be " 
+            "be at least align_memory_size(n, page_size). The return value ret will"
+            "be such that the block of memory between ret and ret + n will be " 
             "inside the block of memory pointed to by mem. The parameter "
             "page_size should be either zero or the page size of the system. "
             "If it is differt from zero, it can be used to make a better "
-            "decision about optimal alignment."),
+            "decision about optimal alignment. This function may modify the "
+            "memory pointed to by mem."),
 
-        fn!("allocate_size",
+        fn!("align_memory_size",
             "size_t",
             list!(arg!("n", "size_t"), arg!("page_size", "size_t")),
-            "Returns the minimal size of the memory block passed to allocate()."),
+            "Returns the minimal size of the memory block passed to align_memory()."),
 
-        fn!("allocate_getmem",
+        fn!("align_memory_retrieve",
             "void*",
             list!(arg!("p", "void*")),
-            "Takes the pointer returned by allocate() and returns the value "
-            "that was passed to allocate() as mem parameter.")
+            "Takes the pointer returned by align_memory() and returns the value "
+            "that was passed to align_memory() as mem parameter.")
     );
 }
     
@@ -285,7 +286,8 @@ template generate_decls(string lang, alias api)
         static if(decl.kind == "type")
             enum decl_to_str = 
                 (decl.doc == "" ? "" : "/**\n"~decl.doc~"\n*/\n")~
-                "struct "~name~";\n";
+                "struct "~name~";\n" ~
+                (lang == "d" ? "" : "typedef struct "~name~" "~name~";\n");
         else
         {
             enum arg_to_str(alias arg) = type_name!(lang, arg.type)~" "~arg.name;

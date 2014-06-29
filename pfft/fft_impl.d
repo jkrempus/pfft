@@ -1716,21 +1716,21 @@ template FFT(alias V, alias Options, bool disable_large = false)
         return min(page_size, max(alignment(), next_pow2(n)));
     }
 
-    void* allocate()(size_t n, void* mem, size_t page_size)
+    void* align_memory()(size_t n, void* mem, size_t page_size)
     {
         size_t mask = recommended_nonnative_alignment(n, page_size) - 1;
         size_t r = (((cast(size_t) mem) + (void*).sizeof + mask)) & ~mask;
         (cast(void**) r)[-1] = mem;
         return cast(void*) r;
     }
-    
-    size_t allocate_size()(size_t n, size_t page_size)
+
+    size_t align_memory_size()(size_t n, size_t page_size)
     {
         size_t mask = recommended_nonnative_alignment(n, page_size) - 1;
         return n + (void*).sizeof + mask;
     }
 
-    void* allocate_getmem()(void* p) { return (cast(void**) p)[-1]; }
+    void* align_memory_retrieve()(void* p) { return (cast(void**) p)[-1]; }
 }
 
 template Instantiate(
