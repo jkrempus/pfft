@@ -233,7 +233,9 @@ void buildLibImpl(
         vexecute(["ld","--gc-sections", "-r", "-o", linked]
             ~ symbolFlags("-u") ~ objs);
 
-        vexecute(["objcopy", linked, objN("copied"), "--remove-section=.eh_frame"]
+        vexecute(
+            ["objcopy", linked, objN("copied"), "--remove-section=.eh_frame"]
+            ~ (dc == Compiler.LDC ? ["--strip-symbol", "_d_dso_registry"] : [])
             ~ symbolFlags("-G"));
 
         auto common = argList.output("lib/pfft").obj("copied").noDefaultLib;
