@@ -6,7 +6,7 @@
 module pfft.pfft;
 import core.memory, core.bitop, std.array, std.algorithm;
 
-template Import(TT)
+private template Import(TT)
 {
     static if(is(TT == float))
         import impl = pfft.impl_float;
@@ -18,7 +18,7 @@ template Import(TT)
         static assert(0, "Not implemented");
 }
 
-template st(alias a){ enum st = cast(size_t) a; }
+private template st(alias a){ enum st = cast(size_t) a; }
 
 /**
 A class for calculating discrete fourier transform. The methods of this class

@@ -1,2 +1,0 @@
-D = <code>$0</code>
-DP = $(D_PARAM $0)

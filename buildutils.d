@@ -62,6 +62,11 @@ auto vshell(string cmd)
     return r;
 }
 
+auto vshellf(A...)(string fmt, A args)
+{
+  return vshell(format(fmt, args));
+}
+
 auto vexecute(string[] cmd)
 {
     if(verbose)
@@ -296,6 +301,7 @@ private struct Arg
         docFile,
         docDir,
         docInclude,
+        jsonFile,
     }
 
     template hasValue(Type type){ enum hasValue = type >= Type.version_; }
@@ -337,6 +343,7 @@ private struct Arg
                 case doc: return "-fdoc";
                 case docFile: return "-fdoc-file="~fn(value);
                 case docDir: return "-fdoc-dir="~fn(value);
+                case jsonFile: return "-fXf="~fn(value);
                 case noDefaultLib: return "-nophoboslib";
                 case pic: return "-fPIC";
                 case version_: return "-fversion="~value;
@@ -360,6 +367,7 @@ private struct Arg
             {
                 case docFile: return "-Df="~fn(value);
                 case docDir: return "-Dd="~fn(value);
+                case jsonFile: return "-Xf="~fn(value);
                 case noDefaultLib: return "-defaultlib=";
                 case version_: return "-d-version="~value;
                 case optimize: return "-O3";
@@ -376,6 +384,7 @@ private struct Arg
             case docFile: return "-Df"~fn(value);
             case docDir: return "-Dd"~fn(value);
             case docInclude: return fn(value);
+            case jsonFile: return "-Xf"~fn(value);
             case pic: return "-fPIC";
             case deps: return "-deps="~value;
             case linkTo: return "-L-l"~value;
@@ -723,13 +732,13 @@ struct ArgList
 
         if(!args.any!(a => a.type == Type.output))
         {
+            if(args.any!(a => a.type == Type.noOutput))
+                return this.output(randomFileName());
+                
             auto firstSource = args.find!(ofType!(Type.src, Type.module_));
 
             if(firstSource.empty)
             {
-                if(args.any!(a => a.type == Type.noOutput))
-                    return this.output(randomFileName());
-                
                 enforce(0, "Can not determine the name of the ouput file");
             }
             else if(firstSource.front.type == Type.src)

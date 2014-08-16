@@ -299,8 +299,17 @@ alias scalars = TypeTuple!(
   ScalarNames!("double", "double", "DOUBLE", "d"),
   ScalarNames!("real", "long double", "LONGDOUBLE", "l"));
 
+string insertType(alias type)(string s)
+{
+    return s
+        .replace("{type}", type.c)
+        .replace("{TYPE}", type.upper)
+        .replace("{suffix}", type.suffix)
+        .replace("{Suffix}", toUpper(type.suffix));
+}
+
 enum decl_module_name(string lang, alias type) = 
-    lang == "c" ?  "pfft_declarations_"~type.suffix : "pfft.impl_"~type.d;
+    lang == "c-doc" ?  "pfft_declarations_"~type.suffix : "pfft.impl_"~type.d;
 
 string generate_decl_module(string lang, alias type)()
 {
@@ -325,12 +334,7 @@ void copyIncludes(string[] types, bool portable)
             auto decls = rd(fixSeparators("../pfft/c/pfft_declarations.h"));
 
             foreach(f; only(&toplevel, &decls))
-            {
-                *f = replace(*f, "{type}", type.c);
-                *f = replace(*f, "{TYPE}", type.upper);
-                *f = replace(*f, "{suffix}", type.suffix);
-                *f = replace(*f, "{Suffix}", toUpper(type.suffix));
-            }
+                *f = insertType!type(*f);
 
             decls = replace(decls, "{declarations}", 
                 generate_decls!("c", api!(type.suffix, type.c)));
@@ -358,23 +362,31 @@ void buildDoc(Compiler c, string ccmd, string[] types)
                 list ~= decl_module_name!(lang, type);
 
     auto common = argList
+        .doc
         .compileCmd(ccmd)
-        .noOutput
-        .docInclude(
-            "doc/candydoc/candy.ddoc", 
-            writeToRandom("MODULES="~list.map!q{"$(MODULE "~a~")"}.join, ".ddoc"),
-            "doc/ddoc/additional-macros.ddoc");
+        .noOutput;
 
-    common.src("pfft/pfft").docFile("doc/pfft.pfft.html").build(c, false);
-    common.src("pfft/stdapi").docFile("doc/pfft.stdapi.html").build(c, false);
+    common
+        .src("pfft/pfft")
+        .src("pfft/stdapi")
+        .jsonFile("doc/src/d.json").build(c, false);
 
+    auto cargs = common;
     foreach(type; scalars)
         if(types.canFind(type.d))
-            foreach(lang; TypeTuple!("c", "d"))
-                common
-                    .src(writeToRandom(generate_decl_module!(lang, type), ".d"))
-                    .docFile("doc/"~decl_module_name!(lang, type)~".html")
-                    .build(c, false);
+            cargs = cargs
+                .src(writeToRandom(generate_decl_module!("c-doc", type), ".d"))
+                .src(writeToRandom(insertType!type(rd("doc/src/c.d")), ".d"));
+
+    cargs.jsonFile("doc/src/c.json").build(c, false);
+
+    foreach(name; ["c", "d"])
+    {
+        auto dir = format("doc/%s", name);
+        rm(dir, "rf");
+        cp("doc/src/assets/", dir, "r");
+        vshellf("ddox generate-html doc/src/%s.json doc/%s", name, name);
+    }
 }
 
 enum usage = `

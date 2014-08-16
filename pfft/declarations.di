@@ -287,7 +287,7 @@ template generate_decls(string lang, alias api)
             enum decl_to_str = 
                 (decl.doc == "" ? "" : "/**\n"~decl.doc~"\n*/\n")~
                 "struct "~name~";\n" ~
-                (lang == "d" ? "" : "typedef struct "~name~" "~name~";\n");
+                (lang == "d" || lang == "c-doc" ? "" : "typedef struct "~name~" "~name~";\n");
         else
         {
             enum arg_to_str(alias arg) = type_name!(lang, arg.type)~" "~arg.name;
