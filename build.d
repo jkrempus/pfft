@@ -371,16 +371,23 @@ void buildDoc(Compiler c, string ccmd, string[] types)
         .src("pfft/stdapi")
         .jsonFile("doc/src/d.json").build(c, false);
 
-    auto cargs = common;
+    auto direct_args = common;
+    auto c_args = common;
     foreach(type; scalars)
         if(types.canFind(type.d))
-            cargs = cargs
+        {
+            c_args = c_args
                 .src(writeToRandom(generate_decl_module!("c-doc", type), ".d"))
                 .src(writeToRandom(insertType!type(rd("doc/src/c.d")), ".d"));
+            
+            direct_args = direct_args
+                .src(writeToRandom(generate_decl_module!("d", type), ".d"));
+        }
 
-    cargs.jsonFile("doc/src/c.json").build(c, false);
+    c_args.jsonFile("doc/src/c.json").build(c, false);
+    direct_args.jsonFile("doc/src/direct.json").build(c, false);
 
-    foreach(name; ["c", "d"])
+    foreach(name; ["c", "d", "direct"])
     {
         auto dir = format("doc/%s", name);
         rm(dir, "rf");
