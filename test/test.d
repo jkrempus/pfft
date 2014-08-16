@@ -28,8 +28,6 @@ auto sum(A, B)(A a, B b){ return a + b; }
 auto prod(A, B)(A a, B b){ return a * b; }
 auto len(A)(A a){ return a.length; }
 
-template st(alias a){ enum st = cast(size_t) a; }
-
 enum Transform { fft, rfft /*, fst*/ }
 
 version(JustDirect)
@@ -122,17 +120,17 @@ mixin template realElementAccessImpl()
             _log2n_cumulative[$ - 2 - i] = 
                 _log2n_cumulative[$ - 1 - i] + log2n.retro[i];
 
-        _n = st!1 << _log2n_cumulative[0];
+        _n = cast(size_t) 1 << _log2n_cumulative[0];
     }
 
     size_t _dim_size(size_t dim)
     {
-        return st!1 << (_log2n_cumulative[dim] - _log2n_cumulative[dim + 1]);
+        return cast(size_t) 1 << (_log2n_cumulative[dim] - _log2n_cumulative[dim + 1]);
     }
 
     size_t _index(size_t i, size_t dim)
     {
-        return (i & ((st!1 << _log2n_cumulative[dim]) - 1)) >>
+        return (i & ((cast(size_t) 1 << _log2n_cumulative[dim]) - 1)) >>
             _log2n_cumulative[dim + 1];
     }
 
@@ -230,7 +228,7 @@ mixin template GenericFst(F)
     this(int log2n)
     {
         f = F(log2n + 1);
-        n = st!1 << log2n; 
+        n = cast(size_t) 1 << log2n; 
     }
 
     void compute()
@@ -265,11 +263,11 @@ else
     alias float T;
 
 static if(is(T == real))
-    import direct = pfft.impl_real;
+    import direct = pfft.direct_real;
 else static if(is(T == double))
-    import direct = pfft.impl_double;
+    import direct = pfft.direct_double;
 else
-    import direct = pfft.impl_float;
+    import direct = pfft.direct_float;
 
 size_t[] pow2(uint[] a){ return a.map!("cast(size_t)1 << a").array; }
 
@@ -359,7 +357,7 @@ if(transform == Transform.rfft && !isMulti)
         log2ns = log2ns.dup;
         auto log2m = 0.reduce!sum(log2ns[1 .. $]);
         auto log2n = log2m + log2ns.front;
-        data = gc_aligned_array!T((st!1 << log2n) + (st!2 << log2m));
+        data = gc_aligned_array!T((cast(size_t) 1 << log2n) + (cast(size_t) 2 << log2m));
         data[] = 0;
 
         auto ns = pow2(log2ns);
@@ -396,7 +394,7 @@ if(transform == Transform.rfft && isMulti)
         enforce(log2ns.length == 1);
         log2multi = bsr(multi);
         log2n = log2ns.front;
-        data = gc_aligned_array!T(multi * ((st!1 << log2n) + 2));
+        data = gc_aligned_array!T(multi * ((cast(size_t) 1 << log2n) + 2));
         data[] = 0;
         auto n = cast(size_t) 1 << log2n;
         auto rsize = d.multi_rfft_table_size(n);
@@ -422,7 +420,7 @@ if(transform == Transform.rfft && isMulti)
     T inIm(size_t i){ return 0; }
     T outRe(size_t i)
     {
-        size_t n = st!1 << log2n;
+        size_t n = cast(size_t) 1 << log2n;
         size_t j = i >> log2multi;
         size_t k = i & ((1 << log2multi) - 1);
 
@@ -434,7 +432,7 @@ if(transform == Transform.rfft && isMulti)
 
     T outIm(size_t i)
     {
-        size_t n = st!1 << log2n;
+        size_t n = cast(size_t) 1 << log2n;
         size_t j = i >> log2multi;
         size_t k = i & ((1 << log2multi) - 1);
 
@@ -465,10 +463,10 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.ff
         log2n = 0;
         foreach(i; 0 .. log2ns.length)
         {
-            ns[i] = st!1 << log2ns[i];
+            ns[i] = cast(size_t) 1 << log2ns[i];
             log2n += log2ns[i]; 
         }
-        auto n = st!1 << log2n;
+        auto n = cast(size_t) 1 << log2n;
         f = new F(ns);
         _re = F.Array(n);
         _im = F.Array(n);
@@ -502,12 +500,12 @@ struct PfftApi(Transform transform, bool isInverse) if(transform == Transform.rf
         size_t log2n = 0;
         foreach(i; 0 .. log2ns.length)
         {
-            ns[i] = st!1 << log2ns[i];
+            ns[i] = cast(size_t) 1 << log2ns[i];
             log2n += log2ns[i]; 
         }
-        auto n = st!1 << log2n;
+        auto n = cast(size_t) 1 << log2n;
         f = new F(ns);
-        auto len = (st!1 << log2n) + (st!2 << (log2n - log2ns[0]));
+        auto len = (cast(size_t) 1 << log2n) + (cast(size_t) 2 << (log2n - log2ns[0]));
         data = F.Array(len);
         data[] = 0;
     }
@@ -549,7 +547,7 @@ if(isIn(transform, Transform.rfft, Transform.fft))
 
     private static auto table(int log2n)
     {
-        auto w = gc_aligned_array!(Complex!T)(st!1 << (log2n - 1));
+        auto w = gc_aligned_array!(Complex!T)(cast(size_t) 1 << (log2n - 1));
 
         size_t n = 1 << log2n;
         T dphi = 4.0 * asin(to!T(1.0)) / n;
@@ -605,8 +603,8 @@ if(isIn(transform, Transform.rfft, Transform.fft))
         if(log2ns.length == 1)
             return fft(a, w);
 
-        size_t m = st!1 << log2ns[1 .. $].reduce!sum;
-        foreach(i; 0 .. st!1 << log2ns.front)
+        size_t m = cast(size_t) 1 << log2ns[1 .. $].reduce!sum;
+        foreach(i; 0 .. cast(size_t) 1 << log2ns.front)
             multidim(a[i * m .. (i + 1) * m], w, log2ns[1 .. $]);
 
         foreach(i; 0 .. m)
@@ -683,8 +681,8 @@ struct StdApi(bool usePhobos = false, Transform transform, bool isInverse)
     {
         enforce(log2ns.length == 1);
         auto log2n = log2ns.front;
-        a = gc_aligned_array!(typeof(a[0]))(st!1 << log2n);
-        r = gc_aligned_array!(Complex!T)(st!1 << log2n);
+        a = gc_aligned_array!(typeof(a[0]))(cast(size_t) 1 << log2n);
+        r = gc_aligned_array!(Complex!T)(cast(size_t) 1 << log2n);
 
         static if(transform == Transform.rfft)
             a[] = cast(T) 0;
@@ -693,7 +691,7 @@ struct StdApi(bool usePhobos = false, Transform transform, bool isInverse)
         else
             static assert(0);
         
-        fft = new Fft(st!1 << log2n);
+        fft = new Fft(cast(size_t) 1 << log2n);
     }
     
     void compute()
@@ -805,7 +803,7 @@ static if(benchFftw)
         
         this(uint[] log2ns)
         {
-            auto n = st!1 << log2ns.reduce!sum;
+            auto n = cast(size_t) 1 << log2ns.reduce!sum;
             a = fftw_array!(Complex!T)(n);
             a[] = Complex!T(0, 0);
             r = fftw_array!(Complex!T)(n);
@@ -835,11 +833,11 @@ static if(benchFftw)
         {
             initRealElementAccessImpl(log2ns); 
             log2n = log2ns.reduce!"a+b";
-            auto n = st!1 << log2n;
+            auto n = cast(size_t) 1 << log2n;
             a = fftw_array!T(n);
             a[] = 0;
             r = fftw_array!(Complex!T)(
-                n / 2 + (st!1 << (log2n - log2ns.back)));
+                n / 2 + (cast(size_t) 1 << (log2n - log2ns.back)));
            
             ndim = log2ns.length.to!int;
             
@@ -911,7 +909,7 @@ void precision(F, Transform transform, bool isInverse)(uint[] log2n, long flops)
     alias typeof(S.init.inRe(0)) ST;
     alias typeof(F.init.inRe(0)) FT;
 
-    auto n = st!1 << log2n.reduce!sum;
+    auto n = cast(size_t) 1 << log2n.reduce!sum;
     auto tested = F(log2n);
     auto simple = S(log2n, ntransforms!F);
     

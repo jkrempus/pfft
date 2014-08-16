@@ -211,7 +211,7 @@ void buildLibImpl(
 {
     auto src = 
         types.map!(t => simdModuleName(v.baseSIMD, t)).array ~ 
-        types.map!(t => "pfft.impl_"~t).array ~
+        types.map!(t => "pfft.direct_"~t).array ~
         ["pfft.fft_impl", "pfft.shuffle", "pfft.common"] ~
         when(v == Version.SSE_AVX, ["pfft.detect_avx"]); 
 
@@ -309,7 +309,7 @@ string insertType(alias type)(string s)
 }
 
 enum decl_module_name(string lang, alias type) = 
-    lang == "c-doc" ?  "pfft_declarations_"~type.suffix : "pfft.impl_"~type.d;
+    lang == "c-doc" ?  "pfft_declarations_"~type.suffix : "pfft.direct_"~type.d;
 
 string generate_decl_module(string lang, alias type)()
 {
@@ -345,7 +345,7 @@ void copyIncludes(string[] types, bool portable)
 
         wr(
             generate_decl_module!("d", type),
-            "include/pfft/impl_"~type.d~".di");
+            "include/pfft/direct_"~type.d~".di");
     }
 
     cp("../pfft/stdapi.d", "include/pfft/");

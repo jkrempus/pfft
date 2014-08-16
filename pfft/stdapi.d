@@ -75,11 +75,11 @@ template st(alias a){ enum st = cast(size_t) a; }
 template impl(T)
 {
     static if(is(T == float))
-        import impl = pfft.impl_float;
+        import impl = pfft.direct_float;
     else static if(is(T == double))
-        import impl = pfft.impl_double;
+        import impl = pfft.direct_double;
     else static if(is(T == real))
-        import impl = pfft.impl_real;
+        import impl = pfft.direct_real;
     else 
         static assert(0, "Not implemented");
 }

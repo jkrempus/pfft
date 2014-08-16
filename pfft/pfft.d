@@ -9,11 +9,11 @@ import core.memory, core.bitop, std.array, std.algorithm;
 private template Import(TT)
 {
     static if(is(TT == float))
-        import impl = pfft.impl_float;
+        import impl = pfft.direct_float;
     else static if(is(TT == double))
-        import impl = pfft.impl_double;
+        import impl = pfft.direct_double;
     else static if(is(TT == real))
-        import impl = pfft.impl_real;
+        import impl = pfft.direct_real;
     else    
         static assert(0, "Not implemented");
 }
