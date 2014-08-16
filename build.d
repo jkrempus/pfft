@@ -224,15 +224,17 @@ void buildLibImpl(
     if(portable)
     {
         auto objN = (string a) => objName(dc, a);
+        auto symbolFlags = (string flag) =>
+          exportedSymbols(types).map!(a => only(flag, a)).joiner().array;
 
         auto linked = objN("linked");
         auto objs = chain(["druntime", "pfft"], implObjs).map!objN.array;
-        if(dc == Compiler.LDC) objs ~= objN("dso_registry_stub");
 
-        vexecute(["ld", "-r", "-o", linked] ~ objs);
+        vexecute(["ld","--gc-sections", "-r", "-o", linked]
+            ~ symbolFlags("-u") ~ objs);
 
-        vexecute(["objcopy", linked, objN("copied")] 
-            ~ exportedSymbols(types).map!(a => only("-G", a)).joiner().array);
+        vexecute(["objcopy", linked, objN("copied"), "--remove-section=.eh_frame"]
+            ~ symbolFlags("-G"));
 
         auto common = argList.output("lib/pfft").obj("copied").noDefaultLib;
         common.genLib.run(dc);
@@ -280,12 +282,6 @@ void buildCObjects(Compiler dc, string[] types, ArgList dcArgs)
         .src("../pfft/druntime_stubs")
         .conditional(dc == Compiler.LDC, argList.module_("core.bitop"))
         .build(dc, false);
-
-    if(dc == Compiler.LDC)
-    {
-      auto src = writeToRandom("void _d_dso_registry(){ }", ".c");
-      vexecute(["gcc", "-c", src, "-o", objName(dc, "dso_registry_stub")]);
-    }
 }
 
 template ScalarNames(string d_, string c_, string upper_, string suffix_)
