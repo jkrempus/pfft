@@ -360,7 +360,7 @@ private struct Arg
             {
                 case docFile: return "-Df="~fn(value);
                 case docDir: return "-Dd="~fn(value);
-                case noDefaultLib: return "-nodefaultlib";
+                case noDefaultLib: return "-defaultlib=";
                 case version_: return "-d-version="~value;
                 case optimize: return "-O3";
                 case noboundscheck: return "-disable-boundscheck";
@@ -646,20 +646,17 @@ struct ArgList
     template argType(string name) { enum argType = mixin("Type."~name); }
 
     ArgList opDispatch(string name)(string[] values...) const
-        if(is(typeof(argType!name)) && Arg.hasValue!(argType!name)) 
+        if(is(typeof(argType!name))) 
     {
-        ArgList r = this;
+      ArgList r = this;
+      static if(Arg.hasValue!(argType!name))
         foreach(val; values)
-            r.args ~= immutable(Arg)(argType!name, val);
-
-        return r;
+          r.args ~= immutable(Arg)(argType!name, val);
+      else
+        r.args ~= Arg(argType!name, null);
+        
+      return r;
     } 
-
-    ArgList opDispatch(string name)() const
-        if(is(typeof(argType!name)) && !Arg.hasValue!(argType!name))
-    {
-        return ArgList(args ~ Arg(argType!name, null));
-    }
 
     ArgList opBinary(string op)(const(ArgList) other) const if(op == "~")
     {
